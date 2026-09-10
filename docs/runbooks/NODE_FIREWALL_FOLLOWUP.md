@@ -1,84 +1,102 @@
-# Worker 결합 변경 및 CP2·CP3 방화벽 후속 절차
+# Worker·CP2·CP3 방화벽 Runtime 후속 절차 v2
 
-2026-09-10 / 상태: **구현·검토용, 실서버 미실행**. 주관: baseline #14 이권욱. Kubernetes 재개 판단: #10 이하영. Cockpit/보호 인계: #19 연계. PR #2 CP1 소스와 PR #3 수집기 소스는 수정하지 않는다.
+2026-09-10 / **코드 보완·독립 리뷰용, PR #4 실서버 미실행**. baseline #14 이권욱 주관, #10 이하영 Kubernetes 판단, #19 보호 인계와 연계한다.
 
 ## 변경 범위
 
-| 대상 | public runtime와 permanent 각각의 변경 | 최대 변경 수 |
+| 대상 | public Runtime에서만 수행 | 최대 후보 수 |
 |---|---|---:|
-| Worker01·02·03 | CP 3개 주소 각각 /32 → TCP 10250 rich rule 추가, `cockpit` service 허용 제거 | 노드당 3 추가 + 1 제거 × 2 = 8 |
-| CP2·CP3 | CP 3개 주소 각각 /32 → TCP 2379–2380 및 10250 추가 | 노드당 6 추가 × 2 = 12 |
+| Worker01·02·03 | CP 3개 /32→TCP 10250 추가, cockpit service 허용 제거 | 노드당 4 |
+| CP2·CP3 | CP 3개 /32→TCP 2379–2380 및 10250 추가 | 노드당 6 |
 
-Worker 전체는 추가 후보 18개, 제거 후보 6개다. 이미 목표 상태인 항목은 보존으로 기록한다. CP1은 PR #2 전용 도구를 사용한다. SSH·dhcpv6-client, CP의 기존 LB→6443 예외, NM 연결과 public binding, SELinux Enforcing을 보존한다. Worker cockpit.socket/service의 mask·inactive 상태를 확인하며 unit을 변경하지 않는다. join/reset, NTP 변경, Calico 정책 변경, 전체 firewalld 정지·reload·runtime-to-permanent는 수행하지 않는다.
+이미 목표 상태인 항목과 Permanent, SSH·dhcpv6-client, CP의 LB→6443 예외, NM/public binding, SELinux Enforcing, Worker Cockpit mask/inactive를 보존한다. CP1 변경, join/reset, NTP 설정, Calico 정책 생성, firewalld 정지·reload·runtime-to-permanent는 수행하지 않는다.
 
-## 실행 조건과 순서
+실행 정책은 `policies/icr-d-net-01-01/node-firewall-v2.json`이다. Controller와 원격 helper가 내용을 고정 범위와 대조한다. v1 정책 파일은 과거 이력이다. v2는 Runtime 인수 전 Permanent가 변경되던 문제를 제거한다. **Permanent 승격은 미구현이며 별도 검토·구현 대상**이다.
 
-1. PR #2 고정 HEAD `068661e076de02669170d3582f3d596d6e1a8eb3`의 이하영 리뷰 지적 해결 및 CP1 canary 실제 적용·운영 증적 인수. 기존 jvgkgfm9는 **inspect** 증적이며 apply 영수증으로 사용할 수 없다.
-2. 본 변경의 정확한 HEAD를 독립 리뷰한다. 현재 Draft 코드는 운영 적용 승인 상태가 아니다. 검토 항목은 `NODE_FIREWALL_VALIDATION.md`에 정리했다.
-3. 평일 실습 가능 시간에 대상 한 대, 최대 2시간의 변경 창을 기록한다. 다른 firewall/NM/Calico 설정 변경과 kubeadm join/reset/member 변경을 중지하고 복구 콘솔을 확보한다. 각 노드에서 다음 노드로의 진행은 직전 결과 검토 후 판단한다. 2026-09-10 이하영 부재를 고려해 준비 작업을 병행하며 타인의 독립 승인을 대신 기록하지 않는다.
-4. 실제 창에서 대상 inspect와 CP1 topology를 수집한다. 입력은 15분 이내이며 source·node·plan·snapshot·topology 해시가 묶인다. 지금 만료될 입력을 미리 반복 생성할 필요는 없다.
-5. CP2 방화벽 적용·검토 → CP2 잔여 상태 판단 및 별도 join 검증 → CP3의 새 inspect·단계 적용·별도 join 검증. 이후 Worker01→02→03을 각 새 topology 기준으로 진행한다. Worker 변경 준비는 CP 작업과 병행할 수 있다.
+## 정본과 실행 조건
 
-## ansible01 사용법
+발행 정본 v3.1.17, D34, named HEP/GNP 보호 통일 및 6대 firewalld disabled/inactive 목표, 기존 AC/Done을 유지한다. v18 전 선행 준비의 이유와 사용자 승인 범위는 [PR #2 선행 변경 이력](https://github.com/321Team/infra-kubernetes/blob/097ddb56d87b229a9eb465f72ea9f55d16524c51/docs/change/ICR-D-NET-01-01/ADVANCE_CHANGE_RECORD_20260910.md)을 따른다. CP 방화벽 보완 순서가 정본 HEP Bootstrap Allow→canary Worker→Worker 확대→CP 인계 순서를 대체하지 않는다.
 
-배포 ZIP의 게시된 외부 SHA-256을 먼저 대조하고 새 디렉터리에 푼다. `server01_ansible` 사용자로 실행하며 controller에 sudo를 붙이지 않는다. 승인된 infra-ansible HEAD `5cbf3b657014b32a20cb5816d90d3ea5fe4951ab`, 고정 inventory·키·known_hosts·송신 IP를 검사한다. 원격은 `svc_ansible`과 `sudo -n /usr/bin/python3`이다.
+1. PR #2 HEAD `097ddb56d87b229a9eb465f72ea9f55d16524c51`의 독립 리뷰와 CP1 Runtime 실제 적용·Positive/Negative/Regression 인수가 선행한다. onsite/inspect는 적용 영수증이 아니다.
+2. 본 PR 새 HEAD의 이하영(hayeounglee) 독립 리뷰와 실제 보호·백업·콘솔·복구·대상 상태 판단이 필요하다. 승인 JSON은 이 판단을 입력에 묶는 기록이며 GitHub 승인의 진위를 인증하지 않는다. 실제 링크의 작성자·결정·검토 HEAD를 사람이 대조한다.
+3. 평일 최대 2시간 창, 한 대상씩 진행한다. 다른 firewall/NM/Calico 변경, join/reset/member 변경, reload/reboot를 동결하고 직전 결과를 검토한 후 확대한다.
+4. 실제 창에서 새 inspect를 수집하고 15분 이내 입력을 사용한다. 잔여 구성·CP1 상태 검토를 해당 해시에 연결한다.
+5. CP2→CP3→Worker01→02→03 확대와 별도 join 창은 각각 실제 결과로 결정한다. join 전 Runtime 유지/회수와 보호 인계의 종료 계획을 정한다.
+
+동일 controller 계정의 변경은 대상 간 공통 lock으로 직렬화한다. node-local lock과 미해결 journal 차단도 유지한다. 외부 관리자·다른 controller·D-Bus/nft까지 잠그는 분산 lock은 아니다.
+
+## 배포본 확인과 inspect
+
+외부 SHA-256을 대조해 새 디렉터리에 푼다. ansible01의 server01_ansible로 실행하며 controller에 sudo를 붙이지 않는다.
 
 ```bash
 sha256sum --check NODE_FIREWALL_SOURCE_SHA256SUMS
-python3 scripts/run-node-firewall.py --help
+python3 -I scripts/run-node-firewall.py --help
+python3 -I scripts/run-node-firewall.py inspect --node k8s-worker01
 ```
 
-실제 변경 창의 Worker01 예시:
+infra-ansible HEAD `5cbf3b657014b32a20cb5816d90d3ea5fe4951ab`, inventory·키·known_hosts·송신 IP 실제 보유 여부를 검사한다. 원격 svc_ansible/sudo Python 경로를 유지하고 Python -I를 사용한다. 실제 sudo 정책의 -I 인수 허용 여부는 새 버전 읽기 전용 검사로 확인하며, 실패를 없애기 위해 권한을 임의 확장하지 않는다. root 소유·경로 권한 검사 아래 /usr/local/bin의 kubectl도 찾는다.
+
+TARGET, CP1_TOPOLOGY, CP1_STATE, POLICY, INSPECTION, RESULT JSON을 검토한다. CP1_STATE는 CP1 방화벽과 Calico Pod·HEP·GNP·IPPool·Felix 설정을 수집한다. spec·UID, Pod 준비 상태·재시작 정보는 해시에 포함하고 resourceVersion은 제외한다. 이는 상태 관측·변경 감지이며 보호의 의미적 완전성 인증은 아니다.
+
+대상 snapshot에는 kubelet 4경로, etcd 2경로, static manifest 4경로의 존재·권한·소유자·크기·mtime 메타데이터를 포함한다. 내용은 읽지 않으며 사용자 지정 data-dir의 부재를 입증하지 않는다. 메타데이터 해시는 승인과 변경 중 snapshot 대조에 포함한다. raw nft는 사람이 검토한다. 기존 전체 snapshot 비교는 완화하지 않았다.
+
+## CP1 영수증 및 실제 인수 기록
+
+허용 생산자는 위 PR #2 HEAD이며 helper SHA-256은 `25b497f7c300c03b76975cee554c1c926e6775674f97ed11254cb1625b635e8d`이다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 고정 생산자 fixture는 모의 계약 시험에만 사용한다.
+
+`cp1-runtime-acceptance.template.json`을 실제 인수 기록으로 채운다. receipt_input_sha256은 CP1 제출 노드 JSON 파일 해시, receipt_sha256은 내부 영수증 내용 해시다. source/helper/reference plan/execution plan, run ID, 이하영 리뷰 링크·결정·시각, Positive/Negative/Regression 각각의 실제 증적 해시와 PASS를 연결한다. 인수 시각은 영수증 종료 이후여야 한다. 모의 시험이나 형식상 APPROVED를 운영 인수로 사용하지 않는다.
+
+## Runtime apply
+
+`node-firewall-authorization.template.json`을 별도 파일로 복사한다. 실제 source/helper/plan/policy, 대상·mode, inspection 파일·snapshot·잔여 메타데이터·CP1 상태 해시, 시간 창·리뷰·보호·백업·콘솔·복구 판단을 채운다. Runtime/Permanent의 forward·masquerade는 실제 검토한 yes/no와 같아야 한다. 임의 기본값을 넣지 않는다. 적용에는 CP1 영수증 파일과 인수 기록 해시도 필요하다.
 
 ```bash
-python3 scripts/run-node-firewall.py inspect --node k8s-worker01
-```
-
-출력된 `OUTPUT` 아래 `INSPECTION.json`과 TARGET/CP1 결과를 검토한다. nft 결과는 원시 증적이며 독자 nft 규칙의 영향을 사람이 확인한다. 허용된 public 외 추가 active zone/source binding, direct rule/passthrough, 예상 밖 public 서비스·rich rule, Cockpit unit 상태 차이는 도구가 중단한다. 다른 비활성 zone/정책/서비스 정의는 snapshot에 넣고 변경 전후 동일성을 확인한다.
-
-`policies/icr-d-net-01-01/node-firewall-authorization.template.json`을 별도 작업 파일로 복사한다. 실제 리뷰 링크·검토자·HEAD·CP1 인수 결과서 SHA·시간 창·대상·모드를 채우고 SHA-256을 구한다. null을 임의 승인값으로 채우지 않는다. 이 파일은 **운영자의 실제 검토 기록**이며 오프라인 도구가 GitHub 승인을 인증하는 수단은 아니다. 실행자는 링크의 리뷰 상태와 검토 HEAD가 일치하는지 확인한다.
-
-```bash
-python3 scripts/run-node-firewall.py apply --node k8s-worker01 \
+python3 -I scripts/run-node-firewall.py apply --node k8s-worker01 \
   --inspection /absolute/path/INSPECTION.json \
   --inspection-sha256 INSPECTION_FILE_SHA256 \
   --authorization /absolute/path/worker01-apply-authorization.json \
   --authorization-sha256 AUTHORIZATION_FILE_SHA256 \
   --cp1-receipt /absolute/path/CP1_APPLY_TARGET.json \
-  --cp1-receipt-sha256 CP1_APPLY_TARGET_FILE_SHA256
+  --cp1-receipt-sha256 CP1_APPLY_TARGET_FILE_SHA256 \
+  --cp1-acceptance /absolute/path/CP1_ACCEPTANCE.json \
+  --cp1-acceptance-sha256 CP1_ACCEPTANCE_FILE_SHA256
 ```
 
-위 대문자 SHA 값은 실제 파일 해시로 교체한다. `CP1_APPLY_TARGET.json`은 PR #2 apply 결과 중 `result.receipt`를 포함하는 CP1 노드 JSON이다. 압축파일 해시와 혼용하지 않는다. 노드 이름만 바꿔 기존 입력·승인 파일을 재사용하면 거부된다. CP2/CP3는 동일 인터페이스로 각자의 새 inspect/승인 파일을 사용한다. `--all` 모드는 없다.
+대문자 값은 해당 파일의 실제 SHA-256으로 바꾼다. 노드 이름만 바꿔 다른 노드 입력을 재사용할 수 없다. CP2/CP3도 각 새 입력을 쓴다. 변경 직전·직후 CP1 topology·보호 상태와 인수된 CP1 Runtime 규칙 존속을 대조하고, 새 SSH 연결로 대상 상태를 확인한다.
 
-## 결과와 복구
+`RUNTIME_APPLIED_REVIEW_REQUIRED`는 도구의 변경·전후 검사 통과이며 Runtime 운영 인수 완료가 아니다. Node Ready, etcd 전체 건강, CA/Auth, 애플리케이션, 정본 AC는 별도 실제 검증이다. 항상 ARCHIVE와 SIDECAR를 함께 제출한다.
 
-`APPLIED_REVIEW_REQUIRED`는 이 도구의 방화벽 변경·새 SSH 연결·snapshot·CP1 API/readiness와 membership 전후 검사를 통과했다는 뜻이다. Node Ready, 전체 etcd health, 애플리케이션·Calico·ICR 전체 인수 완료를 뜻하지 않는다. 사전 TCP 10250 연결 실패는 아직 kubelet 설정이 없는 노드에서 예상할 수 있으므로, 방화벽 검증과 join 후 서비스 연결 검증을 구분한다.
+## 영수증 회수와 Runtime 복구
 
-영수증은 원격 `/var/lib/fds/icr-d-net-01-01/node-firewall-v1/`에 root 소유로 fsync 저장된다. 각 변경 전 intent, 실행 결과, 사후 query와 소유권을 기록한다. 동일 노드의 미해결 이전 영수증이 있으면 새 run ID 적용도 차단한다. 통신 중단 시 자동 재시도 대신 출력된 원래 RUN_ID로 확인한다.
+journal 경로 `/var/lib/fds/icr-d-net-01-01/node-firewall-v1/`를 유지해 이전 미해결 실행을 숨기지 않는다. root 소유/fsync, 변경 전 intent·결과·소유권 기록을 유지한다. 전송 실패 뒤 자동 재시도 대신 원래 RUN_ID로 회수한다.
 
 ```bash
-python3 scripts/run-node-firewall.py receipt --node k8s-worker01 \
+python3 -I scripts/run-node-firewall.py receipt --node k8s-worker01 \
   --run-id ORIGINAL_RUN_ID
 ```
 
-부분 실패여도 확실히 변경된 항목만 자동 복구할 수 있다. timeout, ALREADY_ENABLED/NOT_ENABLED 경고, intent 이후 결과 저장 실패, snapshot drift 또는 membership 변경은 자동 복구 중단 조건이다. 이 경우 원래 영수증과 현 상태를 검토하고 별도 복구 결정을 기록한다. 원래 상태를 모른 채 규칙을 삭제하거나 state 파일을 지우고 다시 실행하지 않는다.
+v1 영수증은 읽기 전용 회수만 가능하며 v2 자동 rollback 입력으로 거부한다. journal 삭제·경로 교체로 우회하지 않는다. timeout, 경고, 결과 저장 실패, snapshot/membership drift는 별도 복구 판단이 필요하다.
 
-복구는 별도 `mode=rollback` 기록과 원격 영수증을 포함한 노드 결과 JSON 및 그 파일 해시를 사용한다. 입력 영수증의 원격 해시도 별도로 검증한다.
+복구도 새 inspect, mode=rollback 승인 기록, 원래 TARGET 영수증 파일 해시가 필요하다.
 
 ```bash
-python3 scripts/run-node-firewall.py rollback --node k8s-worker01 \
-  --receipt /absolute/path/TARGET.json \
-  --receipt-sha256 TARGET_FILE_SHA256 \
+python3 -I scripts/run-node-firewall.py inspect --node k8s-worker01
+python3 -I scripts/run-node-firewall.py rollback --node k8s-worker01 \
+  --inspection /absolute/path/NEW_INSPECTION.json \
+  --inspection-sha256 NEW_INSPECTION_FILE_SHA256 \
+  --receipt /absolute/path/ORIGINAL_TARGET.json \
+  --receipt-sha256 ORIGINAL_TARGET_FILE_SHA256 \
   --authorization /absolute/path/worker01-rollback-authorization.json \
   --authorization-sha256 ROLLBACK_AUTHORIZATION_FILE_SHA256
 ```
 
-복구는 새로 추가한 rule만 제거하고 이 실행이 제거한 cockpit service만 원복한다. 원복 후에도 cockpit unit mask는 유지된다. 가입한 노드의 필수 통신을 제거하지 않도록 가입 이후에는 이 사전 join 복구 절차를 사용하지 못하게 한다.
+확실히 이 실행이 바꾼 Runtime 항목만 역순 원복한다. 기존 rule과 Cockpit unit mask를 보존한다. 이미 가입했거나 membership이 바뀐 경우 이 사전 join 복구 경로를 사용할 수 없다.
 
-항상 출력된 `ARCHIVE`와 `SIDECAR`를 함께 제출한다. controller는 실패 시에도 가능한 증적을 보존한다. 전송 실패 뒤 결과를 알 수 없는 경우 `runtime_applied=attempted_requires_receipt_review`이며 무변경으로 판정하지 않는다.
+## 실행 예산과 미완료 범위
 
-## 검증의 한계
+원격 프로세스별 최대 480초·1,200회 명령 예산을 적용한다. 개별 subprocess timeout은 남은 예산과 변경 창으로 제한하며 명령 수·timeout·예산 소진·실행 시간을 결과에 남긴다. 외부 SSH 제한 720초 안에서 무제한 명령 누적을 막는 중단 장치다. 실제 RHEL/firewalld 완료 성능을 보증한 값은 아니며 현장 metrics가 필요하다.
 
-로컬 테스트는 모의 backend/프로세스로 안전 분기와 복구를 확인한다. RHEL 계열 실서버 firewalld/SSH의 실행 검증은 아직 없다. node-local lock과 snapshot 대조는 다른 관리자나 D-Bus/nft 변경을 원자적으로 잠그지 못한다. CP1 topology도 대상 변경 전후에 별도 조회하므로, 유지보수 중 join/configuration 동결을 실제로 지켜야 한다. raw nft는 수집되지만 변화하는 counter/handle을 자동 ownership 판정에 쓰지 않는다. 최종 runtime/permanent 유효성과 reboot 후 지속성은 별도 실제 증적이 필요하다.
+`promote-permanent`는 preflight/SSH 전에 NOT_IMPLEMENTED로 중단한다. Runtime 실제 시험·독립 인수 뒤 Permanent 반영 또는 보호 인계에 따른 회수 중 필요한 종료 절차를 별도 결정한다. Runtime은 reload/reboot로 사라질 수 있으므로 창 내 동결·종료 계획이 필요하다. 영속성·재부팅 인수는 미완료다.
 
-공식 동작 근거: [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html). runtime/permanent는 별도 설정이므로 개별 명령을 각각 실행한다. 성공 rc만으로 소유권을 단정하지 않으며 query와 경고를 함께 확인한다.
+공식 근거: [Runtime과 Permanent](https://firewalld.org/documentation/configuration/runtime-versus-permanent.html), [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html). rc=0만으로 소유권을 단정하지 않으며 경고·query·전후 상태를 함께 검증한다.

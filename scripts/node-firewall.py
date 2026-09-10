@@ -13,13 +13,24 @@ import socket
 import stat
 import subprocess
 import tempfile
+import time
 
 CP = {"k8s-control01": "10.1.93.102", "k8s-control02": "10.1.93.103", "k8s-control03": "10.1.93.104"}
 WORKERS = {"k8s-worker01": "10.1.93.105", "k8s-worker02": "10.1.93.107", "k8s-worker03": "10.1.93.108"}
 NODES = dict(CP, **WORKERS)
 TARGETS = {k: v for k, v in NODES.items() if k != "k8s-control01"}
 ROOT = Path("/var/lib/fds/icr-d-net-01-01/node-firewall-v1")
+# Keep the journal directory: a format upgrade must not hide unresolved v1 runs.
 MAX_BYTES = 256 * 1024
+REMOTE_BUDGET_SECONDS = 480
+MAX_COMMANDS = 1200
+COMMAND_STATE = {"count": 0, "timeouts": 0, "budget_exhausted": False, "deadline": None}
+CP1_CONTRACT = {
+    "source_commit": "097ddb56d87b229a9eb465f72ea9f55d16524c51",
+    "source_sha256": "25b497f7c300c03b76975cee554c1c926e6775674f97ed11254cb1625b635e8d",
+    "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
+    "execution_plan_sha256": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
+}
 LB_RULE = 'rule family="ipv4" source address="10.1.93.109/32" port port="6443" protocol="tcp" accept'
 
 
@@ -30,11 +41,88 @@ def plan_for(name):
             for ip in CP.values() for port in ports]
     if name in WORKERS:
         rows.append({"kind": "service", "value": "cockpit", "desired": False})
-    return [dict(row, plane=plane) for plane in ("permanent", "runtime") for row in rows]
+    return [dict(row, plane="runtime") for row in rows]
 
 
 def plan_hash(name):
-    return fingerprint({"schema": "fds.node-firewall-plan.v1", "target": name, "zone": "public", "operations": plan_for(name)})
+    return fingerprint({"schema": "fds.node-firewall-plan.v2", "phase": "runtime", "target": name,
+                        "zone": "public", "operations": plan_for(name)})
+
+
+def execution_policy():
+    return {"schema": "fds.node-firewall-policy.v2", "phase": "runtime", "zone": "public",
+            "permanent_promotion": "NOT_IMPLEMENTED", "cp1_contract": CP1_CONTRACT,
+            "initial_zone_controls_authority": "authorization.zone_controls",
+            "targets": {name: {"ip": ip, "plan_sha256": plan_hash(name), "operations": plan_for(name)}
+                        for name, ip in TARGETS.items()}}
+
+
+def policy_hash():
+    return fingerprint(execution_policy())
+
+
+def validate_policy(value):
+    need(value == execution_policy(), "policy artifact differs from fixed executable scope")
+
+
+def digest_field(value, message):
+    need(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value), message)
+
+
+def instant(value):
+    result = dt.datetime.fromisoformat(value)
+    need(result.tzinfo is not None and result.utcoffset() is not None, "timezone required")
+    return result
+
+
+def validate_zone_controls(snapshot, controls):
+    need(isinstance(controls, dict) and set(controls) == {"runtime", "permanent"}, "zone controls review absent")
+    for plane, values in controls.items():
+        need(isinstance(values, dict) and set(values) == {"forward", "masquerade"}, "zone controls incomplete")
+        for key, value in values.items():
+            need(value in ("yes", "no") and snapshot["planes"][plane]["fields"].get(key) == value,
+                 "initial zone control differs from reviewed value: " + plane + "/" + key)
+
+
+def validate_authorization_record(data, commit, target, mode):
+    need(data.get("schema") == "fds.node-firewall-authorization.v2" and data.get("phase") == "runtime",
+         "authorization schema/phase differs")
+    need(data.get("source_commit") == commit and data.get("target") == target and data.get("mode") == mode,
+         "authorization is not for this commit/target/mode")
+    need(data.get("operator") == "GWONUK" and data.get("independent_reviewer") == "hayeounglee",
+         "designated independent review record absent")
+    need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/4#(?:pullrequestreview|issuecomment)-[0-9]+",
+                      data.get("review_url") or ""), "PR4 review URL absent")
+    need(data.get("review_decision") == "APPROVED", "review approval absent")
+    for field in ("maintenance_freeze", "console_recovery_available", "backup_verified", "protection_reviewed",
+                  "rollback_runbook_reviewed", "runtime_only_acknowledged", "target_state_reviewed"):
+        need(data.get(field) is True, "required execution decision absent: " + field)
+    need(data.get("policy_sha256") == policy_hash() and data.get("plan_sha256") == plan_hash(target),
+         "authorization policy/plan differs")
+    for field in ("source_sha256", "before_sha256", "residual_metadata_sha256"):
+        digest_field(data.get(field), "authorization digest absent: " + field)
+    start, end = instant(data["window_start"]), instant(data["window_end"])
+    current = dt.datetime.now(dt.timezone.utc)
+    need(start <= current <= end and 0 < (end - start).total_seconds() <= 7200, "outside bounded operation window")
+    need(current.astimezone(dt.timezone(dt.timedelta(hours=9))).weekday() < 5,
+         "no weekend classroom runtime work")
+    # This is a bound human record, not GitHub authentication or proof of the assertions.
+
+
+def residual_metadata():
+    paths = ["/var/lib/kubelet/config.yaml", "/var/lib/kubelet/kubeadm-flags.env", "/etc/kubernetes/kubelet.conf",
+             "/etc/kubernetes/bootstrap-kubelet.conf", "/var/lib/etcd", "/var/lib/etcd/member"]
+    paths += ["/etc/kubernetes/manifests/" + name + ".yaml"
+              for name in ("etcd", "kube-apiserver", "kube-controller-manager", "kube-scheduler")]
+    result = []
+    for value in paths:
+        try:
+            info = Path(value).lstat()
+            result.append({"path": value, "exists": True, "mode": oct(info.st_mode), "uid": info.st_uid,
+                           "size": info.st_size, "mtime_ns": info.st_mtime_ns})
+        except FileNotFoundError:
+            result.append({"path": value, "exists": False})
+    return result
 
 
 def need(value, message):
@@ -66,7 +154,7 @@ def redact(value):
     text = re.sub(r"(?<![A-Za-z0-9])[a-z0-9]{6}\.[a-z0-9]{16}(?![A-Za-z0-9])", "[REDACTED_TOKEN]", text)
     text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[REDACTED_JWT]", text)
     text = re.sub(r"(?i)(\b(?:bearer|basic)\s+)[A-Za-z0-9_./+=-]+", r"\1[REDACTED]", text)
-    text = re.sub(r'''(?ix)((?:--)?(?:certificate-key|token|password|client-key-data|client-certificate-data)["']?\s*[=:]\s*["']?)([^\s,;"']+)''', r"\1[REDACTED]", text)
+    text = re.sub(r'''(?ix)((?:--)?(?:certificate-key|token|password|client-key-data|client-certificate-data)["']?\s*(?:[=:]\s*|\s+)["']?)([^\s,;"']+)''', r"\1[REDACTED]", text)
     return re.sub(r"(https?://)[^/\s:@]+:[^/\s@]+@", r"\1[REDACTED]@", text)
 
 
@@ -84,7 +172,7 @@ def trusted(path, directory=False):
 
 def binary(name):
     need(re.fullmatch(r"[a-z0-9-]+", name), "invalid binary name")
-    for parent in ("/usr/sbin", "/usr/bin"):
+    for parent in ("/usr/sbin", "/usr/bin", "/usr/local/bin"):
         path = Path(parent) / name
         if path.exists():
             path = path.resolve(strict=True)
@@ -97,10 +185,16 @@ def binary(name):
 def command(argv, timeout=15):
     result = {"argv": argv, "started_at": now()}
     try:
-        proc = subprocess.run([binary(Path(argv[0]).name)] + argv[1:], capture_output=True, text=True, timeout=timeout,
-                              env={"PATH": "/usr/sbin:/usr/bin", "LANG": "C", "LC_ALL": "C", "HOME": "/root", "KUBECTL_KUBERC": "false"})
+        remaining = (COMMAND_STATE["deadline"] - time.monotonic()) if COMMAND_STATE["deadline"] is not None else timeout
+        if remaining <= 0 or COMMAND_STATE["count"] >= MAX_COMMANDS:
+            COMMAND_STATE["budget_exhausted"] = True
+            raise ValueError("REMOTE_COMMAND_BUDGET_EXHAUSTED")
+        COMMAND_STATE["count"] += 1
+        proc = subprocess.run([binary(Path(argv[0]).name)] + argv[1:], capture_output=True, text=True, timeout=min(timeout, remaining),
+                              env={"PATH": "/usr/local/bin:/usr/sbin:/usr/bin", "LANG": "C", "LC_ALL": "C", "HOME": "/root", "KUBECTL_KUBERC": "false"})
         result.update(rc=proc.returncode, stdout=redact(proc.stdout), stderr=redact(proc.stderr))
     except subprocess.TimeoutExpired as error:
+        COMMAND_STATE["timeouts"] += 1
         result.update(rc=124, stdout=redact(error.stdout or ""), stderr=redact(error.stderr or "") + "\nCOMMAND_TIMEOUT")
     except (OSError, ValueError) as error:
         result.update(rc=127, stdout="", stderr=redact(error))
@@ -115,7 +209,7 @@ def command(argv, timeout=15):
 
 def checked(argv):
     result = command(argv)
-    need(result["rc"] == 0 and not result.get("stdout_truncated"),
+    need(result["rc"] == 0 and not result.get("stdout_truncated") and not result.get("stderr_truncated"),
          "query failed: " + shlex.join(argv) + "; rc=" + str(result["rc"]) + "; " + result["stderr"][:2000])
     return result["stdout"].strip()
 
@@ -142,6 +236,8 @@ def parse_zone(text):
     need(in_rules and "ssh" in fields.get("services", "").split(), "SSH service missing")
     need(fields.get("target") == "default" and not fields.get("sources"), "zone routing differs")
     need(not fields.get("ports") and not fields.get("protocols"), "unexpected broad allowance")
+    need(all(fields.get(key) in ("yes", "no") for key in ("forward", "masquerade")),
+         "forward/masquerade state unavailable")
     fields["services"] = " ".join(sorted(fields["services"].split()))
     return {"fields": fields, "rules": sorted(rules)}
 
@@ -155,7 +251,7 @@ class BaseBackend:
     def read_snapshot(self, argv):
         result = command(argv)
         self.snapshot_queries[shlex.join(argv)] = result
-        need(result["rc"] == 0 and not result.get("stdout_truncated"),
+        need(result["rc"] == 0 and not result.get("stdout_truncated") and not result.get("stderr_truncated"),
              "query failed: " + shlex.join(argv) + "; rc=" + str(result["rc"]) + "; " + result["stderr"][:2000])
         return result["stdout"].strip()
 
@@ -205,8 +301,45 @@ class BaseBackend:
                 "direct_permanent": read(["firewall-cmd", "--permanent", "--direct", "--get-all-rules"])}
 
     def kubectl(self, args):
-        return command(["/usr/bin/kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
+        return command(["kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
                         "--cache-dir=" + self.cache.name, "--request-timeout=8s"] + args, timeout=18)
+
+    def cp1_state(self):
+        need(self.node == "k8s-control01", "CP1 state lookup is CP1 only")
+        firewall = self.snapshot()
+        queries, protection = {}, {}
+        self.protection_queries = queries
+        requests = {
+            "calico_nodes": ["-n", "kube-system", "get", "pods", "-l", "k8s-app=calico-node", "-o", "json"],
+            "host_endpoints": ["get", "hostendpoints.crd.projectcalico.org", "-o", "json"],
+            "global_network_policies": ["get", "globalnetworkpolicies.crd.projectcalico.org", "-o", "json"],
+            "ip_pools": ["get", "ippools.crd.projectcalico.org", "-o", "json"],
+            "felix_configurations": ["get", "felixconfigurations.crd.projectcalico.org", "-o", "json"],
+        }
+        for key, argv in requests.items():
+            result = self.kubectl(argv)
+            queries[key] = result
+            need(result["rc"] == 0 and not result.get("stdout_truncated") and not result.get("stderr_truncated"),
+                 "CP1 protection query incomplete: " + key)
+            items = json.loads(result["stdout"])["items"]
+            if key == "calico_nodes":
+                items = [item for item in items if item.get("spec", {}).get("nodeName") == "k8s-control01"]
+                need(len(items) == 1, "CP1 Calico Pod identity ambiguous")
+                status = items[0].get("status", {})
+                containers = status.get("containerStatuses", [])
+                need(status.get("phase") == "Running" and containers and all(x.get("ready") is True for x in containers),
+                     "CP1 Calico Pod not ready")
+                protection[key] = [{"name": items[0]["metadata"]["name"], "uid": items[0]["metadata"]["uid"],
+                                    "node": "k8s-control01", "phase": status["phase"],
+                                    "containers": sorted([{"name": x["name"], "ready": x["ready"],
+                                                            "restartCount": x.get("restartCount"), "imageID": x.get("imageID")}
+                                                           for x in containers], key=lambda x: x["name"])}]
+            else:
+                protection[key] = sorted([{"name": item["metadata"]["name"], "uid": item["metadata"]["uid"],
+                                           "spec": item.get("spec", {})} for item in items], key=lambda x: x["name"])
+        stable = {"firewall": firewall, "protection": protection}
+        return {"stable": stable, "sha256": fingerprint(stable), "queries": queries,
+                "snapshot_queries": self.snapshot_queries}
 
     def topology(self):
         need(self.node == "k8s-control01", "topology lookup is CP1 only")
@@ -216,7 +349,7 @@ class BaseBackend:
         records["nodes"] = self.kubectl(["get", "nodes", "-o", "json"])
         pod = self.kubectl(["-n", "kube-system", "get", "pod", "etcd-k8s-control01", "-o", "json"])
         records["etcd_pod"] = pod
-        need(pod["rc"] == 0 and not pod.get("stdout_truncated"), "etcd Pod lookup failed")
+        need(pod["rc"] == 0 and not pod.get("stdout_truncated") and not pod.get("stderr_truncated"), "etcd Pod lookup failed")
         meta = json.loads(pod["stdout"])
         need(meta["spec"]["nodeName"] == "k8s-control01" and meta["spec"].get("hostNetwork") is True, "unexpected etcd Pod placement")
         container = next(c for c in meta["spec"]["containers"] if c["name"] == "etcd")
@@ -230,7 +363,8 @@ class BaseBackend:
         records["etcd_members"] = self.kubectl(etcd + ["member", "list"])
         records["etcd_status"] = self.kubectl(etcd + ["endpoint", "status"])
         for key, result in records.items():
-            need(result["rc"] == 0 and not result.get("stdout_truncated"), "topology query failed: " + key)
+            need(result["rc"] == 0 and not result.get("stdout_truncated") and not result.get("stderr_truncated"),
+                 "topology query failed: " + key)
         need("readyz check passed" in records["api_readyz"]["stdout"], "API readiness did not pass")
         nodes = json.loads(records["nodes"]["stdout"])["items"]
         members = json.loads(records["etcd_members"]["stdout"])["members"]
@@ -371,6 +505,8 @@ class Backend(BaseBackend):
                 result["cockpit_units"][unit] = props
             need(not read(["ss", "-H", "-lnt", "sport = :9090"]), "Cockpit TCP 9090 listener appeared")
             result["cockpit_listener_absent"] = True
+        # Bind the reviewed pre-join state to every drift check; never read secret file contents.
+        result["residual_metadata"] = residual_metadata()
         return result
 
     def query(self, row):
@@ -382,17 +518,21 @@ class Backend(BaseBackend):
 
     def edit(self, row, desired):
         fixed = {k: row[k] for k in ("plane", "kind", "value", "desired")}
-        need(fixed in plan_for(self.node) and type(desired) is bool, "mutation outside fixed scope")
+        need(fixed in plan_for(self.node) and row["plane"] == "runtime" and type(desired) is bool,
+             "mutation outside fixed runtime scope")
         action = "add" if desired else "remove"
-        return command(["firewall-cmd"] + (["--permanent"] if row["plane"] == "permanent" else []) +
-                       ["--zone=public", "--" + action + "-" + row["kind"] + "=" + row["value"]])
+        return command(["firewall-cmd", "--zone=public", "--" + action + "-" + row["kind"] + "=" + row["value"]])
 
 
 def outcome(result, actual, desired, before):
-    warning = any(x in (result["stdout"] + result["stderr"]) for x in ("ALREADY_ENABLED", "NOT_ENABLED"))
+    if (not isinstance(result, dict) or type(result.get("rc")) is not int
+            or not isinstance(result.get("stdout"), str) or not isinstance(result.get("stderr"), str)):
+        return "uncertain"
+    warning = any(x in (result["stdout"] + result["stderr"])
+                  for x in ("ALREADY_ENABLED", "NOT_ENABLED", "ZONE_ALREADY_SET"))
     if result.get("stdout_truncated") or result.get("stderr_truncated") or warning:
         return "uncertain"
-    if result["rc"] == 0 and actual == desired:
+    if result["rc"] == 0 and actual == desired and result["stdout"].strip() == "success" and not result["stderr"].strip():
         return "changed"
     if result["rc"] not in (0, 124) and actual == before:
         return "not_changed"
@@ -400,11 +540,18 @@ def outcome(result, actual, desired, before):
 
 
 def apply_transaction(backend, journal, request):
+    need(request.get("policy_sha256") == policy_hash(), "runtime policy differs")
     before = backend.snapshot()
     need(fingerprint(before) == request["before_sha256"], "live firewall/NM/mask state differs from inspection")
-    receipt = {"schema": "fds.node-firewall-receipt.v1", "hostname": backend.node, "run_id": request["run_id"],
+    validate_zone_controls(before, request["zone_controls"])
+    need(fingerprint(before["residual_metadata"]) == request["residual_metadata_sha256"], "residual state differs")
+    receipt = {"schema": "fds.node-firewall-receipt.v2", "phase": "runtime", "hostname": backend.node, "run_id": request["run_id"],
                "source_commit": request["source_commit"], "source_sha256": request["source_sha256"],
+               "policy_sha256": policy_hash(), "permanent_promotion": "NOT_IMPLEMENTED",
                "plan_sha256": plan_hash(backend.node), "topology_sha256": request["topology_sha256"],
+               "residual_metadata_sha256": request["residual_metadata_sha256"],
+               "cp1_receipt_sha256": request["cp1_receipt_sha256"],
+               "cp1_acceptance_sha256": request["cp1_acceptance_sha256"],
                "authorization_sha256": request["authorization_sha256"], "before": before,
                "status": "APPLYING", "operations": [], "started_at": now()}
     journal.save(receipt)
@@ -425,7 +572,8 @@ def apply_transaction(backend, journal, request):
             need(op["status"] == "changed", "change failed or ownership uncertain")
         receipt["after"] = backend.snapshot()
         need(receipt["after"] == evolved(before, receipt["operations"]), "post-apply state differs")
-        receipt["status"] = "APPLIED_REVIEW_REQUIRED"
+        need(receipt["after"]["planes"]["permanent"] == before["planes"]["permanent"], "permanent plane changed")
+        receipt["status"] = "RUNTIME_APPLIED_REVIEW_REQUIRED"
     except Exception as error:
         receipt["status"] = "PARTIAL_APPLY_REVIEW_REQUIRED"
         receipt["error"] = redact(error)
@@ -435,11 +583,15 @@ def apply_transaction(backend, journal, request):
 
 
 def validate_receipt(receipt, request):
-    need(receipt["schema"] == "fds.node-firewall-receipt.v1" and receipt["hostname"] == request["node"] and
+    need(receipt.get("schema") == "fds.node-firewall-receipt.v2" and receipt.get("phase") == "runtime",
+         "legacy or non-runtime receipt requires separate recovery review")
+    need(receipt["hostname"] == request["node"] and
          receipt["run_id"] == request["run_id"], "receipt identity differs")
-    for key in ("source_commit", "source_sha256", "plan_sha256", "topology_sha256"):
+    for key in ("source_commit", "source_sha256", "plan_sha256", "topology_sha256", "policy_sha256"):
         need(receipt[key] == request[key], "receipt/input differs: " + key)
-    need(receipt["status"] in ("APPLIED_REVIEW_REQUIRED", "PARTIAL_APPLY_REVIEW_REQUIRED"), "receipt not eligible for rollback")
+    need(receipt["policy_sha256"] == policy_hash() and receipt["plan_sha256"] == plan_hash(request["node"]),
+         "receipt runtime policy differs")
+    need(receipt["status"] in ("RUNTIME_APPLIED_REVIEW_REQUIRED", "PARTIAL_APPLY_REVIEW_REQUIRED"), "receipt not eligible for rollback")
     rows = plan_for(request["node"])
     ops = receipt["operations"]
     need(len(ops) <= len(rows), "too many receipt operations")
@@ -448,11 +600,25 @@ def validate_receipt(receipt, request):
         need(type(op.get("present_before")) is bool and op["present_before"] == present_in(receipt["before"], op), "receipt origin differs")
         need(op["status"] in ("changed", "preserved", "not_changed"), "ambiguous operation requires manual review")
         need((op["status"] == "preserved") == (op["present_before"] == op["desired"]), "receipt ownership differs")
+        if op["status"] in ("changed", "not_changed"):
+            result = op.get("result", {})
+            expected = op["desired"] if op["status"] == "changed" else op["present_before"]
+            need(outcome(result, expected, op["desired"], op["present_before"]) == op["status"],
+                 "receipt operation result does not prove recorded outcome")
+    if receipt["status"] == "RUNTIME_APPLIED_REVIEW_REQUIRED":
+        need(len(ops) == len(rows) and all(x["status"] in ("changed", "preserved") for x in ops),
+             "successful receipt is incomplete")
+        need(receipt.get("after") == evolved(receipt["before"], ops), "receipt after-state differs")
+    need(fingerprint(receipt["before"]["residual_metadata"]) == receipt["residual_metadata_sha256"],
+         "receipt residual metadata differs")
 
 
 def rollback_transaction(backend, journal, receipt, request):
     validate_receipt(receipt, request)
-    need(backend.snapshot() == evolved(receipt["before"], receipt["operations"]), "state drift before rollback")
+    current = backend.snapshot()
+    need(current == evolved(receipt["before"], receipt["operations"]), "state drift before rollback")
+    validate_zone_controls(current, request["zone_controls"])
+    need(fingerprint(current["residual_metadata"]) == request["residual_metadata_sha256"], "residual state differs")
     receipt["status"] = "ROLLING_BACK"
     journal.save(receipt)
     try:
@@ -481,29 +647,21 @@ def rollback_transaction(backend, journal, receipt, request):
 
 
 def fresh(created_at):
-    age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(created_at)).total_seconds()
+    age = (dt.datetime.now(dt.timezone.utc) - instant(created_at)).total_seconds()
     need(0 <= age <= 900, "inspection older than 15 minutes or in future")
 
 
 def inspect(backend):
     result = {"status": "INSPECTED_REVIEW_REQUIRED", "hostname": backend.node, "created_at": now(),
-              "plan_sha256": plan_hash(backend.node)}
+              "phase": "runtime", "policy_sha256": policy_hash(), "plan_sha256": plan_hash(backend.node)}
     try:
         result["snapshot"] = backend.snapshot()
         result["before_sha256"] = fingerprint(result["snapshot"])
         result["nft"] = command(["nft", "-j", "list", "ruleset"])
-        need(result["nft"]["rc"] == 0 and not result["nft"].get("stdout_truncated"), "nft collection incomplete")
-        paths = ["/var/lib/kubelet/config.yaml", "/var/lib/kubelet/kubeadm-flags.env", "/etc/kubernetes/kubelet.conf",
-                 "/etc/kubernetes/bootstrap-kubelet.conf", "/var/lib/etcd", "/var/lib/etcd/member"]
-        paths += ["/etc/kubernetes/manifests/" + name + ".yaml" for name in ("etcd", "kube-apiserver", "kube-controller-manager", "kube-scheduler")]
-        result["residual_metadata"] = []
-        for value in paths:
-            try:
-                info = Path(value).lstat()
-                result["residual_metadata"].append({"path": value, "exists": True, "mode": oct(info.st_mode), "uid": info.st_uid,
-                                                     "size": info.st_size, "mtime_ns": info.st_mtime_ns})
-            except FileNotFoundError:
-                result["residual_metadata"].append({"path": value, "exists": False})
+        need(result["nft"]["rc"] == 0 and not result["nft"].get("stdout_truncated")
+             and not result["nft"].get("stderr_truncated"), "nft collection incomplete")
+        result["residual_metadata"] = result["snapshot"]["residual_metadata"]
+        result["residual_metadata_sha256"] = fingerprint(result["residual_metadata"])
     except Exception as error:
         result["status"] = "INCOMPLETE_REVIEW_REQUIRED"
         result["error"] = redact(error)
@@ -514,14 +672,22 @@ def inspect(backend):
 
 def main(request):
     backend = journal = None
+    started = time.monotonic()
+    COMMAND_STATE.update(count=0, timeouts=0, budget_exhausted=False, deadline=started + REMOTE_BUDGET_SECONDS)
     try:
         mode = request["mode"]
-        need(mode in ("inspect", "topology", "apply", "rollback", "receipt"), "unsupported mode")
-        if mode == "topology":
+        need(mode != "promote-permanent", "Permanent promotion NOT_IMPLEMENTED; separate reviewed change required")
+        need(mode in ("inspect", "topology", "cp1-state", "apply", "rollback", "receipt"), "unsupported mode")
+        validate_policy(request["policy"])
+        need(request.get("policy_sha256") == policy_hash(), "request policy digest differs")
+        if mode in ("topology", "cp1-state"):
             need(request["node"] == "k8s-control01", "topology is CP1 only")
             backend = BaseBackend(request["node"])
             backend.identity()
-            result = dict(backend.topology(), hostname=backend.node, created_at=now(), status="TOPOLOGY_REVIEW_REQUIRED")
+            if mode == "topology":
+                result = dict(backend.topology(), hostname=backend.node, created_at=now(), status="TOPOLOGY_REVIEW_REQUIRED")
+            else:
+                result = dict(backend.cp1_state(), hostname=backend.node, created_at=now(), status="CP1_STATE_REVIEW_REQUIRED")
         else:
             need(request["node"] in TARGETS, "CP1 mutation excluded; use PR2")
             backend = Backend(request["node"])
@@ -535,6 +701,18 @@ def main(request):
                 if mode in ("apply", "rollback"):
                     fresh(request["inspection_created_at"])
                     need(re.fullmatch(r"[0-9a-f]{64}", request["authorization_sha256"]), "authorization digest absent")
+                    auth = request["authorization"]
+                    validate_authorization_record(auth, request["source_commit"], backend.node, mode)
+                    for key in ("source_sha256", "plan_sha256", "policy_sha256", "before_sha256", "residual_metadata_sha256", "zone_controls"):
+                        need(auth.get(key) == request.get(key), "remote authorization binding differs: " + key)
+                    if mode == "apply":
+                        need(auth.get("cp1_canary_accepted") is True, "CP1 acceptance record absent")
+                        for key in ("cp1_receipt_input_sha256", "cp1_acceptance_sha256"):
+                            digest_field(request.get(key), "CP1 proof digest absent")
+                            need(auth.get(key) == request[key], "remote CP1 proof binding differs")
+                    # Bound every child command by both the execution window and the remote budget.
+                    seconds = (instant(auth["window_end"]) - dt.datetime.now(dt.timezone.utc)).total_seconds()
+                    COMMAND_STATE["deadline"] = min(COMMAND_STATE["deadline"], time.monotonic() + max(0, seconds))
                 journal = Journal(request["run_id"], new=mode == "apply")
                 if mode == "apply":
                     result = apply_transaction(backend, journal, request)
@@ -548,6 +726,10 @@ def main(request):
     except Exception as error:
         result = {"status": "STOP", "node": request.get("node"), "run_id": request.get("run_id"), "error": redact(error),
                   "note": "Do not retry blindly. Fetch durable receipt and review any partial/uncertain state."}
+        if backend:
+            result["queries"] = {"snapshot": getattr(backend, "snapshot_queries", {}),
+                                 "topology": getattr(backend, "topology_queries", {}),
+                                 "protection": getattr(backend, "protection_queries", {})}
         if journal and request.get("mode") == "apply" and journal.path.stat().st_size == 0:
             journal.save(result)
     finally:
@@ -555,6 +737,10 @@ def main(request):
             os.close(journal.lock)
         if backend:
             backend.cache.cleanup()
+    result["command_metrics"] = {k: COMMAND_STATE[k] for k in ("count", "timeouts", "budget_exhausted")}
+    result["command_metrics"].update(elapsed_seconds=round(time.monotonic() - started, 3),
+                                     budget_seconds=REMOTE_BUDGET_SECONDS, max_commands=MAX_COMMANDS)
+    COMMAND_STATE["deadline"] = None
     print(json.dumps(result, ensure_ascii=False))
 
 

@@ -41,9 +41,10 @@ class FakeBackend:
         self.node = name
         self.journal = journal
         self.state = {"hostname": name, "nm_uuid": "unchanged", "planes": {
-            p: {"fields": {"services": "cockpit dhcpv6-client ssh" if name in n.WORKERS else "dhcpv6-client ssh"},
+            p: {"fields": {"services": "cockpit dhcpv6-client ssh" if name in n.WORKERS else "dhcpv6-client ssh",
+                           "forward": "yes", "masquerade": "no"},
                 "rules": [] if name in n.WORKERS else [n.canonical_rule(n.LB_RULE)]}
-            for p in ("permanent", "runtime")}}
+            for p in ("permanent", "runtime")}, "residual_metadata": []}
         self.edits = []
         self.fail_at = self.timeout_at = self.warning_at = self.drift_at = None
 
@@ -77,6 +78,9 @@ class Transactions(unittest.TestCase):
     def request_for(self, backend):
         return {"node": backend.node, "run_id": "20260910T070000Z-abcdef123456", "source_commit": "a" * 40,
                 "source_sha256": "b" * 64, "authorization_sha256": "c" * 64, "topology_sha256": "d" * 64,
+                "policy_sha256": n.policy_hash(), "residual_metadata_sha256": n.fingerprint(backend.state["residual_metadata"]),
+                "zone_controls": {p: {"forward": "yes", "masquerade": "no"} for p in ("runtime", "permanent")},
+                "cp1_receipt_sha256": "e" * 64, "cp1_acceptance_sha256": "f" * 64,
                 "plan_sha256": n.plan_hash(backend.node), "before_sha256": n.fingerprint(backend.state)}
 
     def apply(self):
@@ -88,26 +92,28 @@ class Transactions(unittest.TestCase):
     def test_worker_combined_apply_and_exact_reverse_restore(self):
         before = self.backend.snapshot()
         receipt = self.apply()
-        self.assertEqual(receipt["status"], "APPLIED_REVIEW_REQUIRED")
-        self.assertEqual(len(self.backend.edits), 8)
-        for plane in ("permanent", "runtime"):
+        self.assertEqual(receipt["status"], "RUNTIME_APPLIED_REVIEW_REQUIRED")
+        self.assertEqual(len(self.backend.edits), 4)
+        self.assertEqual(before["planes"]["permanent"], self.backend.state["planes"]["permanent"])
+        for plane in ("runtime",):
             self.assertNotIn("cockpit", self.backend.state["planes"][plane]["fields"]["services"])
             self.assertIn("ssh", self.backend.state["planes"][plane]["fields"]["services"])
             self.assertEqual(len(self.backend.state["planes"][plane]["rules"]), 3)
         edited = copy.deepcopy(self.backend.edits)
         self.assertEqual(self.rollback(receipt)["status"], "ROLLED_BACK_REVIEW_REQUIRED")
         self.assertEqual(self.backend.snapshot(), before)
-        self.assertEqual([(r["plane"], r["value"], d) for r, d in self.backend.edits[8:]],
+        self.assertEqual([(r["plane"], r["value"], d) for r, d in self.backend.edits[4:]],
                          [(r["plane"], r["value"], not d) for r, d in reversed(edited)])
 
-    def test_cp2_and_cp3_preserve_lb_and_only_add_twelve_entries(self):
+    def test_cp2_and_cp3_preserve_lb_permanent_and_only_add_six_runtime_entries(self):
         for name in ("k8s-control02", "k8s-control03"):
             backend = FakeBackend(MemoryJournal(), name)
             req = self.request_for(backend)
             before = backend.snapshot()
             receipt = n.apply_transaction(backend, backend.journal, req)
-            self.assertEqual(receipt["status"], "APPLIED_REVIEW_REQUIRED")
-            self.assertEqual(len(backend.edits), 12)
+            self.assertEqual(receipt["status"], "RUNTIME_APPLIED_REVIEW_REQUIRED")
+            self.assertEqual(len(backend.edits), 6)
+            self.assertEqual(before["planes"]["permanent"], backend.state["planes"]["permanent"])
             self.assertTrue(all(row["kind"] == "rich-rule" for row, _ in backend.edits))
             self.assertEqual(n.rollback_transaction(backend, backend.journal, receipt, req)["status"], "ROLLED_BACK_REVIEW_REQUIRED")
             self.assertEqual(before, backend.snapshot())
@@ -119,7 +125,7 @@ class Transactions(unittest.TestCase):
         self.request = self.request_for(self.backend)
         before = self.backend.snapshot()
         receipt = self.apply()
-        self.assertEqual(len(self.backend.edits), 6)
+        self.assertEqual(len(self.backend.edits), 2)
         self.rollback(receipt)
         self.assertEqual(before, self.backend.snapshot())
 
@@ -139,7 +145,7 @@ class Transactions(unittest.TestCase):
 
     def test_confirmed_failure_allows_owned_prefix_rollback(self):
         before = self.backend.snapshot()
-        self.backend.fail_at = 5
+        self.backend.fail_at = 3
         receipt = self.apply()
         self.assertEqual(receipt["operations"][-1]["status"], "not_changed")
         self.assertEqual(self.rollback(receipt)["status"], "ROLLED_BACK_REVIEW_REQUIRED")
@@ -174,7 +180,7 @@ class Transactions(unittest.TestCase):
 
     def test_rollback_restoration_timeout_never_claims_success(self):
         receipt = self.apply()
-        self.backend.timeout_at = 9
+        self.backend.timeout_at = 5
         result = self.rollback(receipt)
         self.assertEqual(result["status"], "PARTIAL_ROLLBACK_REVIEW_REQUIRED")
         self.assertEqual(result["operations"][-1]["status"], "undo_uncertain")
@@ -188,7 +194,7 @@ class Transactions(unittest.TestCase):
             modify(changed)
             with self.assertRaises(ValueError):
                 self.rollback(changed)
-        self.assertEqual(len(self.backend.edits), 8)
+        self.assertEqual(len(self.backend.edits), 4)
 
 
 class Gates(unittest.TestCase):
@@ -234,7 +240,7 @@ class Gates(unittest.TestCase):
                 n.plan_for(name)
 
     def test_fixed_plan_counts_no_broad_network_or_direct_6443(self):
-        self.assertEqual(sum(len(n.plan_for(name)) for name in n.WORKERS), 24)
+        self.assertEqual(sum(len(n.plan_for(name)) for name in n.WORKERS), 12)
         for name in n.TARGETS:
             for row in n.plan_for(name):
                 self.assertNotIn("/24", row["value"])
@@ -269,66 +275,185 @@ class Gates(unittest.TestCase):
                 self.assertTrue(any(x.name.endswith('/TARGET.json') for x in tar.getmembers()))
 
 
+def cp1_producer_receipt(preserve_first=False):
+    """Run byte-pinned PR2 producer code against a fake backend. Not onsite acceptance."""
+    path = ROOT / "tests/fixtures/pr2_cp_canary_node.py"
+    if c.digest(path) != n.CP1_CONTRACT["source_sha256"]:
+        raise AssertionError("PR2 fixture source changed")
+    producer = load("pr2_producer_fixture", "tests/fixtures/pr2_cp_canary_node.py")
+    journal = MemoryJournal()
+    base = FakeBackend(journal, "k8s-control01")
+    base.state.pop("residual_metadata")
+    if preserve_first:
+        base.state["planes"]["runtime"]["rules"].append(producer.canonical_rule(producer.RULES[0]))
+        base.state["planes"]["runtime"]["rules"].sort()
+    stable = {"nodes": [["k8s-control01", "unit-node"]],
+              "members": [{"name": "k8s-control01", "id": "unit-member", "isLearner": False,
+                           "peerURLs": ["https://10.1.93.102:2380"]}]}
+
+    class ProducerBackend:
+        node = "k8s-control01"
+
+        def snapshot(self):
+            return copy.deepcopy(base.state)
+
+        def topology(self):
+            return {"stable": copy.deepcopy(stable), "sha256": producer.fingerprint(stable)}
+
+        def query(self, plane, rule):
+            return producer.canonical_rule(rule) in base.state["planes"][plane]["rules"]
+
+        def edit(self, plane, rule, action):
+            assert plane == "runtime" and action == "add"
+            assert journal.saved[-1]["operations"][-1]["status"] == "add_pending"
+            base.state["planes"][plane]["rules"].append(producer.canonical_rule(rule))
+            base.state["planes"][plane]["rules"].sort()
+            return {"rc": 0, "stdout": "success", "stderr": ""}
+
+    backend = ProducerBackend()
+    request = {**n.CP1_CONTRACT, "run_id": "20260910T070000Z-abcdef123456", "authorization_sha256": "c" * 64,
+               "before_sha256": producer.fingerprint(backend.snapshot()), "topology_sha256": producer.fingerprint(stable)}
+    receipt = producer.apply_transaction(backend, journal, request)
+    assert receipt["status"] == "RUNTIME_APPLIED_REVIEW_REQUIRED", receipt
+    return {"status": receipt["status"], "receipt": receipt, "receipt_sha256": producer.fingerprint(receipt)}
+
+
+def acceptance_for(proof, input_sha):
+    receipt = proof["receipt"]
+    return {"schema": "fds.cp1-runtime-acceptance.v1", "decision": "ACCEPTED", **n.CP1_CONTRACT,
+            "run_id": receipt["run_id"], "receipt_sha256": proof["receipt_sha256"], "receipt_input_sha256": input_sha,
+            "independent_reviewer": "hayeounglee", "review_decision": "APPROVED",
+            "review_url": "https://github.com/321Team/infra-kubernetes/pull/2#issuecomment-1",
+            "reviewed_at": n.now(),
+            "checks": {key: {"status": "PASS", "evidence_sha256": "e" * 64}
+                       for key in ("positive", "negative", "regression")}}
+
+
+def authorization_for(inputs, inspection_sha, mode="apply"):
+    current = dt.datetime.now(dt.timezone.utc)
+    return {"schema": "fds.node-firewall-authorization.v2", "phase": "runtime",
+            "source_commit": inputs["source_commit"], "source_sha256": inputs["source_sha256"],
+            "target": inputs["hostname"], "mode": mode, "operator": "GWONUK", "independent_reviewer": "hayeounglee",
+            "review_url": "https://github.com/321Team/infra-kubernetes/pull/4#issuecomment-1", "review_decision": "APPROVED",
+            "maintenance_freeze": True, "console_recovery_available": True, "backup_verified": True,
+            "protection_reviewed": True, "rollback_runbook_reviewed": True, "runtime_only_acknowledged": True,
+            "target_state_reviewed": True, "policy_sha256": inputs["policy_sha256"], "plan_sha256": inputs["plan_sha256"],
+            "before_sha256": inputs["before_sha256"], "residual_metadata_sha256": inputs["residual_metadata_sha256"],
+            "cp1_state_sha256": inputs["cp1_state_sha256"], "inspection_sha256": inspection_sha,
+            "zone_controls": {p: {key: inputs["snapshot"]["planes"][p]["fields"][key] for key in ("forward", "masquerade")}
+                              for p in ("runtime", "permanent")},
+            "window_start": (current - dt.timedelta(minutes=1)).isoformat(),
+            "window_end": (current + dt.timedelta(minutes=30)).isoformat()}
+
+
+class FixedWeekday(dt.datetime):
+    @classmethod
+    def now(cls, tz=None):
+        value = cls(2026, 9, 10, 12, 0, tzinfo=dt.timezone.utc)
+        return value.astimezone(tz) if tz is not None else value.replace(tzinfo=None)
+
+
+@patch.object(dt, "datetime", FixedWeekday)
 class ControllerWorkflow(unittest.TestCase):
-    """Synthetic controller/remote integration. No network or real host mutation."""
-    def exercise(self, fail=False):
+    """Producer/consumer integration with mocked I/O; approval records are test inputs, not real approvals."""
+    def exercise(self, fail=False, bad_acceptance=False, rollback=False):
         journal = MemoryJournal()
         backend = FakeBackend(journal)
         backend.timeout_at = 4 if fail else None
+        original = backend.snapshot()
         topology = Gates().topology()
         topology.update(hostname="k8s-control01", status="TOPOLOGY_REVIEW_REQUIRED")
+        cp1_proof = cp1_producer_receipt()
+        stable = {"firewall": cp1_proof["receipt"]["after"], "protection": {"fixture": True}}
+        cp1_state = {"stable": stable, "sha256": n.fingerprint(stable),
+                     "hostname": "k8s-control01", "status": "CP1_STATE_REVIEW_REQUIRED"}
         commit = "a" * 40
         calls = []
+
         def remote(name, request):
             calls.append((name, request["mode"]))
             if request["mode"] == "topology":
                 result = topology
+            elif request["mode"] == "cp1-state":
+                result = cp1_state
             elif request["mode"] == "inspect":
-                result = {"status": "INSPECTED_REVIEW_REQUIRED", "hostname": name,
+                result = {"status": "INSPECTED_REVIEW_REQUIRED", "hostname": name, "phase": "runtime",
+                          "policy_sha256": n.policy_hash(), "plan_sha256": n.plan_hash(name),
                           "snapshot": backend.snapshot(), "before_sha256": n.fingerprint(backend.state)}
             elif request["mode"] == "apply":
                 receipt = n.apply_transaction(backend, journal, request)
                 result = {"status": receipt["status"], "receipt": receipt, "receipt_sha256": n.fingerprint(receipt)}
+            elif request["mode"] == "rollback":
+                receipt = n.rollback_transaction(backend, journal, copy.deepcopy(journal.saved[-1]), request)
+                result = {"status": receipt["status"], "receipt": receipt, "receipt_sha256": n.fingerprint(receipt)}
             else:
                 raise AssertionError("unexpected remote mode")
             return {"transport": "PASS", "result": copy.deepcopy(result)}
+
+        def invoke(argv, expected_code):
+            with patch("sys.argv", ["run-node-firewall.py"] + argv), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as code:
+                c.main()
+            self.assertEqual(code.exception.code, expected_code)
+
         old_cwd = Path.cwd()
         with tempfile.TemporaryDirectory() as tmp, patch.object(c, "verify_source", return_value=commit), \
-                patch.object(c, "preflight", return_value={}), patch.object(c, "remote_request", side_effect=remote):
+                patch.object(c, "preflight", return_value={}), patch.object(c, "remote_request", side_effect=remote), \
+                patch.object(c, "ControllerLock"):
             try:
                 os.chdir(tmp)
-                with patch("sys.argv", ["run-node-firewall.py", "inspect", "--node", backend.node]), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as code:
-                    c.main()
-                self.assertEqual(code.exception.code, 0)
-                inspection = next(Path(tmp).glob('FDS_Node_Firewall_*/INSPECTION.json'))
-                cp1_receipt = {"schema": "fds.cp1-canary-receipt.v1", "hostname": "k8s-control01", "status": "APPLIED_REVIEW_REQUIRED",
-                               "source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
-                               "source_sha256": "5b1c9bccaf80cafc7f52eaf1ad9799d4a342981784f8fdb484013e27b19ae41b",
-                               "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
-                               "operations": [{"status": "added"}] * 12}
-                proof = Path(tmp) / 'synthetic-cp1.json'
-                proof.write_bytes(n.encoded({"status": "APPLIED_REVIEW_REQUIRED", "receipt": cp1_receipt, "receipt_sha256": n.fingerprint(cp1_receipt)}))
-                auth = Path(tmp) / 'synthetic-authorization.json'
-                auth.write_text('{}')
-                argv = ["run-node-firewall.py", "apply", "--node", backend.node, "--inspection", str(inspection),
+                invoke(["inspect", "--node", backend.node], 0)
+                inspection = next(Path(tmp).glob("FDS_Node_Firewall_*/INSPECTION.json"))
+                inputs = json.loads(inspection.read_bytes())
+                proof = Path(tmp) / "mock-producer-cp1.json"
+                proof.write_bytes(n.encoded(cp1_proof))
+                acceptance = Path(tmp) / "mock-cp1-acceptance.json"
+                accept_data = acceptance_for(cp1_proof, c.digest(proof))
+                if bad_acceptance:
+                    accept_data["checks"]["negative"]["status"] = "NOT_VERIFIED"
+                acceptance.write_bytes(n.encoded(accept_data))
+                auth = Path(tmp) / "mock-authorization.json"
+                auth_data = authorization_for(inputs, c.digest(inspection))
+                auth_data.update(cp1_canary_accepted=True, cp1_receipt_input_sha256=c.digest(proof),
+                                 cp1_acceptance_sha256=c.digest(acceptance))
+                auth.write_bytes(n.encoded(auth_data))
+                args = ["apply", "--node", backend.node, "--inspection", str(inspection),
                         "--inspection-sha256", c.digest(inspection), "--authorization", str(auth), "--authorization-sha256", c.digest(auth),
-                        "--cp1-receipt", str(proof), "--cp1-receipt-sha256", c.digest(proof)]
-                # Human review is a separate gate; this test isolates orchestration and retained evidence.
-                with patch("sys.argv", argv), patch.object(c, "validate_authorization"), contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as code:
-                    c.main()
-                self.assertEqual(code.exception.code, 2 if fail else 0)
-                summaries = [json.loads(p.read_bytes()) for p in Path(tmp).glob('FDS_Node_Firewall_*/RESULT.json')]
-                applied = next(x for x in summaries if x['mode'] == 'apply')
-                self.assertEqual(applied['status'], 'STOP_REVIEW_REQUIRED' if fail else 'APPLIED_REVIEW_REQUIRED')
-                self.assertEqual(applied['runtime_applied'], 'attempted_requires_receipt_review' if fail else 'applied')
-                targets = [json.loads(p.read_bytes()) for p in Path(tmp).glob('FDS_Node_Firewall_*/TARGET.json')]
-                receipts = [x['result']['receipt'] for x in targets if 'receipt' in x.get('result', {})]
-                self.assertEqual(len(receipts), 1)
-                self.assertEqual(receipts[0]['status'], 'PARTIAL_APPLY_REVIEW_REQUIRED' if fail else 'APPLIED_REVIEW_REQUIRED')
+                        "--cp1-receipt", str(proof), "--cp1-receipt-sha256", c.digest(proof),
+                        "--cp1-acceptance", str(acceptance), "--cp1-acceptance-sha256", c.digest(acceptance)]
+                # The validator itself is exercised. Only I/O and the filesystem lock are mocked.
+                invoke(args, 2 if fail or bad_acceptance else 0)
+                summaries = [json.loads(p.read_bytes()) for p in Path(tmp).glob("FDS_Node_Firewall_*/RESULT.json")]
+                applied = next(x for x in summaries if x["mode"] == "apply")
+                expected_status = "STOP_REVIEW_REQUIRED" if fail or bad_acceptance else "RUNTIME_APPLIED_REVIEW_REQUIRED"
+                self.assertEqual(applied["status"], expected_status, applied)
+                self.assertEqual(applied["permanent_applied"], "not_attempted")
+                if bad_acceptance:
+                    self.assertEqual(backend.edits, [])
+                    self.assertNotIn((backend.node, "apply"), calls)
+                    return
+                self.assertEqual(applied["runtime_applied"], "attempted_requires_receipt_review" if fail else "applied")
+                targets = [p for p in Path(tmp).glob("FDS_Node_Firewall_*/TARGET.json")
+                           if "receipt" in json.loads(p.read_bytes()).get("result", {})]
+                self.assertEqual(len(targets), 1)
+                receipt_file = targets[0]
+                receipt = json.loads(receipt_file.read_bytes())["result"]["receipt"]
+                self.assertEqual(receipt["status"], "PARTIAL_APPLY_REVIEW_REQUIRED" if fail else "RUNTIME_APPLIED_REVIEW_REQUIRED")
                 if fail:
-                    self.assertNotIn(('k8s-worker01', 'rollback'), calls)
+                    self.assertNotIn((backend.node, "rollback"), calls)
                 else:
-                    self.assertEqual(calls[-2:], [('k8s-worker01', 'inspect'), ('k8s-control01', 'topology')])
+                    self.assertEqual(calls[-3:], [(backend.node, "inspect"), ("k8s-control01", "topology"), ("k8s-control01", "cp1-state")])
+                    self.assertEqual(backend.state["planes"]["permanent"], original["planes"]["permanent"])
+                if rollback:
+                    existing = set(Path(tmp).glob("FDS_Node_Firewall_*/INSPECTION.json"))
+                    invoke(["inspect", "--node", backend.node], 0)
+                    fresh = next(iter(set(Path(tmp).glob("FDS_Node_Firewall_*/INSPECTION.json")) - existing))
+                    rollback_auth = authorization_for(json.loads(fresh.read_bytes()), c.digest(fresh), "rollback")
+                    rollback_auth["receipt_input_sha256"] = c.digest(receipt_file)
+                    auth.write_bytes(n.encoded(rollback_auth))
+                    invoke(["rollback", "--node", backend.node, "--inspection", str(fresh), "--inspection-sha256", c.digest(fresh),
+                            "--authorization", str(auth), "--authorization-sha256", c.digest(auth),
+                            "--receipt", str(receipt_file), "--receipt-sha256", c.digest(receipt_file)], 0)
+                    self.assertEqual(backend.snapshot(), original)
             finally:
                 os.chdir(old_cwd)
 
@@ -338,16 +463,23 @@ class ControllerWorkflow(unittest.TestCase):
     def test_partial_mutation_retains_receipt_without_automatic_retry(self):
         self.exercise(fail=True)
 
+    def test_missing_runtime_acceptance_stops_before_target_mutation(self):
+        self.exercise(bad_acceptance=True)
+
+    def test_runtime_rollback_requires_fresh_bound_inspection_and_restores_original(self):
+        self.exercise(rollback=True)
+
     def test_self_review_record_fails_before_time_window_check(self):
-        data = {'schema': 'fds.node-firewall-authorization.v1', 'source_commit': 'a' * 40, 'target': 'k8s-worker01',
-                'mode': 'apply', 'operator': 'GWONUK', 'independent_reviewer': 'GWONUK'}
-        with self.assertRaisesRegex(ValueError, 'independent review'):
-            c.validate_authorization(data, 'a' * 40, 'k8s-worker01', 'apply')
+        data = {"schema": "fds.node-firewall-authorization.v2", "phase": "runtime",
+                "source_commit": "a" * 40, "target": "k8s-worker01", "mode": "apply",
+                "operator": "GWONUK", "independent_reviewer": "GWONUK"}
+        with self.assertRaisesRegex(ValueError, "independent review"):
+            c.validate_authorization(data, "a" * 40, "k8s-worker01", "apply")
 
 
 class BackendSemantics(unittest.TestCase):
     def test_zone_parser_retains_ssh_and_normalizes_service_order(self):
-        zone = 'public (active)\n  target: default\n  interfaces: ens160\n  sources:\n  services: ssh cockpit dhcpv6-client\n  ports:\n  protocols:\n  rich rules:\n'
+        zone = 'public (active)\n  target: default\n  interfaces: ens160\n  sources:\n  services: ssh cockpit dhcpv6-client\n  ports:\n  protocols:\n  forward: yes\n  masquerade: no\n  rich rules:\n'
         self.assertEqual(n.parse_zone(zone)["fields"]["services"], "cockpit dhcpv6-client ssh")
         with self.assertRaisesRegex(ValueError, "SSH"):
             n.parse_zone(zone.replace('ssh ', ''))

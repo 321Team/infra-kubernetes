@@ -1,16 +1,41 @@
 {
+  "backup_verified": false,
+  "before_sha256": null,
   "console_recovery_available": false,
-  "cp1_acceptance_report_sha256": null,
+  "cp1_acceptance_sha256": null,
   "cp1_canary_accepted": false,
+  "cp1_receipt_input_sha256": null,
+  "cp1_state_sha256": null,
   "independent_reviewer": null,
+  "inspection_sha256": null,
   "maintenance_freeze": false,
   "mode": "apply",
   "operator": "GWONUK",
+  "phase": "runtime",
+  "plan_sha256": null,
+  "policy_sha256": "e190237cb887229172dcd0f447731cef199a47288c0ee3a6768227d5c2a00257",
+  "protection_reviewed": false,
+  "receipt_input_sha256": null,
+  "residual_metadata_sha256": null,
   "review_decision": null,
   "review_url": null,
-  "schema": "fds.node-firewall-authorization.v1",
+  "rollback_runbook_reviewed": false,
+  "runtime_only_acknowledged": false,
+  "schema": "fds.node-firewall-authorization.v2",
   "source_commit": null,
+  "source_sha256": null,
   "target": null,
+  "target_state_reviewed": false,
   "window_end": null,
-  "window_start": null
+  "window_start": null,
+  "zone_controls": {
+    "permanent": {
+      "forward": null,
+      "masquerade": null
+    },
+    "runtime": {
+      "forward": null,
+      "masquerade": null
+    }
+  }
 }

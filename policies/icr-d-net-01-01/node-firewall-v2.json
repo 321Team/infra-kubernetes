@@ -1,0 +1,189 @@
+{
+  "cp1_contract": {
+    "execution_plan_sha256": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
+    "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
+    "source_commit": "097ddb56d87b229a9eb465f72ea9f55d16524c51",
+    "source_sha256": "25b497f7c300c03b76975cee554c1c926e6775674f97ed11254cb1625b635e8d"
+  },
+  "initial_zone_controls_authority": "authorization.zone_controls",
+  "permanent_promotion": "NOT_IMPLEMENTED",
+  "phase": "runtime",
+  "schema": "fds.node-firewall-policy.v2",
+  "targets": {
+    "k8s-control02": {
+      "ip": "10.1.93.103",
+      "operations": [
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        }
+      ],
+      "plan_sha256": "6db3ab87e21b438c3554829c86305fbfd20de033288ba670e340360394726138"
+    },
+    "k8s-control03": {
+      "ip": "10.1.93.104",
+      "operations": [
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        }
+      ],
+      "plan_sha256": "7bdf19474c07c21013a803f0e7517216dcbd9dbf972935511d6ab992a5386bbb"
+    },
+    "k8s-worker01": {
+      "ip": "10.1.93.105",
+      "operations": [
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": false,
+          "kind": "service",
+          "plane": "runtime",
+          "value": "cockpit"
+        }
+      ],
+      "plan_sha256": "f7e61cdf8e6cfac17912dc43524e4cf55232955afd5efd6484b706bcec3b95b5"
+    },
+    "k8s-worker02": {
+      "ip": "10.1.93.107",
+      "operations": [
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": false,
+          "kind": "service",
+          "plane": "runtime",
+          "value": "cockpit"
+        }
+      ],
+      "plan_sha256": "045499cdaa45a6efdc92ad69a1876c71452d334ba2d5d8f73923c014bfcb89c7"
+    },
+    "k8s-worker03": {
+      "ip": "10.1.93.108",
+      "operations": [
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": true,
+          "kind": "rich-rule",
+          "plane": "runtime",
+          "value": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+        },
+        {
+          "desired": false,
+          "kind": "service",
+          "plane": "runtime",
+          "value": "cockpit"
+        }
+      ],
+      "plan_sha256": "0fcf4c6d304af70adf3624e9f00a8eae88cc348b2e9221be1bf2af9ca0c1f830"
+    }
+  },
+  "zone": "public"
+}

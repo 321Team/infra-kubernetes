@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Pinned one-node firewall controller; no join/reset/NTP or bulk apply."""
 import argparse
+import copy
 import datetime as dt
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -27,11 +29,43 @@ KEY = Path("/home/server01_ansible/.ssh/p1_ansible_ed25519")
 KNOWN_HOSTS = KEY.parent / "known_hosts"
 KEY_FINGERPRINT = "SHA256:VPGV/RGA8TrwO/3FC4YPxGzRNhBWuB+9hCzPV5plkws"
 SOURCE_IP = "10.250.10.10"
+POLICY_PATH = KIT / "policies/icr-d-net-01-01/node-firewall-v2.json"
+
+
+def controller_env():
+    # Keep the user's approved executable search path, but do not forward arbitrary tool/credential settings.
+    result = {k: os.environ[k] for k in ("HOME", "USER", "LOGNAME", "PATH") if k in os.environ}
+    result.update(LANG="C", LC_ALL="C")
+    return result
+
+
+class ControllerLock:
+    """Serialize all mutation targets on the approved controller; not a distributed lock."""
+    def __init__(self):
+        directory = Path.home() / ".local/state/fds-node-firewall"
+        for path in reversed([directory] + list(directory.parents)):
+            if not path.exists() and not path.is_symlink():
+                path.mkdir(mode=0o700)
+            info = path.lstat()
+            node.need(stat.S_ISDIR(info.st_mode) and info.st_uid in (0, os.getuid()) and not info.st_mode & 0o022,
+                      "unsafe controller lock directory")
+        self.fd = os.open(directory / "transaction.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        try:
+            info = os.fstat(self.fd)
+            node.need(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and not info.st_mode & 0o077,
+                      "unsafe controller lock")
+            fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BaseException:
+            os.close(self.fd)
+            raise
+
+    def close(self):
+        os.close(self.fd)
 
 
 def run(argv, cwd=None, input=None, timeout=30, env=None):
     return subprocess.run(argv, cwd=cwd, input=input, text=True, capture_output=True,
-                          timeout=timeout, env=env)
+                          timeout=timeout, env=controller_env() if env is None else env)
 
 
 def checked(argv, cwd=None, env=None):
@@ -53,7 +87,7 @@ def verify_source():
         commit = lock["commit"]
         files = lock["files"]
         required = {"scripts/run-node-firewall.py", "scripts/node-firewall.py",
-                    "docs/runbooks/NODE_FIREWALL_FOLLOWUP.md"}
+                    "docs/runbooks/NODE_FIREWALL_FOLLOWUP.md", "policies/icr-d-net-01-01/node-firewall-v2.json"}
         node.need(required <= set(files), "incomplete source lock")
         for name, expected in files.items():
             path = KIT / name
@@ -83,7 +117,7 @@ def preflight():
     origin = checked(["git", "remote", "get-url", "origin"], ANSIBLE_REPO)
     node.need(re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)321Team/infra-ansible(?:\.git)?", origin), "Ansible origin differs")
     node.need(not checked(["git", "status", "--porcelain", "--untracked-files=no", "--", "ansible.cfg", "inventory"], ANSIBLE_REPO), "Ansible configuration/inventory is modified")
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("ANSIBLE_", "PYTHON"))}
+    env = controller_env()
     env.update(ANSIBLE_CONFIG=str(ANSIBLE_REPO / "ansible.cfg"), ANSIBLE_HOST_KEY_CHECKING="True")
     raw = checked(["ansible-inventory", "-i", str(ANSIBLE_REPO / "inventory/hosts.yml"), "--list"], ANSIBLE_REPO, env)
     validate_inventory(json.loads(raw))
@@ -97,6 +131,9 @@ def preflight():
     public = checked(["ssh-keygen", "-y", "-P", "", "-f", str(KEY)])
     result = run(["ssh-keygen", "-E", "sha256", "-lf", "-"], input=public + "\n")
     node.need(result.returncode == 0 and len(result.stdout.split()) >= 2 and result.stdout.split()[1] == KEY_FINGERPRINT, "approved SSH key fingerprint differs")
+    addresses = json.loads(checked(["ip", "-j", "-4", "addr", "show"]))
+    node.need(any(value.get("local") == SOURCE_IP for item in addresses for value in item.get("addr_info", [])),
+              "approved SSH source address is not assigned on the controller")
     return {"inventory_commit": ANSIBLE_COMMIT, "ssh_key_fingerprint": KEY_FINGERPRINT,
             "controller_source_ip": SOURCE_IP, "remote_user": "svc_ansible"}
 
@@ -119,14 +156,14 @@ def remote_request(name, request):
     result = None
     try:
         identity_code = "import os,pwd,socket,json;print(json.dumps({'user':pwd.getpwuid(os.getuid()).pw_name,'hostname':socket.gethostname().split('.')[0],'connection':os.environ.get('SSH_CONNECTION','').split()}))"
-        result = run(ssh_argv(name, ["/usr/bin/python3", "-c", identity_code]), timeout=40)
+        result = run(ssh_argv(name, ["/usr/bin/python3", "-I", "-c", identity_code]), timeout=40)
         node.need(result.returncode == 0, "SSH identity failed; rc=" + str(result.returncode) + "; " + node.redact(result.stderr))
         identity = json.loads(result.stdout)
         connection = identity.get("connection", [])
         node.need(identity["user"] == "svc_ansible" and identity["hostname"] == name and len(connection) == 4 and connection[0] == SOURCE_IP and connection[2] == node.NODES[name], "SSH session identity differs")
         phase = "SUDO_PYTHON"
         payload = "REQUEST = " + repr(request) + "\n" + NODE_SOURCE.read_text()
-        result = run(ssh_argv(name, ["sudo", "-n", "/usr/bin/python3", "-"]), input=payload, timeout=720)
+        result = run(ssh_argv(name, ["sudo", "-n", "/usr/bin/python3", "-I", "-"]), input=payload, timeout=720)
         node.need(result.returncode == 0, "remote process failed; rc=" + str(result.returncode) + "; " + node.redact(result.stderr))
         phase = "RESULT_PARSE"
         data = json.loads(result.stdout)
@@ -159,9 +196,19 @@ def archive_output(directory):
 def load_checked(path, expected):
     node.need(path and expected and re.fullmatch(r"[0-9a-f]{64}", expected), "input path and SHA256 are required")
     path = Path(path)
-    node.need(path.is_file() and not path.is_symlink() and path.stat().st_size <= 8 * 1024 * 1024, "unsafe input")
-    node.need(digest(path) == expected, "input checksum mismatch")
-    return json.loads(path.read_bytes())
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        node.need(stat.S_ISREG(info.st_mode) and info.st_size <= 8 * 1024 * 1024, "unsafe input")
+        raw = handle.read(8 * 1024 * 1024 + 1)
+    node.need(len(raw) <= 8 * 1024 * 1024 and node.sha(raw) == expected, "input checksum mismatch")
+    def unique(pairs):
+        data = {}
+        for key, value in pairs:
+            node.need(key not in data, "duplicate JSON key")
+            data[key] = value
+        return data
+    return json.loads(raw, object_pairs_hook=unique)
 
 
 def require_result(wrapper, status):
@@ -171,37 +218,81 @@ def require_result(wrapper, status):
 
 
 def validate_authorization(data, commit, target, mode):
-    node.need(data.get("schema") == "fds.node-firewall-authorization.v1", "authorization schema differs")
-    node.need(data.get("source_commit") == commit and data.get("target") == target and data.get("mode") == mode,
-              "authorization is not for this commit/target/mode")
-    node.need(data.get("operator") == "GWONUK" and isinstance(data.get("independent_reviewer"), str)
-              and data["independent_reviewer"].strip() and data["independent_reviewer"].casefold() != "gwonuk", "independent review record absent")
-    node.need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/[0-9]+#pullrequestreview-[0-9]+",
-                          data.get("review_url") or ""), "review URL absent")
-    node.need(data.get("review_decision") == "APPROVED" and data.get("maintenance_freeze") is True,
-              "review approval and join/configuration freeze must be recorded")
-    node.need(data.get("console_recovery_available") is True and data.get("cp1_canary_accepted") is True,
-              "CP1 acceptance/console recovery record absent")
-    node.need(re.fullmatch(r"[0-9a-f]{64}", data.get("cp1_acceptance_report_sha256") or ""), "CP1 acceptance report digest absent")
-    start = dt.datetime.fromisoformat(data["window_start"])
-    end = dt.datetime.fromisoformat(data["window_end"])
-    current = dt.datetime.now(dt.timezone.utc)
-    node.need(start <= current <= end and 0 < (end - start).total_seconds() <= 7200, "outside bounded operation window")
-    node.need(current.astimezone(dt.timezone(dt.timedelta(hours=9))).weekday() < 5, "no weekend classroom runtime work")
-    # These fields record human review. This offline controller does not authenticate GitHub approvals.
+    node.validate_authorization_record(data, commit, target, mode)
+
+
+def cp1_rules():
+    return [f'rule family="ipv4" source address="{ip}/32" port port="{port}" protocol="tcp" accept'
+            for ip in node.CP.values() for port in ("2379-2380", "10250")]
 
 
 def validate_cp1_receipt(wrapper):
+    if "transport" in wrapper:
+        node.need(wrapper["transport"] == "PASS", "CP1 receipt transport failed")
     data = wrapper.get("result", wrapper)
     receipt = data.get("receipt", {})
-    node.need(data.get("status") == receipt.get("status") == "APPLIED_REVIEW_REQUIRED", "CP1 apply receipt absent")
-    node.need(receipt.get("hostname") == "k8s-control01" and receipt.get("schema") == "fds.cp1-canary-receipt.v1", "wrong CP1 receipt")
-    node.need(receipt.get("source_commit") == "068661e076de02669170d3582f3d596d6e1a8eb3" and
-              receipt.get("source_sha256") == "5b1c9bccaf80cafc7f52eaf1ad9799d4a342981784f8fdb484013e27b19ae41b" and
-              receipt.get("plan_sha256") == "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7", "CP1 source/plan differs")
+    node.need(data.get("status") == receipt.get("status") == "RUNTIME_APPLIED_REVIEW_REQUIRED", "CP1 apply receipt absent")
+    node.need(receipt.get("hostname") == "k8s-control01" and receipt.get("schema") == "fds.cp1-canary-receipt.v2"
+              and receipt.get("phase") == "runtime", "wrong CP1 receipt")
+    for key, value in node.CP1_CONTRACT.items():
+        node.need(receipt.get(key) == value, "CP1 source/plan differs: " + key)
     node.need(node.fingerprint(receipt) == data.get("receipt_sha256"), "CP1 receipt content checksum differs")
-    node.need(len(receipt.get("operations", [])) == 12 and all(x.get("status") in ("added", "preserved") for x in receipt["operations"]),
-              "CP1 apply is incomplete")
+    node.need(re.fullmatch(r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}", receipt.get("run_id") or ""), "CP1 run ID differs")
+    for key in ("authorization_sha256", "topology_sha256"):
+        node.digest_field(receipt.get(key), "CP1 digest absent: " + key)
+    rules = cp1_rules()
+    ops = receipt.get("operations", [])
+    node.need(isinstance(ops, list) and len(ops) == len(rules), "CP1 apply is incomplete")
+    before = receipt["before"]
+    node.need(before.get("hostname") == "k8s-control01", "CP1 snapshot identity differs")
+    expected = copy.deepcopy(before)
+    for op, rule in zip(ops, rules):
+        node.need(op.get("plane") == "runtime" and op.get("rule") == rule, "CP1 ordered operation differs")
+        present = node.canonical_rule(rule) in before["planes"]["runtime"]["rules"]
+        node.need(type(op.get("present_before")) is bool and op["present_before"] == present,
+                  "CP1 original presence differs")
+        node.need(op.get("status") == ("preserved" if present else "added"), "CP1 ownership/status differs")
+        if not present:
+            node.need(node.outcome(op.get("result"), True, True, False) == "changed", "CP1 mutation result uncertain")
+            expected["planes"]["runtime"]["rules"].append(node.canonical_rule(rule))
+            expected["planes"]["runtime"]["rules"].sort()
+        else:
+            node.need("result" not in op, "preserved CP1 rule has mutation result")
+    node.need(receipt.get("after") == expected and receipt["after"]["planes"]["permanent"] == before["planes"]["permanent"],
+              "CP1 after-state or Permanent plane differs")
+    node.need(node.instant(receipt["started_at"]) <= node.instant(receipt["ended_at"]) <= dt.datetime.now(dt.timezone.utc),
+              "CP1 receipt timestamp invalid")
+    return receipt
+
+
+def validate_cp1_acceptance(data, receipt, receipt_input_sha256):
+    node.need(data.get("schema") == "fds.cp1-runtime-acceptance.v1" and data.get("decision") == "ACCEPTED",
+              "CP1 Runtime acceptance absent")
+    for key in node.CP1_CONTRACT:
+        node.need(data.get(key) == receipt[key], "CP1 acceptance source/plan differs: " + key)
+    node.need(data.get("run_id") == receipt["run_id"] and data.get("receipt_sha256") == node.fingerprint(receipt)
+              and data.get("receipt_input_sha256") == receipt_input_sha256, "CP1 acceptance receipt differs")
+    node.need(data.get("independent_reviewer") == "hayeounglee" and data.get("review_decision") == "APPROVED",
+              "CP1 independent acceptance review absent")
+    node.need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/2#(?:pullrequestreview|issuecomment)-[0-9]+",
+                          data.get("review_url") or ""), "CP1 acceptance review URL absent")
+    reviewed = node.instant(data["reviewed_at"])
+    node.need(node.instant(receipt["ended_at"]) <= reviewed <= dt.datetime.now(dt.timezone.utc),
+              "CP1 acceptance predates Runtime result or is in future")
+    checks = data.get("checks", {})
+    node.need(set(checks) == {"positive", "negative", "regression"}, "CP1 acceptance test categories incomplete")
+    for key, result in checks.items():
+        node.need(result.get("status") == "PASS", "CP1 acceptance check not passed: " + key)
+        node.digest_field(result.get("evidence_sha256"), "CP1 acceptance evidence absent: " + key)
+    # Hashes and URLs bind the operator's inputs. A person must verify the linked review and original evidence.
+
+
+def cp1_state_gate(state, expected=None, receipt=None):
+    node.need(node.fingerprint(state["stable"]) == state["sha256"], "CP1 state digest differs")
+    if expected is not None:
+        node.need(state["sha256"] == expected, "CP1 firewall/protection changed since inspection")
+    if receipt is not None:
+        node.need(state["stable"]["firewall"] == receipt["after"], "CP1 accepted Runtime state no longer present")
 
 
 def topology_gate(topology, target, expected=None, unjoined=False):
@@ -218,9 +309,9 @@ def topology_gate(topology, target, expected=None, unjoined=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("inspect", "apply", "rollback", "receipt"))
+    parser.add_argument("mode", choices=("inspect", "apply", "rollback", "receipt", "promote-permanent"))
     parser.add_argument("--node", required=True, choices=tuple(node.TARGETS))
-    for field in ("inspection", "authorization", "receipt", "cp1-receipt"):
+    for field in ("inspection", "authorization", "receipt", "cp1-receipt", "cp1-acceptance"):
         parser.add_argument("--" + field)
         parser.add_argument("--" + field + "-sha256")
     parser.add_argument("--run-id")
@@ -228,28 +319,48 @@ def main():
     os.umask(0o077)
     out = Path(tempfile.mkdtemp(prefix="FDS_Node_Firewall_", dir=Path.cwd()))
     run_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + secrets.token_hex(6)
-    summary = {"schema": "fds.node-firewall-controller.v1", "mode": args.mode, "hostname": args.node,
-               "run_id": run_id, "started_at": node.now(), "status": "STARTING", "runtime_applied": "not_attempted"}
+    lock = None
+    summary = {"schema": "fds.node-firewall-controller.v2", "phase": "runtime", "mode": args.mode,
+               "hostname": args.node, "run_id": run_id, "started_at": node.now(), "status": "STARTING",
+               "runtime_applied": "not_attempted", "permanent_applied": "not_attempted"}
     print("OUTPUT=" + str(out), flush=True)
     try:
+        node.need(args.mode != "promote-permanent",
+                  "Permanent promotion NOT_IMPLEMENTED; Runtime acceptance and a separate reviewed change are required")
         commit = verify_source()
-        summary["source_commit"] = commit
+        policy = load_checked(POLICY_PATH, digest(POLICY_PATH))
+        node.validate_policy(policy)
+        summary.update(source_commit=commit, policy_sha256=node.policy_hash())
+        (out / "POLICY.json").write_bytes(node.encoded(policy))
         summary["preflight"] = preflight()
+        if args.mode in ("apply", "rollback"):
+            lock = ControllerLock()
         request = {"mode": args.mode, "node": args.node, "source_commit": commit,
-                   "source_sha256": digest(NODE_SOURCE), "run_id": run_id, "plan_sha256": node.plan_hash(args.node)}
+                   "source_sha256": digest(NODE_SOURCE), "run_id": run_id,
+                   "plan_sha256": node.plan_hash(args.node), "policy": policy, "policy_sha256": node.policy_hash()}
+
         def remote(name, mode, filename):
             wrapper = remote_request(name, dict(request, mode=mode, node=name))
             (out / filename).write_bytes(node.encoded(wrapper))
             return wrapper
+
         if args.mode == "inspect":
-            # Do not generate short-lived apply inputs until the actual operation window.
             target = require_result(remote(args.node, "inspect", "TARGET.json"), "INSPECTED_REVIEW_REQUIRED")
+            node.need(target.get("phase") == "runtime" and target.get("policy_sha256") == request["policy_sha256"]
+                      and target.get("plan_sha256") == request["plan_sha256"], "target helper policy/version differs")
+            node.need(node.fingerprint(target["snapshot"]) == target["before_sha256"], "target snapshot digest differs")
             topology = require_result(remote("k8s-control01", "topology", "CP1_TOPOLOGY.json"), "TOPOLOGY_REVIEW_REQUIRED")
             topology_gate(topology, args.node, unjoined=True)
-            inputs = {"schema": "fds.node-firewall-input.v1", "hostname": args.node, "created_at": summary["started_at"],
-                      "source_commit": commit, "source_sha256": request["source_sha256"], "plan_sha256": request["plan_sha256"],
-                      "snapshot": target["snapshot"], "before_sha256": target["before_sha256"],
-                      "topology": topology["stable"], "topology_sha256": topology["sha256"]}
+            cp1_state = require_result(remote("k8s-control01", "cp1-state", "CP1_STATE.json"), "CP1_STATE_REVIEW_REQUIRED")
+            cp1_state_gate(cp1_state)
+            inputs = {"schema": "fds.node-firewall-input.v2", "phase": "runtime", "hostname": args.node,
+                      "created_at": summary["started_at"], "source_commit": commit,
+                      "source_sha256": request["source_sha256"], "plan_sha256": request["plan_sha256"],
+                      "policy_sha256": request["policy_sha256"], "snapshot": target["snapshot"],
+                      "before_sha256": target["before_sha256"],
+                      "residual_metadata_sha256": node.fingerprint(target["snapshot"]["residual_metadata"]),
+                      "topology": topology["stable"], "topology_sha256": topology["sha256"],
+                      "cp1_state": cp1_state["stable"], "cp1_state_sha256": cp1_state["sha256"]}
             (out / "INSPECTION.json").write_bytes(node.encoded(inputs))
             summary["status"] = "INSPECTED_REVIEW_REQUIRED"
         elif args.mode == "receipt":
@@ -257,54 +368,88 @@ def main():
             request["run_id"] = args.run_id
             wrapper = remote(args.node, "receipt", "TARGET.json")
             node.need(wrapper.get("transport") == "PASS" and "receipt" in wrapper.get("result", {}), "receipt retrieval failed")
+            data = wrapper["result"]
+            node.need(node.fingerprint(data["receipt"]) == data["receipt_sha256"], "retrieved receipt digest differs")
+            summary["receipt_schema"] = data["receipt"].get("schema")
+            summary["legacy_recovery_review_required"] = summary["receipt_schema"] != "fds.node-firewall-receipt.v2"
             summary["status"] = "RECEIPT_RETRIEVED_REVIEW_REQUIRED"
         else:
             auth = load_checked(args.authorization, args.authorization_sha256)
             validate_authorization(auth, commit, args.node, args.mode)
-            request["authorization_sha256"] = args.authorization_sha256
+            inputs = load_checked(args.inspection, args.inspection_sha256)
+            node.need(inputs.get("schema") == "fds.node-firewall-input.v2" and inputs.get("phase") == "runtime"
+                      and inputs.get("hostname") == args.node, "wrong inspection")
+            for key in ("source_commit", "source_sha256", "plan_sha256", "policy_sha256"):
+                node.need(inputs[key] == request[key], "inspection source/policy differs: " + key)
+            node.fresh(inputs["created_at"])
+            for body, digest_key in (("snapshot", "before_sha256"), ("topology", "topology_sha256"),
+                                     ("cp1_state", "cp1_state_sha256")):
+                node.need(node.fingerprint(inputs[body]) == inputs[digest_key], "inspection content digest differs: " + body)
+            node.need(node.fingerprint(inputs["snapshot"]["residual_metadata"]) == inputs["residual_metadata_sha256"],
+                      "inspection residual metadata digest differs")
+            for key in ("source_sha256", "plan_sha256", "policy_sha256", "before_sha256",
+                        "residual_metadata_sha256", "cp1_state_sha256"):
+                node.need(auth.get(key) == inputs[key], "authorization input binding differs: " + key)
+            node.need(auth.get("inspection_sha256") == args.inspection_sha256, "authorization inspection file differs")
+            node.validate_zone_controls(inputs["snapshot"], auth.get("zone_controls"))
+            request.update(before_sha256=inputs["before_sha256"], topology_sha256=inputs["topology_sha256"],
+                           inspection_created_at=inputs["created_at"], zone_controls=auth["zone_controls"],
+                           residual_metadata_sha256=inputs["residual_metadata_sha256"],
+                           authorization_sha256=args.authorization_sha256, authorization=auth)
             (out / "AUTHORIZATION.json").write_bytes(node.encoded(auth))
+            (out / "INPUT_INSPECTION.json").write_bytes(node.encoded(inputs))
+            cp1_receipt = None
             if args.mode == "apply":
-                validate_cp1_receipt(load_checked(args.cp1_receipt, args.cp1_receipt_sha256))
-                summary["cp1_receipt_input_sha256"] = args.cp1_receipt_sha256
-                inputs = load_checked(args.inspection, args.inspection_sha256)
-                node.need(inputs.get("schema") == "fds.node-firewall-input.v1" and inputs.get("hostname") == args.node, "wrong inspection")
-                for key in ("source_commit", "source_sha256", "plan_sha256"):
-                    node.need(inputs[key] == request[key], "inspection source/plan differs")
-                node.fresh(inputs["created_at"])
-                node.need(node.fingerprint(inputs["snapshot"]) == inputs["before_sha256"] and
-                          node.fingerprint(inputs["topology"]) == inputs["topology_sha256"], "inspection content digest differs")
-                request.update(before_sha256=inputs["before_sha256"], topology_sha256=inputs["topology_sha256"],
-                               inspection_created_at=inputs["created_at"])
-                (out / "INPUT_INSPECTION.json").write_bytes(node.encoded(inputs))
+                proof = load_checked(args.cp1_receipt, args.cp1_receipt_sha256)
+                cp1_receipt = validate_cp1_receipt(proof)
+                acceptance = load_checked(args.cp1_acceptance, args.cp1_acceptance_sha256)
+                validate_cp1_acceptance(acceptance, cp1_receipt, args.cp1_receipt_sha256)
+                node.need(auth.get("cp1_canary_accepted") is True
+                          and auth.get("cp1_receipt_input_sha256") == args.cp1_receipt_sha256
+                          and auth.get("cp1_acceptance_sha256") == args.cp1_acceptance_sha256,
+                          "authorization CP1 receipt/acceptance binding differs")
+                request.update(cp1_receipt_sha256=node.fingerprint(cp1_receipt),
+                               cp1_receipt_input_sha256=args.cp1_receipt_sha256,
+                               cp1_acceptance_sha256=args.cp1_acceptance_sha256)
+                (out / "CP1_RECEIPT.json").write_bytes(node.encoded(proof))
+                (out / "CP1_ACCEPTANCE.json").write_bytes(node.encoded(acceptance))
             else:
                 wrapper = load_checked(args.receipt, args.receipt_sha256)
                 receipt_data = wrapper.get("result", wrapper)
                 receipt = receipt_data["receipt"]
-                request.update(run_id=receipt["run_id"], topology_sha256=receipt["topology_sha256"],
-                               receipt_sha256=receipt_data["receipt_sha256"], inspection_created_at=node.now())
+                node.need(auth.get("receipt_input_sha256") == args.receipt_sha256, "authorization rollback receipt differs")
+                request.update(run_id=receipt["run_id"], receipt_sha256=receipt_data["receipt_sha256"])
                 node.need(node.fingerprint(receipt) == request["receipt_sha256"], "receipt body digest differs")
                 node.validate_receipt(receipt, request)
                 (out / "INPUT_RECEIPT.json").write_bytes(node.encoded(wrapper))
             topology = require_result(remote("k8s-control01", "topology", "CP1_BEFORE.json"), "TOPOLOGY_REVIEW_REQUIRED")
             topology_gate(topology, args.node, request["topology_sha256"], unjoined=True)
+            cp1_state = require_result(remote("k8s-control01", "cp1-state", "CP1_STATE_BEFORE.json"), "CP1_STATE_REVIEW_REQUIRED")
+            cp1_state_gate(cp1_state, inputs["cp1_state_sha256"], cp1_receipt)
             (out / "REQUEST.json").write_bytes(node.encoded(request))
             print("RUN_ID=" + request["run_id"], flush=True)
             summary["runtime_applied"] = "attempted_requires_receipt_review"
             wrapper = remote(args.node, args.mode, "TARGET.json")
-            success = "APPLIED_REVIEW_REQUIRED" if args.mode == "apply" else "ROLLED_BACK_REVIEW_REQUIRED"
+            success = "RUNTIME_APPLIED_REVIEW_REQUIRED" if args.mode == "apply" else "ROLLED_BACK_REVIEW_REQUIRED"
             data = require_result(wrapper, success)
-            # Each call uses a new SSH connection; verifies management remains available.
+            node.need(node.fingerprint(data["receipt"]) == data["receipt_sha256"], "remote receipt body digest differs")
+            if args.mode == "apply":
+                node.validate_receipt(data["receipt"], request)
             post = require_result(remote(args.node, "inspect", "TARGET_AFTER.json"), "INSPECTED_REVIEW_REQUIRED")
             expected = data["receipt"]["after" if args.mode == "apply" else "before"]
             node.need(post["snapshot"] == expected, "post-change verification differs")
             topology = require_result(remote("k8s-control01", "topology", "CP1_AFTER.json"), "TOPOLOGY_REVIEW_REQUIRED")
             topology_gate(topology, args.node, request["topology_sha256"], unjoined=True)
+            cp1_state = require_result(remote("k8s-control01", "cp1-state", "CP1_STATE_AFTER.json"), "CP1_STATE_REVIEW_REQUIRED")
+            cp1_state_gate(cp1_state, inputs["cp1_state_sha256"], cp1_receipt)
             summary["status"] = success
             summary["runtime_applied"] = "applied" if args.mode == "apply" else "rolled_back"
     except (Exception, KeyboardInterrupt) as error:
         summary["status"] = "STOP_REVIEW_REQUIRED"
         summary["error"] = node.redact(error)
     finally:
+        if lock:
+            lock.close()
         summary["ended_at"] = node.now()
         (out / "RESULT.json").write_bytes(node.encoded(summary))
         archive, sidecar = archive_output(out)

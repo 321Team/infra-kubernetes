@@ -1,0 +1,7 @@
+{
+  "commit": "097ddb56d87b229a9eb465f72ea9f55d16524c51",
+  "path": "scripts/cp-canary-node.py",
+  "repository": "321Team/infra-kubernetes",
+  "sha256": "25b497f7c300c03b76975cee554c1c926e6775674f97ed11254cb1625b635e8d",
+  "usage": "Immutable producer snapshot for mock-backed contract tests only; never a runtime entry point"
+}
