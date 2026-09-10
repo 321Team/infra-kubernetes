@@ -1,6 +1,6 @@
 # ICR-D-NET-01-01 — CP 통신 보완 착수
 
-기준일: 2026-09-10 · 상태: **변경안 작성·검증 완료 / Runtime 미적용 / 독립 리뷰 대기**
+기준일: 2026-09-10 · 상태: **변경안·CP1 실행 도구 준비 완료 / Runtime 미적용 / 독립 리뷰 대기**
 
 주관: [fds-project-baseline #14](https://github.com/321Team/fds-project-baseline/issues/14), 이권욱 Lead · 이하영·이재환 Support.
 연계: [#10 P1-K8S-01](https://github.com/321Team/fds-project-baseline/issues/10), 이하영 Lead · 이권욱 Support.
@@ -35,11 +35,12 @@
 - [변경안 생성기](../../../scripts/build-cp-firewall-plan.py): 제출 tar.gz, sidecar, 내부 체크섬 전체 범위, 노드 identity·접속·zone 상태를 검증하고 추가 후보를 산출한다. 외부 접속이나 명령 실행 기능은 없다.
 - [생성 결과](cp-firewall-plan-20260910.json): 노드/설정 종류별 기존 상태, 상태 해시, query/add/rollback 인자. 이미 있는 규칙은 preserve로 기록하고 add/rollback 후보에서 제외한다.
 - [실행·복구 절차](../../runbooks/ICR-D-NET-01-01-CP-PORTS.md): 실시간 상태 재확인, 적용 결과 기록, canary 및 부분 실패 처리.
-- [검증 결과](VALIDATION.md): 11개 자동 테스트와 실제 제출본에 대한 오프라인 생성 결과.
+- [CP1 실행 도구](../../../scripts/run-cp-canary.py): 기본 모드는 CP 3대 읽기 전용 점검이다. 적용·복구는 CP1로 제한한다. [키트 실행 절차](../../runbooks/ICR-D-NET-01-01-CP1-CANARY-KIT.md).
+- [검증 결과](VALIDATION.md): 25개 자동 테스트와 실제 제출본에 대한 오프라인 생성·zone 파싱 결과.
 
 생성 결과 SHA-256: `2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7`.
 
-생성 결과의 상태는 `DRAFT_PLAN_REVIEW_REQUIRED`, `runtime_applied=false`다. add/remove 인자는 검토할 변경 데이터를 뜻한다. 이 첫 PR에는 원격 실행기나 자동 배포 workflow가 없다. 검토된 변경안과 실제 적용 영수증을 연결해 다음 실행을 관리한다.
+생성 결과의 상태는 `DRAFT_PLAN_REVIEW_REQUIRED`, `runtime_applied=false`다. add/remove 인자는 검토할 변경 데이터를 뜻한다. 후속 커밋에서 명시적인 CP1 적용·복구 실행기를 추가했다. 현재 단계는 읽기 전용 inspect이며 자동 배포 workflow는 없다. 검토된 변경안과 원격 영구 작업 기록을 연결한다. CP2/CP3 적용은 후속 범위다.
 
 ## 남은 작업과 담당
 
@@ -56,6 +57,6 @@
 
 ## 이번 작업의 완료와 이슈 전체 완료
 
-이번에 완료한 것은 증적 기반 정책·변경안 생성·실행/복구 절차 준비와 오프라인 검증이다. 실제 방화벽 적용, CP2/CP3 join, 6/6 Ready, etcd 3 Member Healthy, Worker 통신, HEP/GNP, 재부팅·복구·독립 리뷰는 아직 완료되지 않았다. 따라서 #14는 In Progress를 유지하며 ICR-AC-01~20의 전체 PASS나 종료일을 새로 부여하지 않는다.
+이번에 완료한 것은 증적 기반 정책·변경안 생성·CP1 실행 도구 및 복구 절차 준비와 로컬 검증이다. 실제 방화벽 적용, CP2/CP3 join, 6/6 Ready, etcd 3 Member Healthy, Worker 통신, HEP/GNP, 재부팅·복구·독립 리뷰는 아직 완료되지 않았다. 따라서 #14는 In Progress를 유지하며 ICR-AC-01~20의 전체 PASS나 종료일을 새로 부여하지 않는다.
 
 구현 저장소는 `infra-kubernetes`의 현재 main에서 분기한다. 별도 진행 중인 초기 관리 문서 PR #1의 README나 HEAD를 변경하지 않는다. 공통 Inventory는 `infra-ansible`의 검토된 커밋을 참조하며 독립 사본을 만들지 않는다.

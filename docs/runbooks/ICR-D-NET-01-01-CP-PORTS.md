@@ -2,6 +2,8 @@
 
 상태: **검토용 실행 절차 / 실서버 미실행**. 연결: [변경안](../change/ICR-D-NET-01-01/CP_FIREWALL_START.md).
 
+현재 구현된 실행기는 [CP1 Canary Kit](ICR-D-NET-01-01-CP1-CANARY-KIT.md)이며 기본 동작은 읽기 전용 점검이다. 아래 CP 3대 확대 절차 중 자동 적용·복구는 CP1만 구현했다.
+
 이 절차의 범위는 CP 3대 public zone에서 승인된 CP Source /32의 etcd 2379–2380과 kubelet 10250 허용을 보완하는 것이다. join/reset·NTP 설정·HEP/GNP·firewalld OFF는 별도 작업이다.
 
 ## 1. 고정 입력과 변경 전 확인
