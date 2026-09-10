@@ -4,11 +4,21 @@
 
 CP1 최신 inspect 제출본 `FDS_CP1_Canary_jvgkgfm9.tar.gz`는 outer/내부 5개 체크섬과 110개 조회를 검증했다. CP1 canary 입력 확보는 완료했고 runtime 적용은 미실행이다. 이 입력의 15분 유효기간이 지났으므로 실제 적용 창에서 같은 검토 소스로 다시 inspect해야 한다. 지금 반복 수집할 필요는 없다.
 
+## Worker 제출본 검토 — 2026-09-10 15:11 KST
+
+압축파일 SHA-256 `cfbc39b698b7198ec7c3853d8c783527aeb241a5347a0378cc1152ce0481d42e`, 내부 8/8 체크섬 및 소스 HEAD `e83524b9097cee52e254a40fbe3db238eed801a9` 일치. 99개 조회의 rc는 모두 0이나 6대 time_state가 빈 출력이므로 원본 COLLECTED를 완전성 PASS로 인정하지 않는다. 원본을 보존하고 검토 판정은 **PARTIAL / 보완 필요**로 기록한다.
+
+- CP→Worker 10250은 0/9, errno 113. Worker 3대 public의 해당 허용 규칙이 없고 nft에 ens160/public reject 경로가 있다. 동시에 10250 리스너가 없으며 kubelet은 auto-restart 상태다. 포트 개방만으로 복구 완료를 예고하지 않는다.
+- Worker→LB 6443은 TCP 연결 3/3 성공. API/TLS/Auth·LB 전체 backend 정상 판정은 별도다.
+- 6대 chrony.conf 해시는 동일하고 source는 같은 pool이다. 선택 서버는 CP 3대 동일 + Worker별 3종으로 총 4종. Leap Normal 6/6이며 고정 NTP 승인 증적은 여전히 없다.
+- Worker 3대 public에 cockpit 서비스와 nft TCP 9090 accept가 남아 있다. 현재 9090 listener는 없으나 socket/service의 mask 증거는 미수집. #10 Gate 0 확인, #14 불필요 허용 정리, #19 보안 인계로 매핑한다.
+- v1.1 supplement로 6대 시간 속성과 Worker kubelet journal·설정 경로 메타데이터·Cockpit unit 상태만 보완한다. PR #2 소스 및 리뷰 요청은 유지한다.
+
 ## 순서와 담당
 
 | 순서 | 잔여 작업 | 담당/티켓 | 시작 조건 · 완료 증적 |
 |---|---|---|---|
-| 병행 1 | Worker 3대 firewall/listener와 6대 NTP, CP→Worker·Worker→LB 수집 | #14 이권욱 수집·정리 / #10 이하영 검토 | 본 읽기 전용 키트 준비. 실제 실행·업로드·무결성 검토가 남음 |
+| 병행 1 | Worker 3대 firewall/listener와 6대 NTP, CP→Worker·Worker→LB 수집 | #14 이권욱 수집·정리 / #10 이하영 검토 | v1.0 실서버 수집·업로드 및 무결성 검토 완료. 시간 속성 공백과 Worker kubelet/Cockpit 상세는 v1.1 supplement로 보완 |
 | 병행 2 | PR #2 고정 HEAD 독립 리뷰 | 이하영 / infra-kubernetes PR #2 | 정책 최소 범위, 기존 관리 경로 보존, CP1 journal·부분 실패·복구·15분 입력 조건 검토. 동일 HEAD의 리뷰 결과 필요 |
 | 다음 1 | CP1 canary 적용·검증 | #14 이권욱 / #10 이하영 연계 | PR #2 리뷰 지적 해결 후 적용 창에서 inspect 갱신. 적용 영수증·runtime/permanent·관리 SSH·API/etcd·TCP 결과 확보 |
 | 다음 2 | CP2/CP3 단계별 통신 보완 및 join 재개 판단 | #14 이권욱 통신 / #10 이하영 Kubernetes | CP1 canary 검증 후 CP2→CP3 순서의 별도 적용·복구 구현/검토. 현재 CP1 전용 도구로 범위를 임의 확대하지 않음. CP2 잔여 manifest와 기존 etcd membership을 대조한 재개 절차 필요 |

@@ -48,6 +48,8 @@ class ScopeTests(unittest.TestCase):
     def test_cp_has_only_time_queries_and_worker_probes(self):
         def query(argv):
             stdout = json.dumps([{"addr_info": [{"family": "inet", "local": "10.1.93.102"}]}]) if argv[0] == "ip" else ""
+            if argv[0] == "timedatectl":
+                stdout = "Timezone=Asia/Seoul\nNTPSynchronized=yes\nTimeUSec=Thu 2026-09-10 06:11:26 UTC\n"
             return {"rc": 0, "stdout": stdout, "stderr": ""}
         with patch.object(node.os, "geteuid", return_value=0), patch.object(node.socket, "gethostname", return_value="k8s-control01"), patch.object(node, "command", side_effect=query), patch.object(node, "chrony_config", return_value={"gaps": []}), patch.object(node, "tcp_probe", return_value={"connected": False}):
             result = node.collect({"node": "k8s-control01", "mode": "inspect"})
@@ -75,6 +77,46 @@ class ScopeTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_success_code_with_empty_time_properties_is_incomplete(self):
+        self.assertEqual(len(node.time_state_gaps({"rc": 0, "stdout": ""})), 3)
+        self.assertEqual(node.time_state_gaps({"rc": 0, "stdout": "Timezone=UTC\nNTPSynchronized=no\nTimeUSec=123\n"}), [])
+
+    def test_supplement_only_collects_missing_diagnostics(self):
+        for name in ("k8s-control01", "k8s-worker01"):
+            def query(argv):
+                stdout = ""
+                if argv[0] == "ip":
+                    stdout = json.dumps([{"addr_info": [{"family": "inet", "local": node.NODES[name]}]}])
+                elif argv[0] == "timedatectl":
+                    self.assertEqual(argv, ["timedatectl", "show"])
+                    stdout = "Timezone=Asia/Seoul\nNTPSynchronized=yes\nTimeUSec=123\n"
+                return {"rc": 0, "stdout": stdout, "stderr": ""}
+            with patch.object(node.os, "geteuid", return_value=0), patch.object(node.socket, "gethostname", return_value=name), patch.object(node, "command", side_effect=query), patch.object(node, "chrony_config") as config, patch.object(node, "tcp_probe") as probe, patch.object(node, "kubelet_metadata", return_value={"gaps": []}):
+                result = node.collect({"node": name, "mode": "supplement"})
+            config.assert_not_called()
+            probe.assert_not_called()
+            expected = {"identity_ipv4", "time_state"}
+            if name in node.WORKERS:
+                expected |= {"kubelet_state", "kubelet_journal", "cockpit_units", "listeners"}
+            self.assertEqual(set(result["queries"]), expected)
+            self.assertEqual(result["status"], "COLLECTED_REVIEW_REQUIRED")
+
+    def test_supplement_empty_time_is_not_collection_pass(self):
+        identity = {"rc": 0, "stdout": json.dumps([{"addr_info": [{"family": "inet", "local": "10.1.93.102"}]}]), "stderr": ""}
+        empty = {"rc": 0, "stdout": "", "stderr": ""}
+        with patch.object(node.os, "geteuid", return_value=0), patch.object(node.socket, "gethostname", return_value="k8s-control01"), patch.object(node, "command", side_effect=[identity, empty]):
+            result = node.collect({"node": "k8s-control01", "mode": "supplement"})
+        self.assertEqual(result["status"], "INCOMPLETE_REVIEW_REQUIRED")
+        self.assertEqual(len(result["gaps"]), 3)
+
+    def test_kubelet_metadata_never_reads_content(self):
+        with patch.object(Path, "lstat", side_effect=FileNotFoundError), patch.object(Path, "read_bytes") as read, patch.object(Path, "read_text") as text:
+            result = node.kubelet_metadata()
+        self.assertEqual(len(result["paths"]), 4)
+        self.assertTrue(all(not value["exists"] for value in result["paths"].values()))
+        read.assert_not_called()
+        text.assert_not_called()
+
     def test_config_excludes_secrets_and_options(self):
         content = 'server ntp.example.invalid iburst key 123\nkeyfile /etc/chrony.keys\npassword secret\ninclude /unapproved/path\nsourcedir /run/chrony-dhcp\n'
         result = node.source_lines(content)

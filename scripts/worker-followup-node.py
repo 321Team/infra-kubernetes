@@ -171,13 +171,38 @@ def tcp_probe(target):
     return result
 
 
+def time_state_gaps(query):
+    fields = dict(line.split("=", 1) for line in query.get("stdout", "").splitlines() if "=" in line)
+    return ["time_state missing property: " + key for key in ("Timezone", "NTPSynchronized", "TimeUSec") if not fields.get(key)]
+
+
+def kubelet_metadata():
+    """Inspect only fixed path metadata; never open kubeconfig or bootstrap contents."""
+    result = {"paths": {}, "gaps": []}
+    for name in ("/var/lib/kubelet/config.yaml", "/var/lib/kubelet/kubeadm-flags.env",
+                 "/etc/kubernetes/kubelet.conf", "/etc/kubernetes/bootstrap-kubelet.conf"):
+        try:
+            info = Path(name).lstat()
+            result["paths"][name] = {"exists": True, "mode": oct(stat.S_IMODE(info.st_mode)),
+                                     "uid": info.st_uid, "gid": info.st_gid, "size": info.st_size,
+                                     "is_regular": stat.S_ISREG(info.st_mode), "is_symlink": stat.S_ISLNK(info.st_mode),
+                                     "mtime_ns": info.st_mtime_ns}
+        except FileNotFoundError:
+            result["paths"][name] = {"exists": False}
+        except OSError as error:
+            result["paths"][name] = {"error": redact(error)}
+            result["gaps"].append("metadata unavailable: " + name)
+    return result
+
+
 def collect(request):
     name = request.get("node")
-    need(name in NODES and request.get("mode") == "inspect", "unsupported request")
+    mode = request.get("mode")
+    need(name in NODES and mode in ("inspect", "supplement"), "unsupported request")
     need(os.geteuid() == 0, "remote helper requires existing sudo access")
     need(socket.gethostname().split(".")[0] == name, "hostname differs")
     result = {"schema": "fds.worker-followup-node.v1", "hostname": name, "started_at": now(),
-              "status": "STARTING", "mode": "inspect", "runtime_applied": "not_attempted", "queries": {}, "gaps": []}
+              "status": "STARTING", "mode": mode, "runtime_applied": "not_attempted", "queries": {}, "gaps": []}
     queries = result["queries"]
     queries["identity_ipv4"] = command(["ip", "-j", "-4", "address", "show", "dev", "ens160"])
     identity = queries["identity_ipv4"]
@@ -194,10 +219,19 @@ def collect(request):
         "chrony_tracking": ["chronyc", "-n", "tracking"],
         "chrony_sources_numeric": ["chronyc", "-n", "sources", "-v"],
         "chrony_sources_original": ["chronyc", "-N", "sources", "-v"],
-        "time_state": ["timedatectl", "show", "--property=Timezone,NTPSynchronized,TimeUSec"],
+        "time_state": ["timedatectl", "show"],
         "chronyd_state": ["systemctl", "show", "chronyd.service", "--property=LoadState,ActiveState,SubState,NRestarts"],
     }
-    if name in WORKERS:
+    if mode == "supplement":
+        fixed = {"time_state": fixed["time_state"]}
+        if name in WORKERS:
+            fixed.update({
+                "kubelet_state": ["systemctl", "show", "kubelet.service", "--property=Id,LoadState,ActiveState,SubState,UnitFileState,NRestarts"],
+                "kubelet_journal": ["journalctl", "-u", "kubelet.service", "-n", "120", "--no-pager", "-o", "short-iso-precise"],
+                "cockpit_units": ["systemctl", "show", "cockpit.socket", "cockpit.service", "--property=Id,LoadState,ActiveState,SubState,UnitFileState"],
+                "listeners": ["ss", "-lntp"],
+            })
+    if name in WORKERS and mode == "inspect":
         fixed.update({
             "selinux": ["getenforce"],
             "routes": ["ip", "-4", "route", "show"],
@@ -220,15 +254,22 @@ def collect(request):
                 fixed["firewall_" + plane + "_" + label] = base + args
     for label, argv in fixed.items():
         queries[label] = command(argv)
-    if name in WORKERS and queries["nm_device"]["rc"] == 0:
+    result["gaps"].extend(time_state_gaps(queries["time_state"]))
+    if name in WORKERS and mode == "inspect" and queries["nm_device"]["rc"] == 0:
         match = re.search(r"^GENERAL\.CON-UUID:([0-9a-fA-F-]{36})$", queries["nm_device"]["stdout"], re.M)
         if match:
             queries["nm_connection_zone"] = command(["nmcli", "-g", "connection.id,connection.uuid,connection.interface-name,connection.zone", "connection", "show", "uuid", match.group(1)])
         else:
             result["gaps"].append("active NM connection UUID unavailable")
-    result["chrony_config"] = chrony_config()
-    result["gaps"].extend(result["chrony_config"]["gaps"])
-    result["tcp_probes"] = [tcp_probe(target) for target in probe_targets(name)]
+    if mode == "inspect":
+        result["chrony_config"] = chrony_config()
+        result["gaps"].extend(result["chrony_config"]["gaps"])
+        result["tcp_probes"] = [tcp_probe(target) for target in probe_targets(name)]
+    else:
+        result["tcp_probes"] = []
+        if name in WORKERS:
+            result["kubelet_metadata"] = kubelet_metadata()
+            result["gaps"].extend(result["kubelet_metadata"]["gaps"])
     result["failed_queries"] = [label for label, value in queries.items() if value["rc"] != 0 or value.get("stdout_truncated") or value.get("stderr_truncated")]
     result["status"] = "INCOMPLETE_REVIEW_REQUIRED" if result["gaps"] or result["failed_queries"] else "COLLECTED_REVIEW_REQUIRED"
     result["ended_at"] = now()

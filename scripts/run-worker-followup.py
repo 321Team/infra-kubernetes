@@ -173,10 +173,11 @@ def collection_status(targets):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("inspect",), nargs="?", default="inspect")
+    parser.add_argument("mode", choices=("inspect", "supplement"), nargs="?", default="inspect")
     args = parser.parse_args()
     os.umask(0o077)
-    out = Path(tempfile.mkdtemp(prefix="FDS_Worker_Followup_", dir=Path.cwd()))
+    prefix = "FDS_Worker_Supplement_" if args.mode == "supplement" else "FDS_Worker_Followup_"
+    out = Path(tempfile.mkdtemp(prefix=prefix, dir=Path.cwd()))
     run_id = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + secrets.token_hex(6)
     summary = {"schema": "fds.worker-followup-controller.v1", "mode": args.mode, "run_id": run_id,
                "started_at": node.now(), "status": "STARTING", "targets": {}, "runtime_applied": "not_attempted",
@@ -190,7 +191,7 @@ def main():
         request = {"mode": args.mode, "source_commit": commit, "source_sha256": digest(NODE_SOURCE), "run_id": run_id}
         (out / "REQUEST.json").write_bytes(node.encoded(dict(request, nodes=list(node.NODES))))
         for name in node.NODES:
-            print(name + "=INSPECT_STARTED", flush=True)
+            print(name + "=" + args.mode.upper() + "_STARTED", flush=True)
             result = remote_request(name, dict(request, node=name))
             result.update(source_commit=commit, source_sha256=digest(NODE_SOURCE), mode=args.mode)
             (out / (name + ".json")).write_bytes(node.encoded(result))
