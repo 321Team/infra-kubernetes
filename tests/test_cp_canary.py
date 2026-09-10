@@ -202,5 +202,86 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual((folder / "SHA256SUMS").read_text().split()[0], c.digest(folder / "RESULT.json"))
 
 
+class PolicyRegressionTests(unittest.TestCase):
+    # Synthetic formatted output; the original v1.0 result did not retain this query.
+    active = "allow-host-ipv6 (active)\n  ingress-zones: ANY\n  egress-zones: HOST\n"
+
+    def setUp(self):
+        self.backend = n.Backend("k8s-control01")
+        self.addCleanup(self.backend.cache.cleanup)
+        self.calls = []
+
+    def response(self, argv):
+        self.calls.append(argv)
+        values = {"--get-active-policies": self.active, "--get-policies": "allow-host-ipv6\n",
+                  "--info-policy=allow-host-ipv6": self.active, "--state": "running\n",
+                  "--get-default-zone": "public\n", "--get-zone-of-interface=ens160": "public\n",
+                  "--get-all-rules": ""}
+        if argv == ["getenforce"]:
+            output = "Enforcing\n"
+        elif argv[0] == "nmcli":
+            output = "12345678-1234-1234-1234-123456789abc\n" if "GENERAL.CON-UUID" in argv else "\n"
+        elif argv[-1] == "--list-all":
+            interface = "" if "--permanent" in argv else "ens160"
+            output = ('public (default, active)\n  target: default\n  interfaces: ' + interface +
+                      '\n  sources: \n  services: dhcpv6-client ssh\n  ports: \n  protocols: \n  rich rules:\n' +
+                      '    rule family="ipv4" source address="10.1.93.109/32" port port="6443" protocol="tcp" accept\n')
+        else:
+            output = values[argv[-1]]  # Unknown query, including --info-policy=ANY, fails the test.
+        return {"rc": 0, "stdout": output, "stderr": ""}
+
+    def test_full_snapshot_uses_policy_name_list_and_retains_raw_queries(self):
+        with patch.object(self.backend, "identity"), patch.object(n, "command", side_effect=self.response):
+            result = self.backend.snapshot()
+        self.assertEqual(result["active_policies"]["active_output"], self.active.strip())
+        self.assertEqual(set(result["active_policies"]["configurations"]["runtime"]), {"allow-host-ipv6"})
+        self.assertEqual(result["nm_zone"], "")
+        self.assertIn("firewall-cmd --get-active-policies", self.backend.snapshot_queries)
+        self.assertFalse(any("--info-policy=ANY" in argv or "--info-policy=HOST" in argv for argv in self.calls))
+
+    def test_inactive_and_permanent_policies_are_preserved(self):
+        def respond(argv):
+            if argv[-1] == "--get-policies":
+                return {"rc": 0, "stdout": "allow-host-ipv6 dormant\n", "stderr": ""}
+            if argv[-1] == "--info-policy=dormant":
+                return {"rc": 0, "stdout": "dormant\n  target: CONTINUE\n", "stderr": ""}
+            return self.response(argv)
+        with patch.object(n, "command", side_effect=respond):
+            result = self.backend.policy_snapshot()
+        for plane in ("runtime", "permanent"):
+            self.assertIn("dormant", result["configurations"][plane])
+
+    def test_policy_query_failure_is_retained_and_not_ignored(self):
+        def respond(argv):
+            if argv[-1] == "--info-policy=allow-host-ipv6":
+                return {"rc": 140, "stdout": "", "stderr": "INVALID_POLICY: allow-host-ipv6"}
+            return self.response(argv)
+        with patch.object(n, "command", side_effect=respond), self.assertRaisesRegex(ValueError, "rc=140"):
+            self.backend.policy_snapshot()
+        stored = self.backend.snapshot_queries["firewall-cmd --info-policy=allow-host-ipv6"]
+        self.assertEqual(stored["rc"], 140)
+        self.assertIn("INVALID_POLICY", stored["stderr"])
+
+    def test_malformed_name_list_stops_before_policy_lookup(self):
+        def respond(argv):
+            if argv[-1] == "--get-policies":
+                return {"rc": 0, "stdout": "allow-host-ipv6 ingress-zones: ANY", "stderr": ""}
+            return self.response(argv)
+        with patch.object(n, "command", side_effect=respond), self.assertRaisesRegex(ValueError, "policy-name list"):
+            self.backend.policy_snapshot()
+        self.assertFalse(any(any(x.startswith("--info-policy=") for x in argv) for argv in self.calls))
+
+    def test_collection_summary_exposes_diagnostic_gaps(self):
+        wrapper = {"transport": "PASS", "result": {"status": "INSPECTED_REVIEW_REQUIRED",
+                   "gaps": ["FIREWALL_PRECHECK"], "failed_queries": [], "canary_inputs_complete": False}}
+        summary = c.target_summary(wrapper)
+        self.assertEqual(c.collection_status({"k8s-control01": summary}), "INCOMPLETE_REVIEW_REQUIRED")
+        summary["diagnostic_gaps"] = []
+        summary["failed_queries"] = ["nft"]
+        self.assertEqual(c.collection_status({"k8s-control01": summary}), "INCOMPLETE_REVIEW_REQUIRED")
+        summary["failed_queries"] = []
+        self.assertEqual(c.collection_status({"k8s-control02": summary}), "COLLECTED_REVIEW_REQUIRED")
+
+
 if __name__ == "__main__":
     unittest.main()

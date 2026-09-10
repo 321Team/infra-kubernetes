@@ -36,7 +36,7 @@
 - [생성 결과](cp-firewall-plan-20260910.json): 노드/설정 종류별 기존 상태, 상태 해시, query/add/rollback 인자. 이미 있는 규칙은 preserve로 기록하고 add/rollback 후보에서 제외한다.
 - [실행·복구 절차](../../runbooks/ICR-D-NET-01-01-CP-PORTS.md): 실시간 상태 재확인, 적용 결과 기록, canary 및 부분 실패 처리.
 - [CP1 실행 도구](../../../scripts/run-cp-canary.py): 기본 모드는 CP 3대 읽기 전용 점검이다. 적용·복구는 CP1로 제한한다. [키트 실행 절차](../../runbooks/ICR-D-NET-01-01-CP1-CANARY-KIT.md).
-- [검증 결과](VALIDATION.md): 25개 자동 테스트와 실제 제출본에 대한 오프라인 생성·zone 파싱 결과.
+- [검증 결과](VALIDATION.md): 30개 자동 테스트와 실제 제출본에 대한 오프라인 생성·zone 파싱 결과.
 
 생성 결과 SHA-256: `2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7`.
 
@@ -60,3 +60,7 @@
 이번에 완료한 것은 증적 기반 정책·변경안 생성·CP1 실행 도구 및 복구 절차 준비와 로컬 검증이다. 실제 방화벽 적용, CP2/CP3 join, 6/6 Ready, etcd 3 Member Healthy, Worker 통신, HEP/GNP, 재부팅·복구·독립 리뷰는 아직 완료되지 않았다. 따라서 #14는 In Progress를 유지하며 ICR-AC-01~20의 전체 PASS나 종료일을 새로 부여하지 않는다.
 
 구현 저장소는 `infra-kubernetes`의 현재 main에서 분기한다. 별도 진행 중인 초기 관리 문서 PR #1의 README나 HEAD를 변경하지 않는다. 공통 Inventory는 `infra-ansible`의 검토된 커밋을 참조하며 독립 사본을 만들지 않는다.
+
+## 첫 inspect 결과와 수정
+
+2026-09-10 12:45 KST 제출본에서 CP1 etcd 단일 멤버, CP2 표준 kubelet/etcd 경로 부재, CP2/3→CP1 세 포트 실패를 확인했다. v1.0 수집기의 ANY 정책 오인으로 firewall snapshot은 미완료다. v1.1 정책 조회·진단 보존·상태 집계를 수정했으며 재점검이 필요하다. [검토서](CP1_CANARY_REVIEW_20260910.md). 현재 코드의 독립 리뷰와 실제 적용은 여전히 미완료다.

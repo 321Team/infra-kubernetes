@@ -13,5 +13,17 @@
   "source_review_library_file_id": "libfile_e16c1cb98e988191ae4ccc2a272f120d",
   "plan_file": "cp-firewall-plan-20260910.json",
   "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
-  "runtime_applied": false
+  "runtime_applied": false,
+  "cp1_inspection_followup": {
+    "archive": "FDS_CP1_Canary_2vp6t68c.tar.gz",
+    "sha256": "7fb7bfc6ce3b71505c6bfbef290503b6d59d292d4928605d788be5375879b572",
+    "archive_library_id": "libfile_7476c3cc34988191a0ec7f2b819459fb",
+    "sidecar_library_id": "libfile_e836723202848191bcedb928d952fcae",
+    "source_commit": "0325ee798ef7bdc4e6dc582362043d899c1f3641",
+    "internal_checksums": "5/5 PASS",
+    "review": "CP1_CANARY_REVIEW_20260910.md",
+    "review_sha256": "65fe011ee39634da4f0317bf79da2db3e552b4c0d405b9793ab49704730068f9",
+    "firewall_snapshot": "INCOMPLETE: v1.0 policy output parsing defect",
+    "runtime_applied": false
+  }
 }

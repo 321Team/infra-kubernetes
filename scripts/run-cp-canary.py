@@ -190,6 +190,19 @@ def archive_output(directory):
     return archive, sidecar
 
 
+def target_summary(wrapper):
+    data = wrapper.get("result", {})
+    return {"transport": wrapper["transport"], "status": data.get("status", "TRANSPORT_ERROR"),
+            "diagnostic_gaps": data.get("gaps", []), "failed_queries": data.get("failed_queries", []),
+            "canary_inputs_complete": data.get("canary_inputs_complete")}
+
+
+def collection_status(targets):
+    incomplete = any(v["transport"] != "PASS" or v["status"] == "STOP" or v["status"].startswith("PARTIAL_")
+                     or v.get("diagnostic_gaps") or v.get("failed_queries") for v in targets.values())
+    return "INCOMPLETE_REVIEW_REQUIRED" if incomplete else "COLLECTED_REVIEW_REQUIRED"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("mode", choices=("inspect", "apply", "rollback", "receipt"), nargs="?", default="inspect")
@@ -220,11 +233,9 @@ def main():
             result = remote_request(name, request)
             result.update(source_commit=commit, source_sha256=digest(NODE_SOURCE), mode=args.mode)
             (out / (name + ".json")).write_bytes(node.encoded(result))
-            summary["targets"][name] = {"transport": result["transport"], "status": result.get("result", {}).get("status", "TRANSPORT_ERROR")}
+            summary["targets"][name] = target_summary(result)
             print(name + "=" + summary["targets"][name]["status"], flush=True)
-        summary["status"] = "COLLECTED_REVIEW_REQUIRED"
-        if any(v["transport"] != "PASS" or v["status"] == "STOP" or v["status"].startswith("PARTIAL_") for v in summary["targets"].values()):
-            summary["status"] = "INCOMPLETE_REVIEW_REQUIRED"
+        summary["status"] = collection_status(summary["targets"])
     except (Exception, KeyboardInterrupt) as error:
         summary["status"] = "STOP_REVIEW_REQUIRED"
         summary["error"] = node.redact(error)

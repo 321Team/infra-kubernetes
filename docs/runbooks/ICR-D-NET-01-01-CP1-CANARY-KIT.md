@@ -1,4 +1,4 @@
-# CP1 Canary Kit v1.0 — 점검·제한 적용·복구
+# CP1 Canary Kit v1.1 — 점검·제한 적용·복구
 
 상태: 실행 도구 준비 및 로컬 검증 완료. **실서버 미실행, 독립 리뷰 대기. 현재 실행 단계는 `inspect`다.**
 
@@ -13,14 +13,16 @@
 (
   set -euo pipefail
   cd /home/server01_ansible
-  sha256sum --check FDS_CP1_Canary_Kit_v1.0.zip.sha256
+  sha256sum --check FDS_CP1_Canary_Kit_v1.1.zip.sha256
   fds_canary_dir=$(mktemp -d /home/server01_ansible/FDS_CP1_Canary_Kit.XXXXXX)
-  python3 -m zipfile -e FDS_CP1_Canary_Kit_v1.0.zip "$fds_canary_dir"
-  python3 "$fds_canary_dir/FDS_CP1_Canary_Kit_v1.0/scripts/run-cp-canary.py" inspect
+  python3 -m zipfile -e FDS_CP1_Canary_Kit_v1.1.zip "$fds_canary_dir"
+  python3 "$fds_canary_dir/FDS_CP1_Canary_Kit_v1.1/scripts/run-cp-canary.py" inspect
 )
 ```
 
-결과의 `ARCHIVE=...tar.gz`, `SIDECAR=...tar.gz.sha256` 두 파일을 제출한다. 실패한 경우에도 가능한 범위의 증적과 실패 단계가 압축파일에 남는다. `COLLECTED_REVIEW_REQUIRED`는 수집 반환 상태이며 서비스 PASS를 뜻하지 않는다. 노드별 `gaps`, `failed_queries`, TCP 결과를 별도로 검토한다.
+v1.1은 v1.0의 ANY 정책 오인 오류를 수정했다. 새 디렉터리에서 다시 점검하며 기존 v1.0 결과를 적용 입력으로 사용하지 않는다. [제출본 검토서](../change/ICR-D-NET-01-01/CP1_CANARY_REVIEW_20260910.md).
+
+결과의 `ARCHIVE=...tar.gz`, `SIDECAR=...tar.gz.sha256` 두 파일을 제출한다. 실패한 경우에도 가능한 범위의 증적과 실패 단계가 압축파일에 남는다. `COLLECTED_REVIEW_REQUIRED`는 수집 반환 상태이며 서비스 PASS를 뜻하지 않는다. 노드별 `gaps`, `failed_queries`, `snapshot_queries`, TCP 결과를 별도로 검토한다. v1.1에서 gaps/실패 질의가 있으면 전체 상태는 `INCOMPLETE_REVIEW_REQUIRED`다.
 
 `inspect` 수집 범위:
 
@@ -85,6 +87,6 @@ python3 /실제/kit/scripts/run-cp-canary.py rollback --input /실제/적용출�
 
 ## 5. 검증 범위
 
-로컬 자동 테스트 25개 PASS: 기존 계획 11개, 신규 실행·복구·전송/입력 보호 14개. 실제 firewalld/etcd/SSH에 대한 원격 실행 테스트는 아직 하지 않았다. [검증 기록](../change/ICR-D-NET-01-01/VALIDATION.md).
+로컬 자동 테스트 30개 PASS: 기존 계획 11개, 실행·복구·전송/입력 보호 14개, 정책 조회·상태 집계 회귀 5개. v1.0 inspect는 실서버에서 실행했고 SSH·etcd·일반 질의는 확보했으나 정책 파싱 오류로 snapshot 생성에 실패했다. v1.1 실서버 재점검과 apply/rollback 실행 검증은 아직 하지 않았다. [검증 기록](../change/ICR-D-NET-01-01/VALIDATION.md).
 
 기술 기준: [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html), [etcd status](https://etcd.io/docs/v3.6/tasks/operator/how-to-check-cluster-status/), [kubectl exec](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_exec/), [NetworkManager connection.zone](https://networkmanager.dev/docs/api/latest/nm-settings-nmcli.html).

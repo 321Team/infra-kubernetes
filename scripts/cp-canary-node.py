@@ -107,37 +107,59 @@ class Backend:
     def __init__(self, node):
         self.node = node
         self.cache = tempfile.TemporaryDirectory(prefix="fds-kubectl-")
+        self.snapshot_queries = {}
+
+    def read_snapshot(self, argv):
+        result = command(argv)
+        self.snapshot_queries[shlex.join(argv)] = result
+        need(result["rc"] == 0 and not result.get("stdout_truncated"),
+             "query failed: " + shlex.join(argv) + "; rc=" + str(result["rc"]) + "; " + result["stderr"][:2000])
+        return result["stdout"].strip()
+
+    def policy_snapshot(self):
+        # --get-active-policies is formatted detail, not a policy-name list.
+        # ANY/HOST in its zone bindings must never become --info-policy names.
+        active_output = self.read_snapshot(["firewall-cmd", "--get-active-policies"])
+        configurations = {}
+        for plane in ("runtime", "permanent"):
+            prefix = ["firewall-cmd"] + (["--permanent"] if plane == "permanent" else [])
+            names = self.read_snapshot(prefix + ["--get-policies"]).split()
+            need(len(names) == len(set(names)) and all(re.fullmatch(r"[A-Za-z0-9_-]+", name) for name in names),
+                 "invalid policy-name list")
+            configurations[plane] = {name: self.read_snapshot(prefix + ["--info-policy=" + name]) for name in sorted(names)}
+        return {"active_output": active_output, "configurations": configurations}
 
     def identity(self):
         need(os.geteuid() == 0, "sudo/root required")
         need(socket.gethostname().split(".")[0] == self.node and self.node in NODES, "hostname mismatch")
-        addresses = json.loads(checked(["ip", "-j", "-4", "addr", "show", "dev", "ens160"]))
+        addresses = json.loads(self.read_snapshot(["ip", "-j", "-4", "addr", "show", "dev", "ens160"]))
         need(any(a.get("local") == NODES[self.node] for item in addresses for a in item.get("addr_info", [])), "ens160 IP mismatch")
 
     def snapshot(self):
+        self.snapshot_queries = {}
+        read = self.read_snapshot
         self.identity()
-        need(checked(["getenforce"]) == "Enforcing", "SELinux is not Enforcing")
-        need(checked(["firewall-cmd", "--state"]) == "running", "firewalld not running")
-        default = checked(["firewall-cmd", "--get-default-zone"])
-        active = checked(["firewall-cmd", "--get-zone-of-interface=ens160"])
+        need(read(["getenforce"]) == "Enforcing", "SELinux is not Enforcing")
+        need(read(["firewall-cmd", "--state"]) == "running", "firewalld not running")
+        default = read(["firewall-cmd", "--get-default-zone"])
+        active = read(["firewall-cmd", "--get-zone-of-interface=ens160"])
         need(default == active == "public", "default/interface zone mismatch")
-        connection = checked(["nmcli", "-g", "GENERAL.CON-UUID", "device", "show", "ens160"])
+        connection = read(["nmcli", "-g", "GENERAL.CON-UUID", "device", "show", "ens160"])
         need(re.fullmatch(r"[0-9a-fA-F-]{36}", connection), "NM active connection UUID unavailable")
-        zone = checked(["nmcli", "-g", "connection.zone", "connection", "show", "uuid", connection])
+        zone = read(["nmcli", "-g", "connection.zone", "connection", "show", "uuid", connection])
         need(zone in ("", "public"), "NM zone does not resolve to public")
         planes = {}
         for plane in ("permanent", "runtime"):
             prefix = ["firewall-cmd"] + (["--permanent"] if plane == "permanent" else [])
-            planes[plane] = parse_zone(checked(prefix + ["--zone=public", "--list-all"]))
+            planes[plane] = parse_zone(read(prefix + ["--zone=public", "--list-all"]))
         need(planes["runtime"]["fields"].get("interfaces") == "ens160", "runtime interface changed")
         need(planes["permanent"]["fields"].get("interfaces") in ("", "ens160"), "permanent interface mismatch")
-        policies = checked(["firewall-cmd", "--get-active-policies"]).split()
-        policy_data = {name: checked(["firewall-cmd", "--info-policy=" + name]) for name in sorted(policies)}
+        policy_data = self.policy_snapshot()
         return {"hostname": self.node, "ip": NODES[self.node], "selinux": "Enforcing", "default_zone": default,
                 "active_zone": active, "nm_uuid": connection, "nm_zone": zone, "planes": planes,
                 "active_policies": policy_data,
-                "direct_runtime": checked(["firewall-cmd", "--direct", "--get-all-rules"]),
-                "direct_permanent": checked(["firewall-cmd", "--permanent", "--direct", "--get-all-rules"])}
+                "direct_runtime": read(["firewall-cmd", "--direct", "--get-all-rules"]),
+                "direct_permanent": read(["firewall-cmd", "--permanent", "--direct", "--get-all-rules"])}
 
     def kubectl(self, args):
         return command(["/usr/bin/kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
@@ -360,6 +382,7 @@ def inspect(backend):
         result["before_sha256"] = fingerprint(result["snapshot"])
     except Exception as error:
         result["gaps"].append("FIREWALL_PRECHECK: " + redact(error))
+    result["snapshot_queries"] = copy.deepcopy(backend.snapshot_queries)
     queries = {"listeners": ["ss", "-H", "-lntp"],
                "units": ["systemctl", "show", "kubelet", "containerd", "firewalld", "-p", "Id", "-p", "ActiveState", "-p", "SubState", "-p", "NRestarts"],
                "kubeadm_version": ["kubeadm", "version", "-o", "short"],
@@ -401,6 +424,8 @@ def inspect(backend):
             probe.update(connected=False, errno=error.errno, error=str(error))
         result["tcp_to_cp1"].append(probe)
     result["failed_queries"] = [key for key, query in result["queries"].items() if query["rc"] != 0 or query.get("stdout_truncated")]
+    result["failed_queries"] += ["snapshot: " + key for key, query in result["snapshot_queries"].items()
+                                  if query["rc"] != 0 or query.get("stdout_truncated")]
     result["ended_at"] = now()
     result["canary_inputs_complete"] = backend.node == "k8s-control01" and not result["gaps"]
     result["note"] = "Read-only collection. Failed TCP probes do not make collection a transport failure. No kubeconfig/key contents or shell history collected."
