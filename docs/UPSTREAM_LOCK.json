@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-09-09",
+  "purpose": "Reviewed upstream references for repository handoff; this file is not an execution or deployment approval.",
+  "infra_ansible": {
+    "repository": "https://github.com/321Team/infra-ansible",
+    "pull_request": "https://github.com/321Team/infra-ansible/pull/3",
+    "approved_pr_head": "e6c65d6c04615b17bd9be950d572f96abe351027",
+    "commit": "5cbf3b657014b32a20cb5816d90d3ea5fe4951ab",
+    "tree": "0817d18fcbf74b3826f3ee31b1ad8f275daedc8b",
+    "inventory": "inventory/hosts.yml",
+    "gate0_playbook": "playbooks/p1-k8s-01-gate0-precheck.yml",
+    "gate0_node_count": 6,
+    "gate0_review_verdict": "PASS"
+  },
+  "baseline": {
+    "repository": "https://github.com/321Team/fds-project-baseline",
+    "current_pointer": "https://github.com/321Team/fds-project-baseline/blob/main/CURRENT.md",
+    "released_version_at_handoff": "v3.1.17",
+    "approved_content_merge_sha": "8515ecd97e69035f329032ba17206972c7b0739d",
+    "release_path": "releases/v3.1.17/"
+  }
+}
