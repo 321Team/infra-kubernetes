@@ -1,0 +1,31 @@
+{
+  "schema": "fds.cp-firewall-policy.v1",
+  "ticket": "321Team/fds-project-baseline#14",
+  "baseline_commit": "2d93395a0e19ea67e5be199d7183a7edbaa6cf4c",
+  "inventory_commit": "5cbf3b657014b32a20cb5816d90d3ea5fe4951ab",
+  "evidence": {
+    "archive": "FDS_CP_Log_Collection_glrr0dsq.tar.gz",
+    "sha256": "265e7d3fe04c8c215b8c76847bac769c5445682d788c3f9ad2bf9afef100c594",
+    "ended_at": "2026-09-10T02:30:59.491401+00:00"
+  },
+  "targets": {
+    "k8s-control01": "10.1.93.102",
+    "k8s-control02": "10.1.93.103",
+    "k8s-control03": "10.1.93.104"
+  },
+  "zone": "public",
+  "interface": "ens160",
+  "sources": ["10.1.93.102/32", "10.1.93.103/32", "10.1.93.104/32"],
+  "ports": [
+    {"port": "2379-2380", "protocol": "tcp", "contract": "IF-12A"},
+    {"port": "10250", "protocol": "tcp", "contract": "IF-12B"}
+  ],
+  "planes": ["permanent", "runtime"],
+  "deferred": [
+    "IF-12B Worker 3대: 최신 zone/listener 증적 필요",
+    "CP 직접 TCP 6443: 실제 소비 경로와 변경 근거 확인",
+    "고정 NTP/UDP 123: 목적지 및 대체 서버 승인값 필요",
+    "HEP/GNP 적용 및 firewalld 비활성화: 별도 보호 인계 단계",
+    "IF-06B 및 IF-16 잔여 Runtime: 본 CP 포트 작업으로 완료 처리하지 않음"
+  ]
+}

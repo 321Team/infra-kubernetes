@@ -1,0 +1,17 @@
+{
+  "schema": "fds.icr-evidence-index.v1",
+  "collection_archive": "FDS_CP_Log_Collection_glrr0dsq.tar.gz",
+  "archive_sha256": "265e7d3fe04c8c215b8c76847bac769c5445682d788c3f9ad2bf9afef100c594",
+  "collection_ended_at_utc": "2026-09-10T02:30:59.491401+00:00",
+  "internal_checksum_result": "8/8 MATCH",
+  "node_count": 3,
+  "storage": "원본은 기존 승인된 증적 보관 위치 및 이 대화의 제출 파일. 원본 로그는 Git에 편입하지 않음.",
+  "archive_library_file_id": "libfile_c644172547808191aa237709fa659ee6",
+  "sidecar_library_file_id": "libfile_3eb8b76c536481919ba11f9eec5681d7",
+  "review_file": "CP_LOG_REVIEW_20260910.md",
+  "review_sha256": "9e5b3d5a1733c9851e518ce510bf1a5dc26569b70601d3ffda6a8310262a9ba5",
+  "source_review_library_file_id": "libfile_e16c1cb98e988191ae4ccc2a272f120d",
+  "plan_file": "cp-firewall-plan-20260910.json",
+  "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
+  "runtime_applied": false
+}
