@@ -1,6 +1,8 @@
 # CP1 Canary Kit v1.2
 
-현재 단계: 새 코드 독립 리뷰와 읽기 전용 확인. [선행 이력](../change/ICR-D-NET-01-01/ADVANCE_CHANGE_RECORD_20260910.md)·[실행/복구](ICR-D-NET-01-01-CP-PORTS.md).
+현재 단계: 현장 Linux37개·CP inspect 검증 완료, 독립 리뷰 및 실제 Runtime 조건 확인. [선행 이력](../change/ICR-D-NET-01-01/ADVANCE_CHANGE_RECORD_20260910.md)·[실행/복구](ICR-D-NET-01-01-CP-PORTS.md).
+
+[2026-09-10 현장 검토](../change/ICR-D-NET-01-01/ONSITE_REVIEW_20260910.md): afc246d로 수집한 mvoxv1pm은 Linux 기록 부족을 해소했다. 실제 apply의15분 입력·승인 source 조건을 위한 새 inspect는 별개다. 배포 ZIP의 SOURCE_LOCK에 적힌 실행 commit과 이후 증적 편입 commit을 구분한다.
 
 ## 소스와 환경
 

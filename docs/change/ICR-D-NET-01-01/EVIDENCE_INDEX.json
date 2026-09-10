@@ -63,6 +63,30 @@
     "note": "The above historical runtime source commit is not this evidence-registration commit.",
     "linux_test_file": "LINUX_TEST_V12_20260910.json",
     "linux_test_sha256": "d19b3b32dfa951506f33bbdbdceb8b2c44ef08651a72fa6dba671c7ec2926cda",
-    "tests": "37/37 PASS; local mock, not target runtime"
+    "tests": "37/37 PASS; local mock, not target runtime",
+    "onsite_test_record": "ONSITE_TEST_20260910.json",
+    "onsite_result": "37/37 PASS on ansible01; CP inspect complete; Runtime apply not attempted"
+  },
+  "onsite_validation_20260910": {
+    "archive": "FDS_PR2_Onsite_mvoxv1pm.tar.gz",
+    "archive_sha256": "e3e2d9c40f4fd57f8a445ca52e6756f81c455c4ad1ddbc9aa00689009857966b",
+    "archive_library_id": "libfile_996091c52eac819189f43726aec87275",
+    "sidecar_library_id": "libfile_6c49501332fc81919d4a32b5a32168e4",
+    "execution_source_commit": "afc246d2db041c68de5014972107484dad122558",
+    "outer_checksums": "13/13 PASS",
+    "inner_checksums": "5/5 PASS",
+    "linux_tests": "37/37 PASS on ansible01; original 19 test IDs included",
+    "general_queries": 37,
+    "snapshot_queries": 78,
+    "review": "ONSITE_REVIEW_20260910.md",
+    "review_sha256": "3280ed99ebd02dcf14fd0ecad37569446c6e8c5d721e3ee72439c0450698ced5",
+    "test_record": "ONSITE_TEST_20260910.json",
+    "test_record_sha256": "b9cd857e2f82667bd1ac28d841ae69cab5e36f8bcf3238f6acce7fd385b2049d",
+    "inspection_summary": "ONSITE_INSPECTION_SUMMARY_20260910.json",
+    "inspection_summary_sha256": "1173dc0d5212f8720d57ab847f846dd16a71a2551977859f6ba554f7a8ae2aee",
+    "runtime_applied": false,
+    "independent_approval": "PENDING",
+    "input_valid_until_kst": "2026-09-10T19:30:57.964101+09:00",
+    "note": "Execution source and evidence-registration commit differ; code/tests/policies unchanged by this evidence update."
   }
 }

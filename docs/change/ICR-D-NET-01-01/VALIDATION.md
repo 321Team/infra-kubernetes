@@ -1,5 +1,15 @@
 # CP1 Runtime v1.2 검증 기록
 
+## 최신 현장 기록 — 2026-09-10 19:15–19:16 KST
+
+ansible01의 Linux 6.12.0-260.el10 / Python 3.12.13에서 **37/37 PASS**(실행 도구26 + 계획11). 구19개 테스트 식별자 전부 포함. source afc246d의 27개 파일·원격 Git blob, 외부/내부13개·중첩5개 증적 체크섬 일치. CP 3대 inspect 일반37+snapshot78=115개 조회 rc=0. CP2/3→CP1 TCP0/6 및 HEP/GNP0은 남아 있어 실제 운영 인수는 미완료다.
+
+[현장 검토서](ONSITE_REVIEW_20260910.md) · [현장 Linux 원문·소스 해시](ONSITE_TEST_20260910.json) · [점검 요약](ONSITE_INSPECTION_SUMMARY_20260910.json). 리뷰어의 현장 Linux 증적 요청은 확보·검증 완료이며 독립 APPROVED 및 Runtime apply/rollback은 별도다. 이번 커밋은 증적·문서만 갱신하며 코드·테스트·정책을 변경하지 않는다.
+
+아래 로컬 검증·당시 현장 미실행 문구는 afc246d 보완 시점의 이력이다. 현장 실행 여부는 위 최신 기록을 적용한다.
+
+## 이전 로컬 검증·준비 이력
+
 2026-09-10 / 로컬 Linux 검증 / 실제 ansible01·CP1 Runtime 적용 미실행.
 
 | 항목 | 결과·근거 |
