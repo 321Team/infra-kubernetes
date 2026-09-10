@@ -54,6 +54,7 @@ def verify_source():
         files = lock["files"]
         required = {"scripts/run-cp-canary.py", "scripts/cp-canary-node.py",
                     "policies/icr-d-net-01-01/cp-firewall-v1.json",
+                    "policies/icr-d-net-01-01/cp1-runtime-policy-v2.json",
                     "docs/change/ICR-D-NET-01-01/cp-firewall-plan-20260910.json"}
         node.need(required <= set(files), "incomplete source lock")
         for name, expected in files.items():
@@ -68,6 +69,8 @@ def verify_source():
     node.need(re.fullmatch(r"[0-9a-f]{40}", commit), "invalid source commit")
     plan = KIT / "docs/change/ICR-D-NET-01-01/cp-firewall-plan-20260910.json"
     node.need(digest(plan) == node.PLAN, "plan checksum mismatch")
+    node.need(digest(KIT / "policies/icr-d-net-01-01/cp1-runtime-policy-v2.json") == node.fingerprint(node.RUNTIME_POLICY),
+              "runtime execution policy checksum mismatch")
     return commit
 
 
@@ -151,9 +154,37 @@ def load_checked(path, expected):
     return json.loads(path.read_text())
 
 
+def validate_authorization(data, commit, mode, input_sha256):
+    """Validate operator records, not the authenticity of a remote GitHub review."""
+    node.need(data.get("schema") == "fds.cp1-runtime-authorization.v2", "authorization schema differs")
+    node.need(data.get("source_commit") == commit and data.get("hostname") == "k8s-control01" and
+              data.get("mode") == mode and data.get("input_sha256") == input_sha256,
+              "authorization source/target/mode/input differs")
+    node.need(data.get("execution_plan_sha256") == node.fingerprint(node.RUNTIME_POLICY), "authorization plan differs")
+    node.need(data.get("operator") == "GWONUK" and data.get("independent_reviewer") == "hayeounglee" and
+              data.get("review_decision") == "APPROVED", "independent approval record absent")
+    node.need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/2#pullrequestreview-[0-9]+",
+                          data.get("review_url") or ""), "review URL absent")
+    node.need(re.fullmatch(r"https://github\.com/321Team/(?:infra-kubernetes/pull/2|fds-project-baseline/issues/14)#issuecomment-[0-9]+",
+                          data.get("execution_decision_url") or ""), "execution decision URL absent")
+    for field in ("backup_available", "console_recovery_available", "maintenance_freeze",
+                  "coexistence_risk_reviewed", "no_join_before_runtime_acceptance"):
+        node.need(data.get(field) is True, "required operation condition absent: " + field)
+    node.need(data.get("advance_record") == "ICR-D-NET-01-01-ADV-20260910", "advance decision reference differs")
+    for field in ("protection_review_sha256", "rollback_plan_sha256"):
+        node.need(re.fullmatch(r"[0-9a-f]{64}", data.get(field) or ""), "operation evidence digest absent: " + field)
+    start = dt.datetime.fromisoformat(data["window_start"])
+    end = dt.datetime.fromisoformat(data["window_end"])
+    node.need(start.tzinfo is not None and end.tzinfo is not None, "timezone required")
+    current = dt.datetime.now(dt.timezone.utc)
+    node.need(start <= current <= end and 0 < (end - start).total_seconds() <= 7200, "outside operation window")
+    node.need(current.astimezone(dt.timezone(dt.timedelta(hours=9))).weekday() < 5, "no weekend classroom runtime")
+
+
 def request_for(args, commit, run_id):
     request = {"mode": args.mode, "node": "k8s-control01", "source_commit": commit,
-               "source_sha256": digest(NODE_SOURCE), "plan_sha256": node.PLAN, "run_id": run_id}
+               "source_sha256": digest(NODE_SOURCE), "plan_sha256": node.PLAN, "run_id": run_id,
+               "execution_plan_sha256": node.fingerprint(node.RUNTIME_POLICY)}
     if args.mode == "apply":
         node.need(args.input is not None, "apply requires the CP1 inspection JSON")
         wrapper = load_checked(args.input, args.input_sha256)
@@ -176,6 +207,10 @@ def request_for(args, commit, run_id):
     elif args.mode == "receipt":
         node.need(args.run_id is not None, "receipt requires --run-id from the interrupted run")
         request["run_id"] = args.run_id
+    if args.mode in ("apply", "rollback"):
+        auth = load_checked(args.authorization, args.authorization_sha256)
+        validate_authorization(auth, commit, args.mode, args.input_sha256)
+        request["authorization_sha256"] = args.authorization_sha256
     return request
 
 
@@ -208,6 +243,8 @@ def main():
     parser.add_argument("mode", choices=("inspect", "apply", "rollback", "receipt"), nargs="?", default="inspect")
     parser.add_argument("--input", type=Path)
     parser.add_argument("--input-sha256")
+    parser.add_argument("--authorization", type=Path)
+    parser.add_argument("--authorization-sha256")
     parser.add_argument("--run-id")
     args = parser.parse_args()
     os.umask(0o077)
@@ -222,6 +259,9 @@ def main():
         summary["source_commit"] = commit
         summary["preflight"] = preflight()
         request = request_for(args, commit, run_id)
+        if args.mode in ("apply", "rollback"):
+            auth = load_checked(args.authorization, args.authorization_sha256)
+            (out / "AUTHORIZATION.json").write_bytes(node.encoded(auth))
         summary["run_id"] = request["run_id"]
         targets = list(node.NODES) if args.mode == "inspect" else ["k8s-control01"]
         (out / "REQUEST.json").write_bytes(node.encoded(request))

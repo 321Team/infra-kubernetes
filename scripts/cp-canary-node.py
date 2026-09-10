@@ -19,6 +19,9 @@ ROOT = Path("/var/lib/fds/icr-d-net-01-01/cp1-canary")
 PLAN = "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7"
 RULES = [f'rule family="ipv4" source address="{ip}/32" port port="{port}" protocol="tcp" accept'
          for ip in NODES.values() for port in ("2379-2380", "10250")]
+RUNTIME_POLICY = {"schema": "fds.cp1-runtime-policy.v2", "hostname": "k8s-control01",
+                  "zone": "public", "planes": ["runtime"], "rules": RULES,
+                  "reference_plan_sha256": PLAN, "permanent_promotion": "NOT_IMPLEMENTED"}
 
 
 def need(value, message):
@@ -231,12 +234,22 @@ class Journal:
         private_path(ROOT, create=new)
         self.path = ROOT / (run_id + ".json")
         self.lock = os.open(ROOT / "transaction.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-        need(os.fstat(self.lock).st_uid == 0 and not os.fstat(self.lock).st_mode & 0o077, "unsafe lock")
-        fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if new:
-            need(not self.path.exists() and not self.path.is_symlink(), "run id already exists")
-            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-            os.close(fd)
+        try:
+            need(os.fstat(self.lock).st_uid == 0 and not os.fstat(self.lock).st_mode & 0o077, "unsafe lock")
+            fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if new:
+                for previous in sorted(ROOT.glob("*.json")):
+                    private_path(previous)
+                    need(previous.is_file() and previous.stat().st_size <= 4 * 1024 * 1024, "unsafe prior receipt")
+                    data = json.loads(previous.read_bytes())
+                    need(data.get("status") == "ROLLED_BACK_REVIEW_REQUIRED",
+                         "unresolved prior receipt; review before a new run: " + previous.name)
+                need(not self.path.exists() and not self.path.is_symlink(), "run id already exists")
+                fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                os.close(fd)
+        except BaseException:
+            os.close(self.lock)
+            raise
 
     def save(self, value):
         private_path(self.path)
@@ -275,6 +288,7 @@ def evolved(before, operations):
 
 
 def apply_transaction(backend, journal, request):
+    need(request.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY), "runtime execution plan differs")
     before = backend.snapshot()
     need(fingerprint(before) == request["before_sha256"], "live firewall/NM state differs from inspection")
     topology = backend.topology()
@@ -284,13 +298,15 @@ def apply_transaction(backend, journal, request):
     need(len(stable["members"]) == 1 and stable["members"][0]["name"] == "k8s-control01" and
          stable["members"][0]["peerURLs"] == ["https://10.1.93.102:2380"] and not stable["members"][0]["isLearner"],
          "initial canary requires a single CP1 etcd member; review current topology")
-    receipt = {"schema": "fds.cp1-canary-receipt.v1", "hostname": "k8s-control01", "run_id": request["run_id"],
+    receipt = {"schema": "fds.cp1-canary-receipt.v2", "phase": "runtime", "hostname": "k8s-control01", "run_id": request["run_id"],
                "started_at": now(), "source_sha256": request["source_sha256"], "source_commit": request["source_commit"],
                "plan_sha256": PLAN, "before": before, "topology_sha256": topology["sha256"],
+               "execution_plan_sha256": fingerprint(RUNTIME_POLICY),
+               "authorization_sha256": request["authorization_sha256"],
                "status": "APPLYING", "operations": []}
     journal.save(receipt)
     try:
-        for plane in ("permanent", "runtime"):
+        for plane in ("runtime",):
             for rule in RULES:
                 need(backend.snapshot() == evolved(before, receipt["operations"]), "concurrent firewall change")
                 present = backend.query(plane, rule)
@@ -315,7 +331,7 @@ def apply_transaction(backend, journal, request):
         receipt["after"] = backend.snapshot()
         need(receipt["after"] == evolved(before, receipt["operations"]), "post-apply firewall mismatch")
         need(backend.topology()["sha256"] == receipt["topology_sha256"], "post-apply topology/readiness changed")
-        receipt["status"] = "APPLIED_REVIEW_REQUIRED"
+        receipt["status"] = "RUNTIME_APPLIED_REVIEW_REQUIRED"
     except Exception as error:
         receipt["status"] = "PARTIAL_APPLY_REVIEW_REQUIRED"
         receipt["error"] = redact(error)
@@ -325,13 +341,17 @@ def apply_transaction(backend, journal, request):
 
 
 def rollback_transaction(backend, journal, receipt, request):
+    need(receipt.get("schema") == "fds.cp1-canary-receipt.v2" and receipt.get("phase") == "runtime",
+         "legacy or non-runtime receipt requires separate recovery review")
+    need(receipt.get("execution_plan_sha256") == request.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY),
+         "runtime execution plan differs")
     need(receipt["hostname"] == "k8s-control01" and receipt["run_id"] == request["run_id"], "receipt identity mismatch")
     need(receipt["source_sha256"] == request["source_sha256"] and receipt["plan_sha256"] == PLAN, "rollback source differs")
     need(receipt["source_commit"] == request["source_commit"], "rollback commit differs")
-    need(receipt["status"] in ("APPLIED_REVIEW_REQUIRED", "PARTIAL_APPLY_REVIEW_REQUIRED"), "receipt is not eligible for automatic rollback")
+    need(receipt["status"] in ("RUNTIME_APPLIED_REVIEW_REQUIRED", "PARTIAL_APPLY_REVIEW_REQUIRED"), "receipt is not eligible for automatic rollback")
     operations = receipt["operations"]
     for op in operations:
-        need(op["plane"] in ("permanent", "runtime") and op["rule"] in RULES, "receipt rule out of scope")
+        need(op["plane"] == "runtime" and op["rule"] in RULES, "receipt rule out of scope")
         need(op["status"] in ("added", "preserved", "not_added"), "ambiguous operation requires manual review")
         need(op["status"] != "added" or op["present_before"] is False, "refusing removal of a preexisting rule")
     need(backend.topology()["sha256"] == receipt["topology_sha256"], "membership changed; removing rules may disrupt joined nodes")
@@ -409,6 +429,14 @@ def inspect(backend):
         for pod, container in [("etcd-k8s-control01", "etcd"), ("kube-apiserver-k8s-control01", "kube-apiserver")]:
             result["queries"][container + "_log"] = backend.kubectl(["-n", "kube-system", "logs", pod, "-c", container,
                 "--timestamps", "--tail=300", "--since-time=2026-09-09T12:40:00Z"])
+        for key, args in {
+            "calico_pods": ["get", "pods", "-A", "-l", "k8s-app=calico-node", "-o", "wide"],
+            "calico_hostendpoints": ["get", "hostendpoints.crd.projectcalico.org", "-o", "json"],
+            "calico_globalnetworkpolicies": ["get", "globalnetworkpolicies.crd.projectcalico.org", "-o", "json"],
+            "calico_felixconfigurations": ["get", "felixconfigurations.crd.projectcalico.org", "-o", "json"],
+            "calico_ippools": ["get", "ippools.crd.projectcalico.org", "-o", "json"],
+        }.items():
+            result["queries"][key] = backend.kubectl(args)
     for key, argv in queries.items():
         result["queries"][key] = command(argv)
     result["tcp_to_cp1"] = []
@@ -427,7 +455,7 @@ def inspect(backend):
     result["failed_queries"] += ["snapshot: " + key for key, query in result["snapshot_queries"].items()
                                   if query["rc"] != 0 or query.get("stdout_truncated")]
     result["ended_at"] = now()
-    result["canary_inputs_complete"] = backend.node == "k8s-control01" and not result["gaps"]
+    result["canary_inputs_complete"] = backend.node == "k8s-control01" and not result["gaps"] and not result["failed_queries"]
     result["note"] = "Read-only collection. Failed TCP probes do not make collection a transport failure. No kubeconfig/key contents or shell history collected."
     return result
 
@@ -448,6 +476,9 @@ def main(request):
             need(request["plan_sha256"] == PLAN, "plan mismatch")
             mode = request["mode"]
             need(mode in ("apply", "rollback", "receipt"), "unsupported mode")
+            if mode in ("apply", "rollback"):
+                need(request.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY), "runtime execution plan differs")
+                need(re.fullmatch(r"[0-9a-f]{64}", request.get("authorization_sha256", "")), "authorization digest missing")
             journal = Journal(request["run_id"], new=mode == "apply")
             if mode == "apply":
                 age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(request["inspection_created_at"])).total_seconds()

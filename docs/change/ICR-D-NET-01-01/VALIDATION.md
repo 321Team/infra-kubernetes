@@ -1,42 +1,37 @@
-# CP 방화벽 변경안 검증 기록
+# CP1 Runtime v1.2 검증 기록
 
-검증일: 2026-09-10. 로컬 Python 표준 라이브러리로 검증했다.
+2026-09-10 / 로컬 Linux 검증 / 실제 ansible01·CP1 Runtime 적용 미실행.
 
-| 검증 | 결과 |
+| 항목 | 결과·근거 |
 |---|---|
-| unittest | 30개 PASS — 계획 11개 + 실행 도구 14개 + 회귀 5개 |
-| 정확한 /32·포트·대상 제한 | PASS. /24 및 추가 6443 입력 거부 |
-| 기존 규칙 보존 | PASS. 한 plane에 기존 규칙이 있으면 추가 후보에서 제외하고 rollback 인자를 만들지 않음 |
-| 관리 SSH / identity / zone / 수집 상태 검사 | PASS. SSH 부재, 잘못된 노드, unreachable, zone 변경, 잘린 출력 거부 |
-| 무결성·입력 보호 | PASS. sidecar 변조, 내부 변조, 체크섬 누락, 경로 이탈, symlink, JSON 중복 키 거부 |
-| 실제 glrr0dsq 제출본 처리 | 압축파일·내부 8/8 해시 검증 후 3개 CP의 추가 후보 생성 |
-| 생성된 추가 후보 | 노드별 6개 × 2개 설정(Runtime/Permanent) × 3대 = 36건 |
-| 생성 결과 SHA-256 | `2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7` |
-| 원격 실행·서비스 검증 | v1.0 inspect 실행 증적 확보. SSH·etcd·일반 조회 성공, 정책 출력 파싱 오류 확인. v1.1 재점검 및 적용·복구는 미실행 |
-| 독립 리뷰 / Runtime 승인 | 본 로컬 검증으로 대체하지 않음 |
+| 원래068661e canary 테스트 | 19/19 PASS, Linux 6.18.35 / Python3.12.14. [원문 기록](LINUX_TEST_068661e_20260910.json) |
+| 새 v1.2 canary 테스트 | 26/26 PASS |
+| 역사적 계획 생성기 테스트 | 11/11 PASS |
+| 새 소스 합계 | **37/37 PASS**, rc=0. [정확한 파일 SHA와 전체 출력](LINUX_TEST_V12_20260910.json) |
+| Runtime 경계 | apply/rollback 모두 Permanent 쓰기0건, 최대6개 Runtime 작업 |
+| receipt 경계 | v1 receipt·Permanent 작업 삽입·다른 실행 정책의 회수/적용 거부 |
+| 승인 기록 바인딩 | source/target/mode/input·정책·검토자·review URL·실행 결정·필수조건·시간창 검증 |
+| 보존·실패 | 기존 규칙, drift·member 변경·timeout·의도 저장 실패 시 중단/불명확 소유권 보존 |
+| 실제 v1.1 재점검 | jvgkgfm9 수집 완전성 PASS, 내부5/5·110개 질의rc0. 현재 v1.2 실행 증적은 아님 |
+| 새 현장 검사 | v1.2 inspect·실제 적용/복구·보호 공존·CA/Auth/Negative·reboot는 미실행 |
 
 재현 명령:
-
 ```bash
 python3 -m unittest discover -s tests -p 'test_cp*.py' -v
 ```
 
-실제 증적의 계획 재현 명령은 [실행 절차](../../runbooks/ICR-D-NET-01-01-CP-PORTS.md)에 있다. 테스트 fixture는 최소 필드로 만든 합성 데이터이며 원본 운영 로그를 포함하지 않는다. 실제 제출본 실행에서는 고정된 원본 압축파일을 입력으로 사용했다.
+LINUX_TEST_V12는 사전 커밋 단계에서 실제 검증한 파일별 SHA를 기록한다. 부모068661e를 새 구현의 실행 commit으로 표시하지 않는다. 저장소 편입 commit은 이 파일을 포함하는 새 Git commit이며 PR에 따로 기록한다.
 
-## CP1 실행 도구 검증 추가
+첫 검증에서 Runtime-only 전환 후 기존 “12개 중1개 보존=11개 쓰기” 테스트 기대치가 남아 실패했다. Runtime6개 중1개 보존=5개 쓰기로 수정했고, 기존 규칙 미삭제 및 Permanent 무변경 검증을 유지한 최종37개가 통과했다. 실패 결과를 실서버 결함이나 최종PASS로 혼용하지 않는다.
 
-- 정확한 12건 적용 및 역순 복구, 기존 규칙 보존.
-- 영구 의도 기록 실패 시 쓰기 0건, 확인된 부분 성공만 복구.
-- timeout/ALREADY_ENABLED 등 불명확한 소유권의 자동 삭제 거부.
-- 초기 snapshot 불일치, 추가 etcd member, 복구 전 Node/member 변경, firewall drift 중단.
-- Inventory 대상 불일치, 점검 파일 변조, 15분 경과 입력 거부.
-- SSH 실패 단계·진단 보존 및 token 마스킹, 부분 결과 압축파일과 체크섬 검증.
-- 기존 glrr0dsq의 public Runtime/Permanent 출력 6건을 신규 zone parser로 처리 성공.
+## 리뷰 지적 반영
 
-모의 Backend는 방화벽·etcd·SSH에 접속하지 않는다. 실제 journaling fsync/lock, sudo, NetworkManager, kubectl exec와 firewalld 연동은 서버 점검 및 canary 결과로 추가 검증해야 한다. 로컬 테스트는 독립 리뷰와 운영 인수를 대체하지 않는다.
+- [증적 누락 지적](https://github.com/321Team/infra-kubernetes/pull/2#issuecomment-5615857463): 첫2vp6t68c 기록은 보존하고 [재점검 검토서](CP1_REINSPECTION_REVIEW_20260910.md), [파생 요약](CP1_REINSPECTION_SUMMARY_20260910.json), EVIDENCE_INDEX의 최신 항목을 추가했다.
+- [Linux 검증 요청](https://github.com/321Team/infra-kubernetes/pull/2#issuecomment-5615889673): 원래 소스19개와 새 소스37개 결과를 환경·파일 해시·시각·rc·전체 출력과 함께 편입했다. ansible01/CP1에서 실행한 기록은 아니므로 현장 확인 요구를 대체하지 않는다.
+- CA-01: [선행 변경 기록](ADVANCE_CHANGE_RECORD_20260910.md)에 사용자 허용·타당성·공존 위험·범위·v18 반영 조건을 명시했다.
+- CA-02: 현재apply는Runtime만 변경하며 영구 승격 미구현이다. 시험·리뷰 전 Permanent 선반영 경로를 제거했다.
 
-## v1.1 회귀 검증
+## 검증의 한계
 
---get-policies로 조회한 이름만 info-policy에 전달하고, ANY/HOST가 들어간 active 출력은 원문 보관한다. 전체 snapshot 완료, Runtime/Permanent 및 비활성 정책 보존, 정책 조회 오류 기록, 잘못된 이름 목록 중단, gaps/실패 질의의 전체 INCOMPLETE 상태 집계를 5개 테스트로 검증했다. 실제 active 출력 전체는 v1.0에서 보존되지 않았으므로 fixture를 실제 수집 원문이라고 간주하지 않는다.
+Backend·journal은 대부분 모의이며, 실제 SSH/sudo·root lock/fsync·firewalld·Calico dataplane·etcd 연동을 이 시험이 입증하지 않는다. NTP·실제 Source·포트/서비스·Negative·복구/재부팅 인수는 실제 증적이 필요하다. Offline 승인 JSON은 실제 GitHub 승인 인증 기능이 아니다. 원시 운영 로그는 기존 보관 위치에 두고 저장소에는 식별·해시·검토서와 필요한 비밀정보 없는 파생 요약만 포함한다.
 
-이전 25개 로컬 테스트는 CLI의 실제 active-policies 출력 형식을 검증하지 않아 이번 결함을 발견하지 못했다. v1.1의 새 실서버 inspect로 snapshot·NM·정책 조회를 확인해야 한다. 원본 일반 조회 32개 rc=0과 별도 snapshot 오류 3개는 구분해 기록한다. [검토서](CP1_CANARY_REVIEW_20260910.md).

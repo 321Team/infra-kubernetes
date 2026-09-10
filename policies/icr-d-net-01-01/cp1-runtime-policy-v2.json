@@ -1,0 +1,18 @@
+{
+  "hostname": "k8s-control01",
+  "permanent_promotion": "NOT_IMPLEMENTED",
+  "planes": [
+    "runtime"
+  ],
+  "reference_plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
+  "rules": [
+    "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+    "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+    "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+    "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+    "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+    "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+  ],
+  "schema": "fds.cp1-runtime-policy.v2",
+  "zone": "public"
+}

@@ -1,0 +1,47 @@
+# Local authentication and secrets
+.env
+.env.*
+!.env.example
+.ssh/
+.kube/
+*.key
+*.pem
+*.p12
+*.pfx
+*.kubeconfig
+kubeconfig
+admin.conf
+super-admin.conf
+id_rsa*
+id_ed25519*
+id_ecdsa*
+secrets.local.*
+runtime-input.local.json
+*join-token*
+*certificate-key*
+
+# Raw execution evidence and generated output
+/evidence/raw/
+/results/
+/artifacts/
+/generated/
+*.retry
+*.log
+*.tar.gz
+*.tgz
+*.zip
+
+# Local tooling and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ansible/
+.cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

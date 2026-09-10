@@ -80,7 +80,8 @@ class TransactionTests(unittest.TestCase):
         self.backend = FakeBackend(self.journal)
         self.request = {"run_id": "20260910T120000Z-abcdef123456", "source_sha256": "a" * 64,
                         "source_commit": "b" * 40, "before_sha256": n.fingerprint(self.backend.state),
-                        "topology_sha256": self.backend.topology()["sha256"]}
+                        "topology_sha256": self.backend.topology()["sha256"],
+                        "execution_plan_sha256": n.fingerprint(n.RUNTIME_POLICY), "authorization_sha256": "c" * 64}
 
     def apply(self):
         return n.apply_transaction(self.backend, self.journal, self.request)
@@ -88,20 +89,20 @@ class TransactionTests(unittest.TestCase):
     def test_full_apply_and_reverse_rollback(self):
         before = self.backend.snapshot()
         receipt = self.apply()
-        self.assertEqual(receipt["status"], "APPLIED_REVIEW_REQUIRED")
-        self.assertEqual(len(self.backend.edits), 12)
+        self.assertEqual(receipt["status"], "RUNTIME_APPLIED_REVIEW_REQUIRED")
+        self.assertEqual(len(self.backend.edits), 6)
         added = list(self.backend.edits)
         rolled = n.rollback_transaction(self.backend, self.journal, receipt, self.request)
         self.assertEqual(rolled["status"], "ROLLED_BACK_REVIEW_REQUIRED")
         self.assertEqual(self.backend.snapshot(), before)
-        self.assertEqual([(p, r) for p, r, a in self.backend.edits[12:]], [(p, r) for p, r, a in reversed(added)])
+        self.assertEqual([(p, r) for p, r, a in self.backend.edits[6:]], [(p, r) for p, r, a in reversed(added)])
 
     def test_preexisting_rule_never_removed(self):
         self.backend.state["planes"]["runtime"]["rules"].append(n.canonical_rule(n.RULES[0]))
         self.backend.state["planes"]["runtime"]["rules"].sort()
         self.request["before_sha256"] = n.fingerprint(self.backend.state)
         receipt = self.apply()
-        self.assertEqual(len(self.backend.edits), 11)
+        self.assertEqual(len(self.backend.edits), 5)
         n.rollback_transaction(self.backend, self.journal, receipt, self.request)
         self.assertTrue(self.backend.query("runtime", n.RULES[0]))
         self.assertNotIn(("runtime", n.RULES[0], "remove"), self.backend.edits)
@@ -117,7 +118,7 @@ class TransactionTests(unittest.TestCase):
         self.backend.stable["nodes"].append(["k8s-control02", "uid2"])
         with self.assertRaisesRegex(ValueError, "membership changed"):
             n.rollback_transaction(self.backend, self.journal, receipt, self.request)
-        self.assertEqual(len(self.backend.edits), 12)
+        self.assertEqual(len(self.backend.edits), 6)
 
     def test_initial_canary_rejects_existing_second_member(self):
         self.backend.stable["members"].append({"name": "k8s-control02"})
@@ -158,7 +159,7 @@ class TransactionTests(unittest.TestCase):
         self.backend.state["planes"]["runtime"]["rules"].append("someone-elses-rule")
         with self.assertRaisesRegex(ValueError, "drift"):
             n.rollback_transaction(self.backend, self.journal, receipt, self.request)
-        self.assertEqual(len(self.backend.edits), 12)
+        self.assertEqual(len(self.backend.edits), 6)
 
 
 class ControllerTests(unittest.TestCase):
@@ -281,6 +282,93 @@ class PolicyRegressionTests(unittest.TestCase):
         self.assertEqual(c.collection_status({"k8s-control01": summary}), "INCOMPLETE_REVIEW_REQUIRED")
         summary["failed_queries"] = []
         self.assertEqual(c.collection_status({"k8s-control02": summary}), "COLLECTED_REVIEW_REQUIRED")
+
+
+class RuntimeOnlyTests(unittest.TestCase):
+    def setUp(self):
+        fixture = TransactionTests()
+        fixture.setUp()
+        self.backend, self.journal, self.request = fixture.backend, fixture.journal, fixture.request
+
+    def test_apply_and_rollback_never_write_permanent(self):
+        before = copy.deepcopy(self.backend.state["planes"]["permanent"])
+        receipt = n.apply_transaction(self.backend, self.journal, self.request)
+        self.assertEqual(receipt["status"], "RUNTIME_APPLIED_REVIEW_REQUIRED")
+        self.assertEqual(len(receipt["operations"]), 6)
+        self.assertEqual(self.backend.state["planes"]["permanent"], before)
+        n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        self.assertTrue(all(plane == "runtime" for plane, _, _ in self.backend.edits))
+        self.assertEqual(self.backend.state["planes"]["permanent"], before)
+
+    def test_legacy_receipt_rejected_without_removal(self):
+        receipt = n.apply_transaction(self.backend, self.journal, self.request)
+        receipt["schema"] = "fds.cp1-canary-receipt.v1"
+        with self.assertRaisesRegex(ValueError, "legacy"):
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        self.assertEqual(len(self.backend.edits), 6)
+
+    def test_permanent_operation_in_receipt_is_rejected(self):
+        receipt = n.apply_transaction(self.backend, self.journal, self.request)
+        receipt["operations"][0]["plane"] = "permanent"
+        with self.assertRaisesRegex(ValueError, "out of scope"):
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        self.assertEqual(len(self.backend.edits), 6)
+
+    def test_execution_policy_mismatch_has_zero_mutations(self):
+        self.request["execution_plan_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "execution plan"):
+            n.apply_transaction(self.backend, self.journal, self.request)
+        self.assertEqual(self.backend.edits, [])
+
+
+class AuthorizationTests(unittest.TestCase):
+    def setUp(self):
+        class FrozenDateTime(dt.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                value = cls(2026, 9, 10, 9, 0, tzinfo=dt.timezone.utc)
+                return value.astimezone(tz) if tz else value.replace(tzinfo=None)
+        clock = patch.object(c.dt, "datetime", FrozenDateTime)
+        clock.start()
+        self.addCleanup(clock.stop)
+        current = dt.datetime.now(dt.timezone.utc)
+        self.data = {"schema": "fds.cp1-runtime-authorization.v2", "source_commit": "b" * 40,
+            "hostname": "k8s-control01", "mode": "apply", "input_sha256": "a" * 64,
+            "execution_plan_sha256": n.fingerprint(n.RUNTIME_POLICY), "operator": "GWONUK",
+            "independent_reviewer": "hayeounglee", "review_decision": "APPROVED",
+            "review_url": "https://github.com/321Team/infra-kubernetes/pull/2#pullrequestreview-1",
+            "execution_decision_url": "https://github.com/321Team/fds-project-baseline/issues/14#issuecomment-1",
+            "advance_record": "ICR-D-NET-01-01-ADV-20260910", "backup_available": True,
+            "console_recovery_available": True, "maintenance_freeze": True,
+            "coexistence_risk_reviewed": True, "no_join_before_runtime_acceptance": True,
+            "protection_review_sha256": "d" * 64, "rollback_plan_sha256": "e" * 64,
+            "window_start": (current - dt.timedelta(minutes=1)).isoformat(),
+            "window_end": (current + dt.timedelta(minutes=1)).isoformat()}
+
+    def check(self, data):
+        c.validate_authorization(data, "b" * 40, "apply", "a" * 64)
+
+    def test_bound_record_and_missing_condition(self):
+        self.check(self.data)
+        for field in ("backup_available", "console_recovery_available", "maintenance_freeze",
+                      "coexistence_risk_reviewed", "no_join_before_runtime_acceptance"):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.check(dict(self.data, **{field: False}))
+
+    def test_other_source_input_target_or_review_cannot_be_reused(self):
+        for field, value in (("source_commit", "f" * 40), ("input_sha256", "f" * 64),
+                             ("hostname", "k8s-control02"), ("mode", "rollback"),
+                             ("review_decision", "COMMENTED"), ("independent_reviewer", "GWONUK"),
+                             ("review_url", "https://github.com/321Team/infra-kubernetes/pull/1#pullrequestreview-1")):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                self.check(dict(self.data, **{field: value}))
+
+    def test_expired_or_unbounded_window_is_rejected(self):
+        current = dt.datetime.now(dt.timezone.utc)
+        for start, end in ((current-dt.timedelta(minutes=3), current-dt.timedelta(minutes=2)),
+                           (current-dt.timedelta(hours=3), current+dt.timedelta(hours=1))):
+            with self.subTest(start=start), self.assertRaises(ValueError):
+                self.check(dict(self.data, window_start=start.isoformat(), window_end=end.isoformat()))
 
 
 if __name__ == "__main__":

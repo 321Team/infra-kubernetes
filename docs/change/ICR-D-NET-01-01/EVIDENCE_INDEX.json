@@ -24,6 +24,45 @@
     "review": "CP1_CANARY_REVIEW_20260910.md",
     "review_sha256": "65fe011ee39634da4f0317bf79da2db3e552b4c0d405b9793ab49704730068f9",
     "firewall_snapshot": "INCOMPLETE: v1.0 policy output parsing defect",
-    "runtime_applied": false
+    "runtime_applied": false,
+    "historical_record": true
+  },
+  "cp1_reinspection_followup": {
+    "archive": "FDS_CP1_Canary_jvgkgfm9.tar.gz",
+    "sha256": "45a23e3039a37edf4ee17a540263a1a3c558ab1e0d50b7aa2f783f0fa8f61b55",
+    "execution_source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+    "source_sha256": "5b1c9bccaf80cafc7f52eaf1ad9799d4a342981784f8fdb484013e27b19ae41b",
+    "internal_checksums": "5/5 PASS",
+    "general_queries": 32,
+    "snapshot_queries": 78,
+    "review": "CP1_REINSPECTION_REVIEW_20260910.md",
+    "review_sha256": "2d34a9778e1a2e61ffef5d36b1435ab93399faaae8a9655936e5155e92eeb860",
+    "summary": "CP1_REINSPECTION_SUMMARY_20260910.json",
+    "summary_sha256": "a982ccb8b41a673d9b755c93fe2b050743928644ef2672ed3bd370c3d67ba2f1",
+    "firewall_snapshot": "COMPLETE at collection time",
+    "canary_inputs_complete_cp1": true,
+    "runtime_applied": false,
+    "input_expired": true,
+    "archive_library_id": "libfile_c9ae9f2374808191809e5110fb8c20ba",
+    "sidecar_library_id": "libfile_733515c4951c8191bfa829609a8352c4"
+  },
+  "linux_test_original_source": {
+    "file": "LINUX_TEST_068661e_20260910.json",
+    "sha256": "5855a9d4c937ff162a03ac7542beb5c4fbe9e0b7bfc45bb0f198ea8cffc75fa4",
+    "source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+    "tests": 19,
+    "result": "PASS",
+    "environment": "Codex local Linux, not ansible01/CP1"
+  },
+  "current_implementation": {
+    "version": "v1.2",
+    "scope": "CP1 runtime only; permanent promotion not implemented",
+    "execution_policy_sha256": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
+    "advance_record": "ADVANCE_CHANGE_RECORD_20260910.md",
+    "runtime_applied": false,
+    "note": "The above historical runtime source commit is not this evidence-registration commit.",
+    "linux_test_file": "LINUX_TEST_V12_20260910.json",
+    "linux_test_sha256": "d19b3b32dfa951506f33bbdbdceb8b2c44ef08651a72fa6dba671c7ec2926cda",
+    "tests": "37/37 PASS; local mock, not target runtime"
   }
 }
