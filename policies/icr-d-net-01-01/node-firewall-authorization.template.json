@@ -1,0 +1,16 @@
+{
+  "console_recovery_available": false,
+  "cp1_acceptance_report_sha256": null,
+  "cp1_canary_accepted": false,
+  "independent_reviewer": null,
+  "maintenance_freeze": false,
+  "mode": "apply",
+  "operator": "GWONUK",
+  "review_decision": null,
+  "review_url": null,
+  "schema": "fds.node-firewall-authorization.v1",
+  "source_commit": null,
+  "target": null,
+  "window_end": null,
+  "window_start": null
+}
