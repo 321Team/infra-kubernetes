@@ -1,24 +1,27 @@
 # P1-SEC-01 — SEC-01~08 Revision 대응 기록
 
-> 대응 리뷰: `fds-project-baseline#19` (GWONUK, issuecomment-5627308483, 2026-09-11)
+> 1차 대응 리뷰: `fds-project-baseline#19` 실제 지적 댓글 (issuecomment-5633339292, GWONUK, 2026-09-11).
+> 이전 PR 코멘트에 5627308483(하영님 구현 제출 댓글)으로 잘못 링크했던 부분은 정정한다.
+> 2차 재검토: issuecomment-5644891728 (GWONUK, 2026-09-12), 판정 HOLD / Revision Required, 대상 HEAD 4454098.
 > 이 문서는 PR 제출 시점의 대응 상태를 기록한다. Runtime PASS/FAIL 판정은 이 PR이 부여하지 않으며,
 > 이권욱님 최종 승인과 실제 클러스터(P1-K8S-01 Platform Ready) 이후의 Runtime 인수로 별도 확정한다.
 
-## 대응 요약
+## 대응 요약 (2차 반영 후)
 
-| ID | 수준 | 리뷰 지적 | 수정 파일 | 상태 |
-|---|---|---|---|---|
-| SEC-01 | Critical | identity 우선 재작성 = 사실상 평문 저장, static Pod mount 미제출 | `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW |
-| SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | `scripts/create-secrets-safe.sh` | FIXED_PENDING_REVIEW |
-| SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW |
-| SEC-04 | High | selector/labels 누락, Monitoring image 누락 | `manifests/02-securitycontext.yaml` | FIXED_PENDING_REVIEW |
-| SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW |
-| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | `manifests/04-calico-hep-gnp.yaml`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | FIXED_PENDING_REVIEW |
-| SEC-07 | High | 테스트 대상 IP 오류(.109), 정책 차단 판정 근거 부정확 | `scripts/verify-probe-failover.sh` | FIXED_PENDING_REVIEW |
-| SEC-08 | High | `auth can-i`의 TYPE/NAME과 subresource 구문 혼동 | `scripts/verify-rbac.sh` | FIXED_PENDING_REVIEW |
+| ID | 수준 | 1차 리뷰 지적 | 2차 재검토 지적 (HEAD 4454098) | 수정 파일 | 상태 |
+|---|---|---|---|---|---|
+| SEC-01 | Critical | identity 우선 재작성 = 평문 저장, static Pod mount 미제출 | 키 내용/길이/CP 동일성 미검증, 구조적 mount 대조 아님, 실제 재시작 미확인, 무한 대기, raw 검증기가 구 키도 PASS | `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
+| SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | umask 늦음, 고정 /tmp 경로, set -e로 정리 미도달 | `scripts/create-secrets-safe.sh`, `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
+| SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | 방향 수정은 인정(CLOSED_STATIC), monitor01 실주소 등 INPUT HOLD | `manifests/03-networkpolicy.yaml` | INPUT HOLD (코드 변경 불필요, 외부 입력 대기) |
+| SEC-04 | High | selector/labels 누락, Monitoring image 누락 | selector/labels 인정(PARTIAL), Service 80→8000(IF-02A) 위반, "완성" 주장 철회 필요 | `manifests/02-securitycontext.yaml` | 1차 FIXED, 2차 IF-02A 포트 수정 완료 / 나머지(UID·PVC 등) BLOCKED_INPUT |
+| SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | monitoring-api DNS 허용 없음, API endpoint 미완성 | `manifests/03-networkpolicy.yaml` | OPEN (미착수) |
+| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | `manifests/04-calico-hep-gnp.yaml`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | OPEN (미착수) |
+| SEC-07 | High | 테스트 대상 IP 오류(.109) | nc/curl 부재·부분 실패·timeout을 PASS로 오판 | `scripts/verify-probe-failover.sh` | FIXED_PENDING_REVIEW (2차) |
+| SEC-08 | High | `auth can-i` TYPE/NAME과 subresource 구문 혼동 | API 통신 오류를 "no"로 오인해 전체 PASS | `scripts/verify-rbac.sh` | FIXED_PENDING_REVIEW (2차) |
 
 상태값은 baseline 리뷰 관례(OPEN → FIXED_PENDING_REVIEW → CLOSED_STATIC)를 따른다.
 이 PR 제출만으로 CLOSED로 전환하지 않으며, 독립 Reviewer의 HEAD 검토 후 판정한다.
+SEC-05/06은 아직 2차 수정 미착수 상태다.
 
 ## 항목별 변경 내용
 
