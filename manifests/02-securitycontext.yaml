@@ -1,0 +1,445 @@
+# P1-SEC-01 / SEC-04 (High) 수정 — selector/labels 누락으로 독립 apply 불가능했던 문제 교정.
+#
+# 대응 리뷰: fds-project-baseline#19 (issuecomment-5627308483), SEC-04
+#   - 6 Deployment + 1 DaemonSet 전부에 spec.selector / template.metadata.labels 추가
+#   - Monitoring 5개 워크로드에 image 필드 명시 (버전은 실제 채택 버전으로 교체 필요)
+#   - transaction-api/fds-engine은 APP 원본 Deployment에 적용할 patch로도 사용 가능하도록
+#     독립 apply 가능한 완성 Manifest로 제공
+#
+# <실제-버전>, <확인된-UID>, <확인된-GID>, <approved-digest> 등은 사전확인(§3) 완료 후
+# 실측값으로 교체한다. Placeholder 상태로 적용하지 않는다 (baseline P1-SEC-01 원칙).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transaction-api
+  namespace: fds-app
+  labels:
+    app: transaction-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: transaction-api
+  template:
+    metadata:
+      labels:
+        app: transaction-api
+    spec:
+      serviceAccountName: transaction-api-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: <확인된-UID>
+        runAsGroup: <확인된-GID>
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: harbor-pull-secret
+      containers:
+        - name: transaction-api
+          image: 10.1.93.54/fds/transaction-api@sha256:<approved-digest>
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8000
+            - containerPort: 9091
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-api
+  namespace: fds-app
+  labels:
+    app: transaction-api
+spec:
+  selector:
+    app: transaction-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fds-engine
+  namespace: fds-app
+  labels:
+    app: fds-engine
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fds-engine
+  template:
+    metadata:
+      labels:
+        app: fds-engine
+    spec:
+      serviceAccountName: fds-engine-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: <확인된-UID>
+        runAsGroup: <확인된-GID>
+        seccompProfile:
+          type: RuntimeDefault
+      imagePullSecrets:
+        - name: harbor-pull-secret
+      containers:
+        - name: fds-engine
+          image: 10.1.93.54/fds/fds-engine@sha256:<approved-digest>
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8001
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8001
+            initialDelaySeconds: 10
+            periodSeconds: 20
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fds-engine
+  namespace: fds-app
+  labels:
+    app: fds-engine
+spec:
+  selector:
+    app: fds-engine
+  ports:
+    - name: grpc
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring-api
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: <확인된-UID>
+        runAsGroup: <확인된-GID>
+        fsGroup: <확인된-GID>
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus
+          image: prom/prometheus:<실제-버전>
+          args:
+            - --storage.tsdb.retention.time=15d
+            - --storage.tsdb.retention.size=<PVC용량의-80%>
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tsdb-data
+              mountPath: /prometheus
+          ports:
+            - containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      volumes:
+        - name: tsdb-data
+          persistentVolumeClaim:
+            claimName: prometheus-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring-api
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      serviceAccountName: alertmanager-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: <확인된-UID>
+        runAsGroup: <확인된-GID>
+        fsGroup: <확인된-GID>
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:<실제-버전>
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: am-data
+              mountPath: /alertmanager
+          ports:
+            - containerPort: 9093
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      volumes:
+        - name: am-data
+          persistentVolumeClaim:
+            claimName: alertmanager-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring-api
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      serviceAccountName: grafana-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: <확인된-UID>
+        runAsGroup: <확인된-GID>
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana
+          image: grafana/grafana:<실제-버전>
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-credentials
+                  key: GF_SECURITY_ADMIN_USER
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-credentials
+                  key: GF_SECURITY_ADMIN_PASSWORD
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+      volumes:
+        - name: grafana-data
+          persistentVolumeClaim:
+            claimName: grafana-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: monitoring-api
+  labels:
+    app: kube-state-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+    spec:
+      serviceAccountName: kube-state-metrics-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: <확인된-UID>
+        runAsGroup: <확인된-GID>
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:<실제-버전>
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+            - containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: 8080
+      hostPID: false
+      hostIPC: false
+      hostNetwork: false
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: monitoring-node
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      serviceAccountName: node-exporter-sa
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:<실제-버전>
+          args:
+            - --path.rootfs=/host/root
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: host-root
+              mountPath: /host/root
+              readOnly: true
+          ports:
+            - containerPort: 9100
+              hostPort: 9100
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9100
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9100
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
