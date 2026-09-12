@@ -11,7 +11,7 @@
 #   namespaceSelector만으로는 hostNetwork/API DNAT 경로를 보장하지 못하므로
 #   Host 경로(kubelet 10250)와 Pod 경로(kube-dns, kubernetes.default.svc)를 구분해 명시.
 #
-# <monitor01-실제-IP> 등은 실측 확인(§3.6) 후 반영. Placeholder 상태로 적용 금지.
+# monitor01 IP는 baseline §6.4에서 10.250.10.30으로 확정됐다 (SEC-03 참조, 아래).
 #
 # 2차 수정 (SEC-05, GWONUK 재검토 issuecomment-5644891728):
 #   - monitoring-api 네임스페이스 전체에 DNS(53) egress가 빠져있던 문제 보완 (아래
@@ -307,7 +307,14 @@ spec:
     # (아래 prometheus-remote-write-allow 참조). Alertmanager는 monitor01로의 egress 규칙을 갖지 않는다.
     []
 ---
-# SEC-03: IF-06B — Prometheus -> monitor01 Remote Write (TCP 443 HTTPS)
+# SEC-03 2차 수정: monitor01 실제 IP 확정 (baseline §6.4 Network Design,
+# FDS_Project_Implementation_Baseline_v3.1.18.md L520-524):
+#   "Management VMnet: 10.250.10.0/24 ... monitor01 `.30`"
+# D-SEC-01 표기 ".30"은 10.1.93.x가 아니라 Management VMnet(10.250.10.0/24) 소속이다.
+# 물리 FDS VM(Kubernetes Node 포함)의 Return Route는 "10.250.10.0/24 via 10.1.93.58"
+# (baseline L527, mgmt-gw01 경유)이므로 Pod egress 목적지는 10.250.10.30이 맞다.
+#
+# IF-06B — Prometheus -> monitor01 Remote Write (TCP 443 HTTPS)
 # baseline IF-06B: "5분 이내 Loss Detection, TLS/Auth, Payload Allowlist, Return Path" 계약.
 # 이 NetworkPolicy는 Egress만 허용하며, TLS/Auth/Payload 계약 자체의 구현은 P1-MON-01 소관.
 apiVersion: networking.k8s.io/v1
@@ -323,10 +330,10 @@ spec:
   egress:
     - to:
         - ipBlock:
-            cidr: <monitor01-실제-IP>/32  # D-SEC-01 표기 ".30" — 실제 대역(10.1.93.x/10.250.10.x) 확인 후 반영
+            cidr: 10.250.10.30/32  # monitor01 (Management VMnet, baseline §6.4 확정)
       ports:
         - { protocol: TCP, port: 443 }
-      # mgmt-gw01(10.1.93.58)은 물리 경로상 중간 홉이며 NetworkPolicy egress 목적지가 아님
+      # mgmt-gw01(10.1.93.58)은 물리 경로상 중간 홉(Return Route)이며 NetworkPolicy egress 목적지가 아님
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

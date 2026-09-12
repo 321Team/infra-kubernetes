@@ -12,7 +12,7 @@
 |---|---|---|---|---|---|
 | SEC-01 | Critical | identity 우선 재작성 = 평문 저장, static Pod mount 미제출 | 키 내용/길이/CP 동일성 미검증, 구조적 mount 대조 아님, 실제 재시작 미확인, 무한 대기, raw 검증기가 구 키도 PASS | `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
 | SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | umask 늦음, 고정 /tmp 경로, set -e로 정리 미도달 | `scripts/create-secrets-safe.sh`, `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
-| SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | 방향 수정은 인정(CLOSED_STATIC), monitor01 실주소 등 INPUT HOLD | `manifests/03-networkpolicy.yaml` | INPUT HOLD (코드 변경 불필요, 외부 입력 대기) |
+| SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | 방향 수정 인정(CLOSED_STATIC), monitor01 실주소는 baseline §6.4 재확인으로 해소(10.250.10.30) | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (3차, TLS/Auth/Payload 계약 자체는 여전히 P1-MON-01 소관) |
 | SEC-04 | High | selector/labels 누락, Monitoring image 누락 | selector/labels 인정(PARTIAL), Service 80→8000(IF-02A) 위반, "완성" 주장 철회 필요 | `manifests/02-securitycontext.yaml` | 1차 FIXED, 2차 IF-02A 포트 수정 완료 / 나머지(UID·PVC 등) BLOCKED_INPUT |
 | SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | monitoring-api DNS 허용 없음, API endpoint 미완성 | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (2차) |
 | SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | `manifests/calico/*.yaml`(신규 분리), `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | FIXED_PENDING_REVIEW (2차) |
@@ -21,8 +21,8 @@
 
 상태값은 baseline 리뷰 관례(OPEN → FIXED_PENDING_REVIEW → CLOSED_STATIC)를 따른다.
 이 PR 제출만으로 CLOSED로 전환하지 않으며, 독립 Reviewer의 HEAD 검토 후 판정한다.
-2026-09-13 기준 SEC-01/02/04/05/06/07/08 모두 2차 수정을 제출했다. SEC-03만 외부 입력
-대기(INPUT HOLD)로 남아있다.
+2026-09-13 기준 SEC-01/02/04/05/06/07/08은 2차 수정을, SEC-03은 baseline §6.4 재확인으로
+3차 수정(monitor01 IP 10.250.10.30 확정 반영)을 제출했다. 8개 항목 전체 코드 대응 완료.
 
 ## 항목별 변경 내용
 
@@ -94,7 +94,8 @@
 - `<확인된-UID>` / `<확인된-GID>` — 각 워크로드 공식 이미지의 non-root 지원 UID/GID
 - `<approved-digest>` — transaction-api/fds-engine의 Harbor Trivy 스캔 통과 후 SHA-256 Digest
 - `<실제-NIC-이름>` — Worker 3대의 실제 네트워크 인터페이스명
-- `<monitor01-실제-IP>`, `<Worker-Node-CIDR>` — D-NET-01/ICR 실측 확정 후 반영
+- ~~`<monitor01-실제-IP>`~~ — baseline §6.4에서 10.250.10.30으로 확정, 반영 완료 (3차 수정)
+- ~~`<Worker-Node-CIDR>`~~ — baseline §6.2에서 개별 IP(10.1.93.105/107/108)로 확정, 반영 완료 (2차 수정)
 - `<PVC용량의-80%>` — Prometheus PVC 실제 용량 확정 후 계산
 
 ## Evidence
