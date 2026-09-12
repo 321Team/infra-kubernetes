@@ -1,0 +1,15 @@
+# SEC-06 2차 수정 — Worker 확대 2단계. Worker01(02-worker01-hep.yaml)이 회귀·재부팅·
+# 복구 PASS인 경우에만 이 파일을 적용한다.
+# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+apiVersion: crd.projectcalico.org/v1
+kind: HostEndpoint
+metadata:
+  name: worker02-hep
+  labels:
+    role: k8s-worker
+    rollout-stage: expanded
+spec:
+  node: k8s-worker02
+  interfaceName: <실제-NIC-이름>
+  expectedIPs:
+    - "10.1.93.107"

@@ -1,0 +1,15 @@
+# SEC-06 2차 수정 — canary 1단계. 이 파일만 단독 적용한다 (Worker02/03과 별도 파일).
+# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+# 적용 후: docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md의 회귀시험 세트 전체 실행 필수.
+apiVersion: crd.projectcalico.org/v1
+kind: HostEndpoint
+metadata:
+  name: worker01-hep
+  labels:
+    role: k8s-worker
+    rollout-stage: canary
+spec:
+  node: k8s-worker01
+  interfaceName: <실제-NIC-이름>
+  expectedIPs:
+    - "10.1.93.105"

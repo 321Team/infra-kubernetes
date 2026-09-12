@@ -14,14 +14,15 @@
 | SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | umask 늦음, 고정 /tmp 경로, set -e로 정리 미도달 | `scripts/create-secrets-safe.sh`, `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
 | SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | 방향 수정은 인정(CLOSED_STATIC), monitor01 실주소 등 INPUT HOLD | `manifests/03-networkpolicy.yaml` | INPUT HOLD (코드 변경 불필요, 외부 입력 대기) |
 | SEC-04 | High | selector/labels 누락, Monitoring image 누락 | selector/labels 인정(PARTIAL), Service 80→8000(IF-02A) 위반, "완성" 주장 철회 필요 | `manifests/02-securitycontext.yaml` | 1차 FIXED, 2차 IF-02A 포트 수정 완료 / 나머지(UID·PVC 등) BLOCKED_INPUT |
-| SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | monitoring-api DNS 허용 없음, API endpoint 미완성 | `manifests/03-networkpolicy.yaml` | OPEN (미착수) |
-| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | `manifests/04-calico-hep-gnp.yaml`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | OPEN (미착수) |
+| SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | monitoring-api DNS 허용 없음, API endpoint 미완성 | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (2차) |
+| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | `manifests/calico/*.yaml`(신규 분리), `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | FIXED_PENDING_REVIEW (2차) |
 | SEC-07 | High | 테스트 대상 IP 오류(.109) | nc/curl 부재·부분 실패·timeout을 PASS로 오판 | `scripts/verify-probe-failover.sh` | FIXED_PENDING_REVIEW (2차) |
 | SEC-08 | High | `auth can-i` TYPE/NAME과 subresource 구문 혼동 | API 통신 오류를 "no"로 오인해 전체 PASS | `scripts/verify-rbac.sh` | FIXED_PENDING_REVIEW (2차) |
 
 상태값은 baseline 리뷰 관례(OPEN → FIXED_PENDING_REVIEW → CLOSED_STATIC)를 따른다.
 이 PR 제출만으로 CLOSED로 전환하지 않으며, 독립 Reviewer의 HEAD 검토 후 판정한다.
-SEC-05/06은 아직 2차 수정 미착수 상태다.
+2026-09-13 기준 SEC-01/02/04/05/06/07/08 모두 2차 수정을 제출했다. SEC-03만 외부 입력
+대기(INPUT HOLD)로 남아있다.
 
 ## 항목별 변경 내용
 

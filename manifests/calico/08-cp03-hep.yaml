@@ -1,0 +1,16 @@
+# SEC-06 2차 수정 — CP 단계 3/3 (마지막). CP02(07-cp02-hep.yaml)의 회귀·quorum 확인 PASS 후 적용.
+# 이 파일 적용 후 6대 전체 HEP/GNP가 집행 중인 상태가 된다. firewalld 최종 비활성화는
+# 별도 단계(Runbook 5단계)로 노드 1대씩 진행한다.
+# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+apiVersion: crd.projectcalico.org/v1
+kind: HostEndpoint
+metadata:
+  name: cp03-hep
+  labels:
+    role: k8s-cp
+    rollout-stage: cp
+spec:
+  node: k8s-control03
+  interfaceName: <실제-NIC-이름>
+  expectedIPs:
+    - "10.1.93.104"

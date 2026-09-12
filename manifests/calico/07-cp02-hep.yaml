@@ -1,0 +1,14 @@
+# SEC-06 2차 수정 — CP 단계 2/3. CP01(06-cp01-hep.yaml)의 회귀·quorum 확인 PASS 후 적용.
+# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+apiVersion: crd.projectcalico.org/v1
+kind: HostEndpoint
+metadata:
+  name: cp02-hep
+  labels:
+    role: k8s-cp
+    rollout-stage: cp
+spec:
+  node: k8s-control02
+  interfaceName: <실제-NIC-이름>
+  expectedIPs:
+    - "10.1.93.103"

@@ -11,7 +11,18 @@
 #   namespaceSelector만으로는 hostNetwork/API DNAT 경로를 보장하지 못하므로
 #   Host 경로(kubelet 10250)와 Pod 경로(kube-dns, kubernetes.default.svc)를 구분해 명시.
 #
-# <monitor01-실제-IP>, <Worker-Node-CIDR> 등은 실측 확인(§3.6) 후 반영. Placeholder 상태로 적용 금지.
+# <monitor01-실제-IP> 등은 실측 확인(§3.6) 후 반영. Placeholder 상태로 적용 금지.
+#
+# 2차 수정 (SEC-05, GWONUK 재검토 issuecomment-5644891728):
+#   - monitoring-api 네임스페이스 전체에 DNS(53) egress가 빠져있던 문제 보완 (아래
+#     monitoring-api-dns-allow 신설). CoreDNS 조회 없이는 Service 이름 기반 통신이 불가능.
+#   - kube-state-metrics의 API discovery 목적지를 namespaceSelector(default)에서
+#     baseline(FDS_Project_Implementation_Baseline_v3.1.18.md L498-500) 확정 CP 노드
+#     IP(10.1.93.102~104) 기준 ipBlock으로 교체. kube-apiserver는 kubeadm 클러스터에서
+#     kube-system 네임스페이스의 hostNetwork Static Pod로 떠서 Node IP를 그대로 쓰므로,
+#     Service(kubernetes.default.svc)의 ClusterIP 뒤 실제 Endpoint는 CP Node IP:6443이다.
+#   - prometheus의 kubelet(10250) 목적지를 <Worker-Node-CIDR> 추정값 대신 baseline
+#     확정 Worker 개별 IP(10.1.93.105/107/108) 3개로 명시 (넓은 CIDR 대체 금지 원칙).
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -149,6 +160,29 @@ spec:
       ports:
         - { protocol: TCP, port: 9100 }
 ---
+# SEC-05 2차 수정: monitoring-api 네임스페이스 전체에 DNS egress 공통 허용.
+# prometheus/alertmanager/grafana/kube-state-metrics 전부 CoreDNS 조회가 필요하며,
+# Default Deny 적용 후 이 규칙이 빠져있으면 Service 이름 기반 통신이 전부 실패한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-api-dns-allow
+  namespace: monitoring-api
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -167,14 +201,20 @@ spec:
       ports:
         - { protocol: TCP, port: 8080 }
   egress:
-    # SEC-05: kubernetes.default.svc:443 (API discovery) — 실제 ClusterIP/Endpoint는
-    # 클러스터 구축 후 재확인 (D-SEC-01 "참고 사항")
+    # SEC-05 2차 수정: kubernetes.default.svc:443 (API discovery)의 실제 목적지는
+    # CP 3대(hostNetwork static Pod)다. namespaceSelector:default는 Service
+    # 리소스만 가리킬 뿐 실제 Endpoint(Node IP)로 트래픽을 매칭시키지 못하므로
+    # ipBlock으로 CP 개별 IP를 명시한다 (baseline L498-500 확정값).
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: default
+        - ipBlock:
+            cidr: 10.1.93.102/32  # k8s-control01
+        - ipBlock:
+            cidr: 10.1.93.103/32  # k8s-control02
+        - ipBlock:
+            cidr: 10.1.93.104/32  # k8s-control03
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 6443 }
+    # DNS egress는 monitoring-api-dns-allow(네임스페이스 공통 정책)가 커버한다.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -230,11 +270,17 @@ spec:
               app: kube-state-metrics
       ports:
         - { protocol: TCP, port: 8080 }
-    # SEC-05: kubelet 10250은 Host 경로 (hostNetwork) — namespaceSelector가 아니라
-    # 실제 Worker Node CIDR ipBlock으로 명시해야 트래픽이 실제로 매칭된다.
+    # SEC-05 2차 수정: kubelet 10250은 Host 경로(hostNetwork)라 namespaceSelector로는
+    # 매칭되지 않는다. 넓은 CIDR 추정 대신 baseline 확정 Worker 개별 IP 3개를 명시
+    # (GWONUK 재검토: "필요한 6개 노드의 승인 목적지를 개별 범위로 입력하고 임의의
+    # 넓은 CIDR로 대체하지 않는다").
     - to:
         - ipBlock:
-            cidr: <Worker-Node-CIDR>  # 6개 Node 실제 IP 대역 확정 후 반영 (미확정 상태로 적용 금지)
+            cidr: 10.1.93.105/32  # k8s-worker01
+        - ipBlock:
+            cidr: 10.1.93.107/32  # k8s-worker02
+        - ipBlock:
+            cidr: 10.1.93.108/32  # k8s-worker03
       ports:
         - { protocol: TCP, port: 10250 }
 ---

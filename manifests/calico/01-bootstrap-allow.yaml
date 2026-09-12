@@ -1,0 +1,89 @@
+# SEC-06 2차 수정 (issuecomment-5644891728) — Bootstrap 규칙 자체 모순 제거.
+#
+# 1차 제출 결함:
+#   - BGP Disabled(D34 확정: "BGP Disabled + VXLANCrossSubnet")인데 TCP179(BGP)를 허용 -> 모순.
+#     승인 VXLAN(UDP4789)은 빠져있었음.
+#   - source/destination 제한 없이 광범위 허용 -> "failsafe 성격"이라는 설명으로 광역
+#     허용을 승인하지 않는다는 재검토 지적 반영, 6개 노드로 source/destination을 좁힘.
+#
+# 이 GNP는 HEP가 없는 상태에서는 어떤 노드에도 집행되지 않으므로(Calico는 HEP가 있는
+# 인터페이스에만 정책을 적용), Worker/CP HEP를 아직 만들기 전에 먼저 적용해도 안전하다.
+# HEP가 생기는 순간부터 이 규칙이 실제로 집행되기 시작한다.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: bootstrap-allow
+spec:
+  selector: role == 'k8s-worker' || role == 'k8s-cp'
+  order: 0
+  applyOnForward: true
+  types: ["Ingress", "Egress"]
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        nets:
+          - "10.1.93.102/32"  # k8s-control01
+          - "10.1.93.103/32"  # k8s-control02
+          - "10.1.93.104/32"  # k8s-control03
+          - "10.1.93.105/32"  # k8s-worker01
+          - "10.1.93.107/32"  # k8s-worker02
+          - "10.1.93.108/32"  # k8s-worker03
+      destination:
+        ports: [22, 6443, 10250]  # SSH, API(CP만 실제 리스닝), kubelet
+    - action: Allow
+      protocol: TCP
+      source:
+        nets: ["10.1.93.102/32", "10.1.93.103/32", "10.1.93.104/32"]  # etcd는 CP-CP 전용
+      destination:
+        ports: [2379, 2380]
+    - action: Allow
+      protocol: UDP
+      source:
+        nets:
+          - "10.1.93.102/32"
+          - "10.1.93.103/32"
+          - "10.1.93.104/32"
+          - "10.1.93.105/32"
+          - "10.1.93.107/32"
+          - "10.1.93.108/32"
+      destination:
+        ports: [4789]  # VXLAN (BGP Disabled 구성이므로 179 대신 이게 필요)
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        ports: [22, 6443, 2379, 2380, 10250]
+        nets:
+          - "10.1.93.102/32"
+          - "10.1.93.103/32"
+          - "10.1.93.104/32"
+          - "10.1.93.105/32"
+          - "10.1.93.107/32"
+          - "10.1.93.108/32"
+    - action: Allow
+      protocol: UDP
+      destination:
+        ports: [4789]
+        nets:
+          - "10.1.93.102/32"
+          - "10.1.93.103/32"
+          - "10.1.93.104/32"
+          - "10.1.93.105/32"
+          - "10.1.93.107/32"
+          - "10.1.93.108/32"
+    - action: Allow
+      protocol: TCP
+      destination:
+        ports: [443]
+        nets: ["10.1.93.54/32"]  # Harbor — 이미지 pull 경로
+    - action: Allow
+      protocol: UDP
+      destination:
+        ports: [53]  # DNS — Host 자체 조회 (Bootstrap DNS, D-NET-01 확정)
+    - action: Allow
+      protocol: TCP
+      destination:
+        ports: [53]
+  # NTP(#14 미확정) egress는 이 Bootstrap 규칙에 포함하지 않는다 — 목적지/운영 주체가
+  # 아직 확정되지 않았으므로(baseline "미결 사양") 별도 승인 후 추가한다.
