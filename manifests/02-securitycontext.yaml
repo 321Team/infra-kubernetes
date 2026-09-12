@@ -8,6 +8,12 @@
 #
 # <실제-버전>, <확인된-UID>, <확인된-GID>, <approved-digest> 등은 사전확인(§3) 완료 후
 # 실측값으로 교체한다. Placeholder 상태로 적용하지 않는다 (baseline P1-SEC-01 원칙).
+#
+# 범위 정정 (GWONUK 재검토 SEC-04, issuecomment-5644891728):
+# 이 파일은 "독립 apply 가능한 완성 Manifest"가 아니라 P1-APP-01/P1-MON-01 원본
+# Deployment에 적용할 SecurityContext/RBAC/Probe 관련 patch 참고자료다. SA/PVC/
+# ConfigMap 등 참조 리소스는 실제 APP/MON 소스 기준으로 별도 연결이 필요하며,
+# UID/GID/image digest는 BLOCKED_INPUT(사전확인 §3 완료 전까지 미확정)이다.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -82,8 +88,11 @@ spec:
   selector:
     app: transaction-api
   ports:
+    # IF-02A(baseline Interface Register): transaction-api Service -> Pod, TCP 80 -> 8000.
+    # 1차 제출에서 8000->8000으로 잘못 설정됐던 부분을 GWONUK 재검토(SEC-04)에서
+    # 지적받아 계약대로 교정한다.
     - name: http
-      port: 8000
+      port: 80
       targetPort: 8000
     - name: metrics
       port: 9091
