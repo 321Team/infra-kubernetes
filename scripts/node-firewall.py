@@ -163,6 +163,24 @@ def redact(value):
     if isinstance(value, bytes):
         value = value.decode("utf-8", "replace")
     text = str(value)
+    # Redact JSON values structurally; text patterns must not consume JSON delimiters
+    # or mistake serviceAccountToken configuration for a credential value.
+    try:
+        structured = json.loads(text)
+    except (ValueError, TypeError):
+        structured = None
+    if isinstance(structured, (dict, list)):
+        sensitive = {"certificate-key", "token", "password", "client-key-data", "client-certificate-data"}
+
+        def scrub(item):
+            if isinstance(item, dict):
+                return {key: "[REDACTED]" if key.lower() in sensitive else scrub(val)
+                        for key, val in item.items()}
+            if isinstance(item, list):
+                return [scrub(val) for val in item]
+            return redact(item) if isinstance(item, str) else item
+
+        return json.dumps(scrub(structured), ensure_ascii=False, indent=2)
     text = re.sub(r"-----BEGIN [^-\r\n]+-----.*?(?:-----END [^-\r\n]+-----|\Z)", "[REDACTED_PEM]", text, flags=re.S)
     text = re.sub(r"(?<![A-Za-z0-9])[a-z0-9]{6}\.[a-z0-9]{16}(?![A-Za-z0-9])", "[REDACTED_TOKEN]", text)
     text = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[REDACTED_JWT]", text)
