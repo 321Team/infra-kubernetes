@@ -482,7 +482,10 @@ class Backend(BaseBackend):
         result = super().snapshot()
         read = self.read_snapshot
         active = read(["firewall-cmd", "--get-active-zones"])
-        need(active.split() == ["public", "interfaces:", "ens160"], "additional active zone or source binding")
+        # firewalld may annotate the already-verified public default zone.
+        need(active.split() in (["public", "interfaces:", "ens160"],
+                                ["public", "(default)", "interfaces:", "ens160"]),
+             "additional active zone or source binding")
         result["active_zones"] = active
         result["other_zones"] = {}
         result["services"] = {}
