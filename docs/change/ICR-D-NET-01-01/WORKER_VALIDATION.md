@@ -1,3 +1,5 @@
+> 2026-09-14 독립 리뷰 후속: [main 통합·인가 설명·128개 Linux 회귀 검증](PR4_REVIEW_FOLLOWUP_20260914.md). 아래 기록은 이전 제출 이력이다.
+
 # Worker/NTP 수집기 검증
 
 2026-09-10. `python3 -m unittest discover -s tests -v`: **19/19 PASS**.

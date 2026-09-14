@@ -1,7 +1,9 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import socket
+import shlex
 import stat
 import subprocess
 import tarfile
@@ -23,6 +25,31 @@ def inventory():
 
 
 class ScopeTests(unittest.TestCase):
+    def test_subprocess_does_not_receive_injected_python_ansible_or_credentials(self):
+        injected = {"PYTHONPATH": "/untrusted", "ANSIBLE_CONFIG": "/unapproved",
+                    "EXAMPLE_SECRET": "test-only", "SSH_AUTH_SOCK": "/unapproved-agent"}
+        with patch.dict(os.environ, injected), \
+                patch.object(controller.subprocess, "run", return_value=SimpleNamespace(returncode=0)) as run:
+            controller.run(["test-command"])
+        forwarded = run.call_args.kwargs["env"]
+        self.assertTrue(set(injected).isdisjoint(forwarded))
+        self.assertEqual(forwarded["LC_ALL"], "C")
+
+    def test_both_remote_python_stages_use_isolated_mode(self):
+        name = "k8s-worker01"
+        identity = {"user": "svc_ansible", "hostname": name,
+                    "connection": [controller.SOURCE_IP, "12345", node.NODES[name], "22"]}
+        replies = [SimpleNamespace(returncode=0, stdout=json.dumps(identity), stderr=""),
+                   SimpleNamespace(returncode=0, stdout=json.dumps(
+                       {"status": "COLLECTED_REVIEW_REQUIRED", "hostname": name}), stderr="")]
+        with patch.object(controller, "run", side_effect=replies) as run:
+            result = controller.remote_request(name, {"mode": "inspect", "node": name})
+        self.assertEqual(result["transport"], "PASS")
+        self.assertEqual(run.call_count, 2)
+        for call in run.call_args_list:
+            remote = shlex.split(call.args[0][-1])
+            self.assertEqual(remote[remote.index("/usr/bin/python3") + 1], "-I")
+
     def test_fixed_tcp_matrix(self):
         for name in node.CP:
             self.assertEqual([(ip, port) for _, ip, port, _ in node.probe_targets(name)], [(ip, 10250) for ip in node.WORKERS.values()])
