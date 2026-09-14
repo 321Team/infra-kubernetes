@@ -46,6 +46,17 @@ def fingerprint(value):
     return sha(encoded(value))
 
 
+INSPECTION_MAX_AGE_SECONDS = 30 * 60
+
+
+def validate_inspection_age(created_at):
+    created = dt.datetime.fromisoformat(created_at)
+    need(created.tzinfo is not None, "inspection timestamp requires timezone")
+    age = (dt.datetime.now(dt.timezone.utc) - created).total_seconds()
+    need(0 <= age <= INSPECTION_MAX_AGE_SECONDS,
+         "inspection older than 30 minutes or in future; inspect again")
+
+
 def validate_authorization(data, commit, mode, input_sha256):
     """Validate operator records, not the authenticity of a remote GitHub review."""
     need(data.get("schema") == "fds.cp1-runtime-authorization.v2", "authorization schema differs")
@@ -55,7 +66,7 @@ def validate_authorization(data, commit, mode, input_sha256):
     need(data.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY), "authorization plan differs")
     need(data.get("operator") == "GWONUK" and data.get("independent_reviewer") == "hayeounglee" and
               data.get("review_decision") == "APPROVED", "independent approval record absent")
-    need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/2#pullrequestreview-[0-9]+",
+    need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/[1-9][0-9]*#pullrequestreview-[0-9]+",
                           data.get("review_url") or ""), "review URL absent")
     need(re.fullmatch(r"https://github\.com/321Team/(?:infra-kubernetes/pull/2|fds-project-baseline/issues/14)#issuecomment-[0-9]+",
                           data.get("execution_decision_url") or ""), "execution decision URL absent")
@@ -564,8 +575,7 @@ def main(request):
                 need(re.fullmatch(r"[0-9a-f]{64}", request.get("authorization_sha256", "")), "authorization digest missing")
             journal = Journal(request["run_id"], new=mode == "apply")
             if mode == "apply":
-                age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(request["inspection_created_at"])).total_seconds()
-                need(0 <= age <= 900, "inspection older than 15 minutes; inspect again")
+                validate_inspection_age(request["inspection_created_at"])
                 result = apply_transaction(backend, journal, request, window)
             elif mode == "rollback":
                 receipt = journal.load(request["receipt_sha256"])

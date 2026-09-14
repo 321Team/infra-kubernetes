@@ -117,6 +117,56 @@ class WindowTests(unittest.TestCase):
                        window_end=(self.clock.wall + dt.timedelta(minutes=10)).isoformat())
         return request
 
+    def test_controller_inspection_freshness_boundaries(self):
+        for age in (901, 1800, 1800.001, -0.001):
+            with self.subTest(age=age):
+                data = json.loads(self.input.read_bytes())
+                data['result']['created_at'] = (self.clock.wall - dt.timedelta(seconds=age)).isoformat()
+                self.input.write_bytes(n.encoded(data))
+                self.auth['input_sha256'] = c.digest(self.input)
+                self.auth_path.write_bytes(n.encoded(self.auth))
+                args = argparse.Namespace(mode='apply', input=self.input, input_sha256=c.digest(self.input),
+                                          authorization=self.auth_path, authorization_sha256=c.digest(self.auth_path))
+                if 0 <= age <= 1800:
+                    request = c.request_for(args, 'b' * 40, self.request['run_id'])
+                    self.assertEqual(request['inspection_created_at'], data['result']['created_at'])
+                else:
+                    with self.assertRaisesRegex(ValueError, '30 minutes or in future'):
+                        c.request_for(args, 'b' * 40, self.request['run_id'])
+
+    def test_remote_accepts_exact_thirty_minute_inspection(self):
+        self.request['inspection_created_at'] = (self.clock.wall - dt.timedelta(seconds=1800)).isoformat()
+        result = self.invoke()
+        self.assertEqual(result['status'], 'RUNTIME_APPLIED_REVIEW_REQUIRED')
+        self.assertEqual(len(self.backend.edits), 6)
+
+    def test_remote_rejects_expired_future_and_naive_inspection_without_edits(self):
+        candidates = [(self.clock.wall - dt.timedelta(seconds=1800.001)).isoformat(),
+                      (self.clock.wall + dt.timedelta(seconds=0.001)).isoformat(),
+                      self.clock.wall.replace(tzinfo=None).isoformat()]
+        for created_at in candidates:
+            with self.subTest(created_at=created_at):
+                result = self.invoke(dict(self.request, inspection_created_at=created_at))
+                self.assertEqual(result['status'], 'STOP')
+                self.assertIn('inspection', result['error'])
+                self.assertEqual(self.backend.edits, [])
+
+    def test_inspection_expiring_in_transit_stops_before_mutation(self):
+        self.request['inspection_created_at'] = (self.clock.wall - dt.timedelta(seconds=1799.5)).isoformat()
+        n.validate_inspection_age(self.request['inspection_created_at'])
+        self.clock.advance(0.75)  # The operation window is still open.
+        result = self.invoke()
+        self.assertEqual(result['status'], 'STOP')
+        self.assertIn('30 minutes', result['error'])
+        self.assertEqual(self.backend.edits, [])
+
+    def test_thirty_minute_inspection_does_not_allow_state_drift(self):
+        self.request['inspection_created_at'] = (self.clock.wall - dt.timedelta(seconds=1800)).isoformat()
+        self.backend.state['planes']['runtime']['rules'].append('someone-elses-rule')
+        result = self.invoke()
+        self.assertEqual(result['status'], 'STOP')
+        self.assertEqual(self.backend.edits, [])
+
     def test_exact_authorization_and_normal_six_runtime_operations(self):
         self.assertEqual(self.request['authorization_json'].encode(), self.auth_path.read_bytes())
         result = self.invoke()

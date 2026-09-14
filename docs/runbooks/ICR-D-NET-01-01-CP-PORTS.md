@@ -6,7 +6,7 @@
 
 1. 새 HEAD의 이하영 독립 APPROVED, #14 또는 PR #2의 실행 결정, 평일 최대2시간 작업창·백업·콘솔·보호 검토·복구 계획을 확인한다. 선행 착수 허용을 빈 승인값으로 전용하지 않는다.
 2. 현재 고정 소스의 inspect로 CP3대의 firewall/NM/SELinux/nft·원래 규칙과 CP1 단일 Node/voter·API를 재확인한다. CP1 Calico Pod·HEP/GNP·Felix·IPPool 조회를 추가했다. 실패·새 정책·새 member는 별도 검토하며 collection PASS만으로 공존 안전성을 판정하지 않는다.
-3. 정확한 source/plan/target/input, 15분 이내 snapshot·topology와 승인 기록 해시가 일치하면 CP1 Runtime만 CP .102/.103/.104 각각 /32→2379–2380·10250 TCP 최대6개를 추가한다.
+3. 정확한 source/plan/target/input, 30분 이내 snapshot·topology와 승인 기록 해시가 일치하면 CP1 Runtime만 CP .102/.103/.104 각각 /32→2379–2380·10250 TCP 최대6개를 추가한다.
 4. 쓰기 전 intent를 root 전용 영수증에 fsync하고 query/add/query 결과로 실제 소유권을 확인한다. 기존 SSH/LB·Permanent·NM·SELinux는 보존한다.
 5. 새 SSH, CP2/3→CP1 TCP, API·etcd 상태, CA/Auth·logs/exec/port-forward, 비승인 Source·Calico/CNI·DNS/필수 통신 회귀 증적을 확인한다. TCP 성공은 인증·서비스 인수를 대체하지 않는다.
 6. 실제 Runtime Positive/Negative/Regression과 Reviewer 인수 후 별도 보존·회수·보호 인계를 결정한다. **이 버전에는 Permanent 승격 기능이 없다.** 인수 전 CP2/3 join·확대를 하지 않는다.

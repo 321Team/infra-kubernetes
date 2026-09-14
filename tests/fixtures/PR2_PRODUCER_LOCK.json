@@ -1,8 +1,7 @@
 {
-  "commit": "f0388b1a372d19b5079e94ec6949ef443d774d2f",
+  "commit": "264b273ab8ad79209bc0fec4a85c4497c946dbe3",
   "path": "scripts/cp-canary-node.py",
   "repository": "321Team/infra-kubernetes",
-  "sha256": "0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2",
-  "merged_via": "1c5483166f3e4d495feffd5408967bc45c60c0e4",
+  "sha256": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc",
   "usage": "Contract tests execute the integrated path under scripts with fake backends after verifying these immutable producer bytes. Runtime execution still requires the separately approved source checkout."
 }

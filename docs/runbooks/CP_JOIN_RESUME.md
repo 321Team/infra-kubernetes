@@ -45,7 +45,7 @@
 
 ## v2 보완에 따른 실행·종료 조건
 
-PR #2 계약은 HEAD `f0388b1a372d19b5079e94ec6949ef443d774d2f`의 v2 Runtime 6개 연산이다. CP1 실제 적용 영수증과 Positive/Negative/Regression 독립 인수 기록이 있어야 PR #4 확대 입력이 성립한다. 새 HEAD 리뷰와 실제 보호·콘솔·백업·복구 조건도 별도 충족해야 한다. 발행 정본 v3.1.18 §6.6/6.6.1·D34·HEP 인계 순서와 기존 AC는 유지한다.
+PR #2 계약은 HEAD `264b273ab8ad79209bc0fec4a85c4497c946dbe3`의 v2 Runtime 6개 연산이다. CP1 실제 적용 영수증과 Positive/Negative/Regression 독립 인수 기록이 있어야 PR #4 확대 입력이 성립한다. 새 HEAD 리뷰와 실제 보호·콘솔·백업·복구 조건도 별도 충족해야 한다. 발행 정본 v3.1.18 §6.6/6.6.1·D34·HEP 인계 순서와 기존 AC는 유지한다.
 
 PR #4는 Runtime만 변경하며 Permanent 승격은 미구현이다. reload/reboot 시 Runtime이 사라질 수 있다. join을 재개하기 전에 #10/#14/#19에서 Runtime 유지/회수·별도 영속화 또는 보호 인계의 종료 계획과 필요한 승인을 확정한다. join 뒤에는 현재 사전 join rollback을 사용할 수 없으므로 종료 계획 없이 다음 창을 열지 않는다.
 
