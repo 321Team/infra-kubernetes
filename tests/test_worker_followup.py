@@ -33,7 +33,7 @@ class ScopeTests(unittest.TestCase):
             controller.run(["test-command"])
         forwarded = run.call_args.kwargs["env"]
         self.assertTrue(set(injected).isdisjoint(forwarded))
-        self.assertEqual(forwarded["LC_ALL"], "C")
+        self.assertEqual(forwarded["LC_ALL"], "C.UTF-8")
 
     def test_both_remote_python_stages_use_isolated_mode(self):
         name = "k8s-worker01"

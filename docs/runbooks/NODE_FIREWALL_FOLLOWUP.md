@@ -104,3 +104,5 @@ python3 -I scripts/run-node-firewall.py rollback --node k8s-worker01 \
 공식 근거: [Runtime과 Permanent](https://firewalld.org/documentation/configuration/runtime-versus-permanent.html), [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html). rc=0만으로 소유권을 단정하지 않으며 경고·query·전후 상태를 함께 검증한다.
 
 2026-09-14 변경: [생산자 갱신 검증](../change/ICR-D-NET-01-01/NODE_FIREWALL_PRODUCER_FOLLOWUP_20260914.md). 09-13 구 영수증/Permanent 두 수정의 CLOSED_STATIC 수용은 당시 범위로 유지하며 이번 새 pin/window 검증의 독립 리뷰와 실제 적용은 별도다.
+
+2026-09-14 locale 보완: controller 자식 환경은 Ansible이 요구하는 `C.UTF-8`을 사용한다. plain `C`로 인한 원격 접속 전 인벤토리 조회 중단을 수정했다. [원인·검증·재개 절차](../change/ICR-D-NET-01-01/CONTROLLER_UTF8_FIX_20260914.md).

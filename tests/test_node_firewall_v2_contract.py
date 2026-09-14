@@ -304,7 +304,7 @@ class ExecutionBounds(unittest.TestCase):
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("ANSIBLE_CONFIG", env)
         self.assertNotIn("EXAMPLE_SECRET", env)
-        self.assertEqual(env["LC_ALL"], "C")
+        self.assertEqual(env["LC_ALL"], "C.UTF-8")
 
     def test_redact_handles_space_assignment_pem_and_url_credentials(self):
         for text, secret in (("--password secret-value", "secret-value"), ("token: secret-value", "secret-value"),
