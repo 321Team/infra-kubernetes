@@ -1,0 +1,21 @@
+{
+  "command": "python3 -m unittest discover -s tests -p 'test_cp*.py' -v",
+  "exit_code": 0,
+  "initial_iteration": "First local invocation used the wrong working directory; fixture edits were not written. The ensuing old fixtures had 18 errors from the new required window/timeout arguments. Corrected paths and adapted fixture signatures before the passing run.",
+  "log_sha256": "358d6c58a73e95828edfa0f727b465c2a950ccb6863d21d2a19f12868e40e40a",
+  "new_window_tests": 12,
+  "parent_commit": "097ddb56d87b229a9eb465f72ea9f55d16524c51",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "recorded_at": "2026-09-14T01:53:56.695851+00:00",
+  "scope": "Local Linux mocked I/O. No lab server access, actual approvals or runtime acceptance.",
+  "source_sha256": {
+    "policies/icr-d-net-01-01/cp1-runtime-policy-v2.json": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
+    "scripts/cp-canary-node.py": "0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2",
+    "scripts/run-cp-canary.py": "76afecf88e7885367f9713ee471e903f8dc7bdc6334ee848f62631b8f155bb40",
+    "tests/test_cp_canary.py": "0dc48ef6bd7d6c7200cfb8020c0dd72ee5e273512902627e0cdc1f5590bd45cf",
+    "tests/test_cp_firewall_plan.py": "8681c59ef83130de299a97b8aee26e5ab6b32ad4937e8690b88f981b016eeca5",
+    "tests/test_cp_window.py": "f98d7c25b3e83d2274496bad2f0a6a39d16623d95e4d5221ccfc8a38e692ff79"
+  },
+  "tests": 49
+}

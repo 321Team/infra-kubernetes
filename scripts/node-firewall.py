@@ -25,6 +25,12 @@ MAX_BYTES = 256 * 1024
 REMOTE_BUDGET_SECONDS = 480
 MAX_COMMANDS = 1200
 COMMAND_STATE = {"count": 0, "timeouts": 0, "budget_exhausted": False, "deadline": None}
+# These are the designated people in this change record, not authenticated identities.
+# Do not obtain them from the same untrusted JSON that they are meant to constrain.
+EXPECTED_OPERATOR = "GWONUK"
+EXPECTED_REVIEWER = "hayeounglee"
+# Receipt compatibility stays pinned to the approved producer even after main merges.
+# Integration tests execute scripts/cp-canary-node.py and verify its locked bytes.
 CP1_CONTRACT = {
     "source_commit": "f0388b1a372d19b5079e94ec6949ef443d774d2f",
     "source_sha256": "0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2",
@@ -85,11 +91,18 @@ def validate_zone_controls(snapshot, controls):
 
 
 def validate_authorization_record(data, commit, target, mode):
+    """Check consistency of a human-reviewed record; this is not authentication.
+
+    An editor of the JSON can assert these names and booleans. The operator and
+    independent reviewer must verify the actual GitHub decision and evidence
+    before execution; SSH/sudo provide the separate host access boundary.
+    See docs/runbooks/NODE_AUTHORIZATION_MODEL.md for the trust model.
+    """
     need(data.get("schema") == "fds.node-firewall-authorization.v2" and data.get("phase") == "runtime",
          "authorization schema/phase differs")
     need(data.get("source_commit") == commit and data.get("target") == target and data.get("mode") == mode,
          "authorization is not for this commit/target/mode")
-    need(data.get("operator") == "GWONUK" and data.get("independent_reviewer") == "hayeounglee",
+    need(data.get("operator") == EXPECTED_OPERATOR and data.get("independent_reviewer") == EXPECTED_REVIEWER,
          "designated independent review record absent")
     need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/4#(?:pullrequestreview|issuecomment)-[0-9]+",
                       data.get("review_url") or ""), "PR4 review URL absent")

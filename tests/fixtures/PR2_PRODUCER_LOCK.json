@@ -3,5 +3,6 @@
   "path": "scripts/cp-canary-node.py",
   "repository": "321Team/infra-kubernetes",
   "sha256": "0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2",
-  "usage": "Immutable producer snapshot for mock-backed contract tests only; never a runtime entry point"
+  "merged_via": "1c5483166f3e4d495feffd5408967bc45c60c0e4",
+  "usage": "Contract tests execute the integrated path under scripts with fake backends after verifying these immutable producer bytes. Runtime execution still requires the separately approved source checkout."
 }

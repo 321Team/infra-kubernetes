@@ -18,11 +18,19 @@ from test_node_firewall import (n, c, ROOT, FakeBackend, MemoryJournal,
 
 
 class ReceiptContract(unittest.TestCase):
-    def test_producer_lock_matches_current_contract_and_fixture_bytes(self):
+    def test_producer_lock_matches_current_contract_and_integrated_source(self):
         lock = json.loads((ROOT / "tests/fixtures/PR2_PRODUCER_LOCK.json").read_bytes())
         self.assertEqual(lock["commit"], n.CP1_CONTRACT["source_commit"])
         self.assertEqual(lock["sha256"], n.CP1_CONTRACT["source_sha256"])
-        self.assertEqual(c.digest(ROOT / "tests/fixtures/pr2_cp_canary_node.py"), lock["sha256"])
+        self.assertEqual(lock["path"], "scripts/cp-canary-node.py")
+        self.assertEqual(c.digest(ROOT / lock["path"]), lock["sha256"])
+
+    def test_integrated_producer_drift_stops_before_producer_execution(self):
+        with patch.object(c, "digest", return_value="f" * 64), \
+                patch.object(original_tests, "load") as loader:
+            with self.assertRaisesRegex(AssertionError, "integrated PR2 producer"):
+                cp1_producer_receipt()
+            loader.assert_not_called()
 
     def test_rehashed_missing_invalid_or_outside_window_is_rejected(self):
         original = cp1_producer_receipt()

@@ -277,10 +277,10 @@ class Gates(unittest.TestCase):
 
 def cp1_producer_receipt(preserve_first=False):
     """Run byte-pinned PR2 producer code against a fake backend. Not onsite acceptance."""
-    path = ROOT / "tests/fixtures/pr2_cp_canary_node.py"
+    path = ROOT / "scripts/cp-canary-node.py"
     if c.digest(path) != n.CP1_CONTRACT["source_sha256"]:
-        raise AssertionError("PR2 fixture source changed")
-    producer = load("pr2_producer_fixture", "tests/fixtures/pr2_cp_canary_node.py")
+        raise AssertionError("integrated PR2 producer source differs from receipt contract")
+    producer = load("integrated_pr2_producer", "scripts/cp-canary-node.py")
     journal = MemoryJournal()
     base = FakeBackend(journal, "k8s-control01")
     base.state.pop("residual_metadata")

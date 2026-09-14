@@ -11,7 +11,7 @@
 
 이미 목표 상태인 항목과 Permanent, SSH·dhcpv6-client, CP의 LB→6443 예외, NM/public binding, SELinux Enforcing, Worker Cockpit mask/inactive를 보존한다. CP1 변경, join/reset, NTP 설정, Calico 정책 생성, firewalld 정지·reload·runtime-to-permanent는 수행하지 않는다.
 
-실행 정책은 `policies/icr-d-net-01-01/node-firewall-v2.json`이다. Controller와 원격 helper가 내용을 고정 범위와 대조한다. v1 정책 파일은 과거 이력이다. v2는 Runtime 인수 전 Permanent가 변경되던 문제를 제거한다. **Permanent 승격은 미구현이며 별도 검토·구현 대상**이다.
+실행 정책은 `policies/icr-d-net-01-01/node-firewall-v2.json`이다. Controller와 원격 helper가 내용을 고정 범위와 대조한다. 사용하지 않는 v1 정책 파일은 현재 배포본에서 제거했고 Git 이력에 보존한다. v2는 Runtime 인수 전 Permanent가 변경되던 문제를 제거한다. **Permanent 승격은 미구현이며 별도 검토·구현 대상**이다.
 
 ## 정본과 실행 조건
 
@@ -24,6 +24,8 @@
 5. CP2→CP3→Worker01→02→03 확대와 별도 join 창은 각각 실제 결과로 결정한다. join 전 Runtime 유지/회수와 보호 인계의 종료 계획을 정한다.
 
 동일 controller 계정의 변경은 대상 간 공통 lock으로 직렬화한다. node-local lock과 미해결 journal 차단도 유지한다. 외부 관리자·다른 controller·D-Bus/nft까지 잠그는 분산 lock은 아니다.
+
+인가 JSON의 신뢰 경계와 실제 승인 대조는 [인가 기록 모델](NODE_AUTHORIZATION_MODEL.md)을 따른다.
 
 ## 배포본 확인과 inspect
 
@@ -43,7 +45,7 @@ TARGET, CP1_TOPOLOGY, CP1_STATE, POLICY, INSPECTION, RESULT JSON을 검토한다
 
 ## CP1 영수증 및 실제 인수 기록
 
-허용 생산자는 위 PR #2 HEAD이며 helper SHA-256은 `0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2`이다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 새 생산자의 authorization_window와 각 연산 시작 시각도 검사한다. 작업창은 [start, end), 최대 2시간이며 종료 시각의 연산을 허용하지 않는다. receipt ended_at은 결과 보존 시각이므로 창 밖일 수 있고, 전체 성공 상태와 기존 시각 검증을 별도로 적용한다. 고정 생산자 fixture는 모의 계약 시험에만 사용한다.
+허용 생산자는 위 PR #2 HEAD이며 helper SHA-256은 `0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2`이다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 새 생산자의 authorization_window와 각 연산 시작 시각도 검사한다. 작업창은 [start, end), 최대 2시간이며 종료 시각의 연산을 허용하지 않는다. receipt ended_at은 결과 보존 시각이므로 창 밖일 수 있고, 전체 성공 상태와 기존 시각 검증을 별도로 적용한다. 계약 시험은 main에서 통합된 `scripts/cp-canary-node.py` 실제 파일의 해시를 확인한 뒤 fake backend로 실행한다. 중복 producer fixture는 제거했다. 실행 source pin은 승인된 CP1 생산자와 영수증 호환성을 유지하기 위한 값이며 PR #4 HEAD로 교체하지 않는다.
 
 `cp1-runtime-acceptance.template.json`을 실제 인수 기록으로 채운다. receipt_input_sha256은 CP1 제출 노드 JSON 파일 해시, receipt_sha256은 내부 영수증 내용 해시다. source/helper/reference plan/execution plan, run ID, 이하영 리뷰 링크·결정·시각, Positive/Negative/Regression 각각의 실제 증적 해시와 PASS를 연결한다. 인수 시각은 영수증 종료 이후여야 한다. 모의 시험이나 형식상 APPROVED를 운영 인수로 사용하지 않는다.
 
