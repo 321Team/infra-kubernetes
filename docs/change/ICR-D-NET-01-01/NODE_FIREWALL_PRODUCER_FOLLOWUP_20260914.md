@@ -6,8 +6,8 @@ PR #2가 원격 실행창 통제를 추가하므로 기존 `097ddb56d87b229a9eb4
 
 ## 변경
 
-- CP1 생산자 commit을 `2911d625745d74eff035fa572b269df5445886fb`, helper SHA-256을 `0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2`로 고정한다. 실행 정책, 인수 template, 원본 fixture와 `PR2_PRODUCER_LOCK.json`, runbook을 함께 갱신한다.
-- [새 생산자 변경·49개 검증](https://github.com/321Team/infra-kubernetes/blob/2911d625745d74eff035fa572b269df5445886fb/docs/change/ICR-D-NET-01-01/CP1_WINDOW_FOLLOWUP_20260914.md)과 [원본 보존·비상 복구](https://github.com/321Team/infra-kubernetes/blob/2911d625745d74eff035fa572b269df5445886fb/docs/runbooks/CP1_CANARY_RECOVERY.md)를 연결한다.
+- CP1 생산자 commit을 `f0388b1a372d19b5079e94ec6949ef443d774d2f`, helper SHA-256을 `0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2`로 고정한다. 실행 정책, 인수 template, 원본 fixture와 `PR2_PRODUCER_LOCK.json`, runbook을 함께 갱신한다.
+- [새 생산자 변경·49개 검증](https://github.com/321Team/infra-kubernetes/blob/f0388b1a372d19b5079e94ec6949ef443d774d2f/docs/change/ICR-D-NET-01-01/CP1_WINDOW_FOLLOWUP_20260914.md)과 [원본 보존·비상 복구](https://github.com/321Team/infra-kubernetes/blob/f0388b1a372d19b5079e94ec6949ef443d774d2f/docs/runbooks/CP1_CANARY_RECOVERY.md)를 연결한다.
 - 새 `authorization_window`의 timezone·종료 제외·최대 2시간, receipt 시작과 6개 연산 시작 시각의 창 내 포함을 검사한다. 결과/영수증 보존은 종료 뒤에도 수행될 수 있으므로 `ended_at`은 기존의 started≤ended≤현재 시각 조건을 유지한다.
 - schema v2, Runtime 6개 연산의 순서·소유권·해시·전후 상태와 실제 독립 인수 기록 검증, 후속 Node의 Runtime 전용 변경/복구를 유지한다. Permanent 승격은 미구현이다. 구 receipt에 새 source/창 값을 덧씌워 통과시키지 않는다.
 
