@@ -20,7 +20,7 @@ sha256sum /absolute/path/recovery/source.bundle
 
 출력 HEAD와 승인 HEAD가 같고 tracked 변경이 없으며 origin이 `321Team/infra-kubernetes`여야 한다. 원본 checkout에서 `docs/change/ICR-D-NET-01-01/SOURCE_SHA256SUMS`를 검사한다. 키트가 ZIP 배포본이라면 실제 원본 ZIP·외부 sidecar·내부 manifest·`SOURCE_LOCK.json`을 함께 보존한다. 새 코드로 원래 키트를 덮어쓰거나 lock의 commit/hash를 수동 교체하지 않는다. 원본 checkout과 bundle/ZIP의 별도 접근 가능 사본을 확보하고 실행 전 검증한다.
 
-실행 출력 `REQUEST.json`, **원문 바이트를 보존한** `AUTHORIZATION.json`, `k8s-control01.json`, `SUMMARY.json`, archive·sidecar 및 root 영수증을 원본 그대로 보존한다. root 영수증 경로는 계속 `/var/lib/fds/icr-d-net-01-01/cp1-canary/<ORIGINAL_RUN_ID>.json`이다. v1.3도 이 디렉터리를 그대로 사용하므로 미해결 이전 실행을 감춘 새 run은 허용되지 않는다.
+실행 출력 `REQUEST.json`, **원문 바이트를 보존한** `AUTHORIZATION.json`, `k8s-control01.json`, `RESULT.json`, archive·sidecar 및 root 영수증을 원본 그대로 보존한다. root 영수증 경로는 계속 `/var/lib/fds/icr-d-net-01-01/cp1-canary/<ORIGINAL_RUN_ID>.json`이다. v1.3도 이 디렉터리를 그대로 사용하므로 미해결 이전 실행을 감춘 새 run은 허용되지 않는다.
 
 ## 2. 중단 직후와 정상 자동 복구 경로
 
