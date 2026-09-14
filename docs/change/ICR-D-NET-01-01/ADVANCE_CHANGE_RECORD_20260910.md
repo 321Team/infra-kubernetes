@@ -1,5 +1,7 @@
 # ICR-D-NET-01-01 선행 변경 기록 — ADV-20260910
 
+> 2026-09-14 현재 적용 기준: [발행 정본 v3.1.18](https://github.com/321Team/fds-project-baseline/blob/72599ae49342b0fb8dbd3d8ee60314afb9f907bb/baseline/FDS_Project_Implementation_Baseline_v3.1.18.md) §6.6/6.6.1. 아래 후보/미발행 표현은 09-10 작성 당시 이력이다. 제한 준비의 근거와 최신 HEAD 독립 리뷰·콘솔/백업/복구/실행창·실행 결정 요건을 구분한다. [09-14 후속 검증](CP1_WINDOW_FOLLOWUP_20260914.md).
+
 기록 ID: **ICR-D-NET-01-01-ADV-20260910** / 2026-09-10 / Lead·최종 승인자 이권욱 / 독립 Reviewer 이하영.
 
 ## 사용자 지시와 승인 범위

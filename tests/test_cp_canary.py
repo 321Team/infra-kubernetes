@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -76,6 +76,9 @@ class FakeBackend:
 
 class TransactionTests(unittest.TestCase):
     def setUp(self):
+        self.window = Mock(spec=n.OperationWindow)
+        self.window.remaining.return_value = 60
+        self.window.record.return_value = {"fixture": "transaction tests isolate time-window enforcement"}
         self.journal = MemoryJournal()
         self.backend = FakeBackend(self.journal)
         self.request = {"run_id": "20260910T120000Z-abcdef123456", "source_sha256": "a" * 64,
@@ -84,7 +87,7 @@ class TransactionTests(unittest.TestCase):
                         "execution_plan_sha256": n.fingerprint(n.RUNTIME_POLICY), "authorization_sha256": "c" * 64}
 
     def apply(self):
-        return n.apply_transaction(self.backend, self.journal, self.request)
+        return n.apply_transaction(self.backend, self.journal, self.request, self.window)
 
     def test_full_apply_and_reverse_rollback(self):
         before = self.backend.snapshot()
@@ -92,7 +95,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "RUNTIME_APPLIED_REVIEW_REQUIRED")
         self.assertEqual(len(self.backend.edits), 6)
         added = list(self.backend.edits)
-        rolled = n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        rolled = n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(rolled["status"], "ROLLED_BACK_REVIEW_REQUIRED")
         self.assertEqual(self.backend.snapshot(), before)
         self.assertEqual([(p, r) for p, r, a in self.backend.edits[6:]], [(p, r) for p, r, a in reversed(added)])
@@ -103,7 +106,7 @@ class TransactionTests(unittest.TestCase):
         self.request["before_sha256"] = n.fingerprint(self.backend.state)
         receipt = self.apply()
         self.assertEqual(len(self.backend.edits), 5)
-        n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertTrue(self.backend.query("runtime", n.RULES[0]))
         self.assertNotIn(("runtime", n.RULES[0], "remove"), self.backend.edits)
 
@@ -117,7 +120,7 @@ class TransactionTests(unittest.TestCase):
         receipt = self.apply()
         self.backend.stable["nodes"].append(["k8s-control02", "uid2"])
         with self.assertRaisesRegex(ValueError, "membership changed"):
-            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(len(self.backend.edits), 6)
 
     def test_initial_canary_rejects_existing_second_member(self):
@@ -132,7 +135,7 @@ class TransactionTests(unittest.TestCase):
         receipt = self.apply()
         self.assertEqual(receipt["status"], "PARTIAL_APPLY_REVIEW_REQUIRED")
         self.assertEqual(receipt["operations"][-1]["status"], "not_added")
-        n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(sum(a == "remove" for p, r, a in self.backend.edits), 3)
 
     def test_uncertain_timeout_refuses_automatic_rollback(self):
@@ -140,7 +143,7 @@ class TransactionTests(unittest.TestCase):
         receipt = self.apply()
         self.assertEqual(receipt["operations"][-1]["status"], "add_uncertain")
         with self.assertRaisesRegex(ValueError, "ambiguous"):
-            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(len(self.backend.edits), 2)
 
     def test_raced_existing_rule_does_not_claim_ownership(self):
@@ -158,7 +161,7 @@ class TransactionTests(unittest.TestCase):
         receipt = self.apply()
         self.backend.state["planes"]["runtime"]["rules"].append("someone-elses-rule")
         with self.assertRaisesRegex(ValueError, "drift"):
-            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(len(self.backend.edits), 6)
 
 
@@ -212,7 +215,7 @@ class PolicyRegressionTests(unittest.TestCase):
         self.addCleanup(self.backend.cache.cleanup)
         self.calls = []
 
-    def response(self, argv):
+    def response(self, argv, timeout=15):
         self.calls.append(argv)
         values = {"--get-active-policies": self.active, "--get-policies": "allow-host-ipv6\n",
                   "--info-policy=allow-host-ipv6": self.active, "--state": "running\n",
@@ -241,7 +244,7 @@ class PolicyRegressionTests(unittest.TestCase):
         self.assertFalse(any("--info-policy=ANY" in argv or "--info-policy=HOST" in argv for argv in self.calls))
 
     def test_inactive_and_permanent_policies_are_preserved(self):
-        def respond(argv):
+        def respond(argv, timeout=15):
             if argv[-1] == "--get-policies":
                 return {"rc": 0, "stdout": "allow-host-ipv6 dormant\n", "stderr": ""}
             if argv[-1] == "--info-policy=dormant":
@@ -253,7 +256,7 @@ class PolicyRegressionTests(unittest.TestCase):
             self.assertIn("dormant", result["configurations"][plane])
 
     def test_policy_query_failure_is_retained_and_not_ignored(self):
-        def respond(argv):
+        def respond(argv, timeout=15):
             if argv[-1] == "--info-policy=allow-host-ipv6":
                 return {"rc": 140, "stdout": "", "stderr": "INVALID_POLICY: allow-host-ipv6"}
             return self.response(argv)
@@ -264,7 +267,7 @@ class PolicyRegressionTests(unittest.TestCase):
         self.assertIn("INVALID_POLICY", stored["stderr"])
 
     def test_malformed_name_list_stops_before_policy_lookup(self):
-        def respond(argv):
+        def respond(argv, timeout=15):
             if argv[-1] == "--get-policies":
                 return {"rc": 0, "stdout": "allow-host-ipv6 ingress-zones: ANY", "stderr": ""}
             return self.response(argv)
@@ -289,35 +292,36 @@ class RuntimeOnlyTests(unittest.TestCase):
         fixture = TransactionTests()
         fixture.setUp()
         self.backend, self.journal, self.request = fixture.backend, fixture.journal, fixture.request
+        self.window = fixture.window
 
     def test_apply_and_rollback_never_write_permanent(self):
         before = copy.deepcopy(self.backend.state["planes"]["permanent"])
-        receipt = n.apply_transaction(self.backend, self.journal, self.request)
+        receipt = n.apply_transaction(self.backend, self.journal, self.request, self.window)
         self.assertEqual(receipt["status"], "RUNTIME_APPLIED_REVIEW_REQUIRED")
         self.assertEqual(len(receipt["operations"]), 6)
         self.assertEqual(self.backend.state["planes"]["permanent"], before)
-        n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+        n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertTrue(all(plane == "runtime" for plane, _, _ in self.backend.edits))
         self.assertEqual(self.backend.state["planes"]["permanent"], before)
 
     def test_legacy_receipt_rejected_without_removal(self):
-        receipt = n.apply_transaction(self.backend, self.journal, self.request)
+        receipt = n.apply_transaction(self.backend, self.journal, self.request, self.window)
         receipt["schema"] = "fds.cp1-canary-receipt.v1"
         with self.assertRaisesRegex(ValueError, "legacy"):
-            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(len(self.backend.edits), 6)
 
     def test_permanent_operation_in_receipt_is_rejected(self):
-        receipt = n.apply_transaction(self.backend, self.journal, self.request)
+        receipt = n.apply_transaction(self.backend, self.journal, self.request, self.window)
         receipt["operations"][0]["plane"] = "permanent"
         with self.assertRaisesRegex(ValueError, "out of scope"):
-            n.rollback_transaction(self.backend, self.journal, receipt, self.request)
+            n.rollback_transaction(self.backend, self.journal, receipt, self.request, self.window)
         self.assertEqual(len(self.backend.edits), 6)
 
     def test_execution_policy_mismatch_has_zero_mutations(self):
         self.request["execution_plan_sha256"] = "0" * 64
         with self.assertRaisesRegex(ValueError, "execution plan"):
-            n.apply_transaction(self.backend, self.journal, self.request)
+            n.apply_transaction(self.backend, self.journal, self.request, self.window)
         self.assertEqual(self.backend.edits, [])
 
 
