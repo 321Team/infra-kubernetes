@@ -240,6 +240,13 @@ def validate_cp1_receipt(wrapper):
     node.need(re.fullmatch(r"[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}", receipt.get("run_id") or ""), "CP1 run ID differs")
     for key in ("authorization_sha256", "topology_sha256"):
         node.digest_field(receipt.get(key), "CP1 digest absent: " + key)
+    window = receipt.get("authorization_window")
+    node.need(isinstance(window, dict) and window.get("end_exclusive") is True,
+              "CP1 authorization window absent")
+    node.need(all(isinstance(window.get(key), str) for key in ("start", "end")), "CP1 window timestamps absent")
+    start, end = node.instant(window["start"]), node.instant(window["end"])
+    node.need(0 < (end - start).total_seconds() <= 7200 and start <= node.instant(receipt["started_at"]) < end,
+              "CP1 authorization window invalid")
     rules = cp1_rules()
     ops = receipt.get("operations", [])
     node.need(isinstance(ops, list) and len(ops) == len(rules), "CP1 apply is incomplete")
@@ -248,6 +255,8 @@ def validate_cp1_receipt(wrapper):
     expected = copy.deepcopy(before)
     for op, rule in zip(ops, rules):
         node.need(op.get("plane") == "runtime" and op.get("rule") == rule, "CP1 ordered operation differs")
+        node.need(isinstance(op.get("started_at"), str), "CP1 operation timestamp absent")
+        node.need(start <= node.instant(op["started_at"]) < end, "CP1 operation outside authorization window")
         present = node.canonical_rule(rule) in before["planes"]["runtime"]["rules"]
         node.need(type(op.get("present_before")) is bool and op["present_before"] == present,
                   "CP1 original presence differs")

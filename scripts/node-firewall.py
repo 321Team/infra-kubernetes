@@ -26,8 +26,8 @@ REMOTE_BUDGET_SECONDS = 480
 MAX_COMMANDS = 1200
 COMMAND_STATE = {"count": 0, "timeouts": 0, "budget_exhausted": False, "deadline": None}
 CP1_CONTRACT = {
-    "source_commit": "097ddb56d87b229a9eb465f72ea9f55d16524c51",
-    "source_sha256": "25b497f7c300c03b76975cee554c1c926e6775674f97ed11254cb1625b635e8d",
+    "source_commit": "2911d625745d74eff035fa572b269df5445886fb",
+    "source_sha256": "0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2",
     "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
     "execution_plan_sha256": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
 }

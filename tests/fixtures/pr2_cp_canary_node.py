@@ -13,6 +13,7 @@ import socket
 import stat
 import subprocess
 import tempfile
+import time
 
 NODES = {"k8s-control01": "10.1.93.102", "k8s-control02": "10.1.93.103", "k8s-control03": "10.1.93.104"}
 ROOT = Path("/var/lib/fds/icr-d-net-01-01/cp1-canary")
@@ -43,6 +44,66 @@ def encoded(value):
 
 def fingerprint(value):
     return sha(encoded(value))
+
+
+def validate_authorization(data, commit, mode, input_sha256):
+    """Validate operator records, not the authenticity of a remote GitHub review."""
+    need(data.get("schema") == "fds.cp1-runtime-authorization.v2", "authorization schema differs")
+    need(data.get("source_commit") == commit and data.get("hostname") == "k8s-control01" and
+              data.get("mode") == mode and data.get("input_sha256") == input_sha256,
+              "authorization source/target/mode/input differs")
+    need(data.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY), "authorization plan differs")
+    need(data.get("operator") == "GWONUK" and data.get("independent_reviewer") == "hayeounglee" and
+              data.get("review_decision") == "APPROVED", "independent approval record absent")
+    need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/2#pullrequestreview-[0-9]+",
+                          data.get("review_url") or ""), "review URL absent")
+    need(re.fullmatch(r"https://github\.com/321Team/(?:infra-kubernetes/pull/2|fds-project-baseline/issues/14)#issuecomment-[0-9]+",
+                          data.get("execution_decision_url") or ""), "execution decision URL absent")
+    for field in ("backup_available", "console_recovery_available", "maintenance_freeze",
+                  "coexistence_risk_reviewed", "no_join_before_runtime_acceptance"):
+        need(data.get(field) is True, "required operation condition absent: " + field)
+    need(data.get("advance_record") == "ICR-D-NET-01-01-ADV-20260910", "advance decision reference differs")
+    for field in ("protection_review_sha256", "rollback_plan_sha256"):
+        need(re.fullmatch(r"[0-9a-f]{64}", data.get(field) or ""), "operation evidence digest absent: " + field)
+    start = dt.datetime.fromisoformat(data["window_start"])
+    end = dt.datetime.fromisoformat(data["window_end"])
+    need(start.tzinfo is not None and end.tzinfo is not None, "timezone required")
+    current = dt.datetime.now(dt.timezone.utc)
+    need(start <= current < end and 0 < (end - start).total_seconds() <= 7200, "outside operation window")
+    need(current.astimezone(dt.timezone(dt.timedelta(hours=9))).weekday() < 5, "no weekend classroom runtime")
+
+    return start, end
+
+
+class OperationWindow:
+    """Bound remote commands by both reviewed UTC time and elapsed time."""
+    def __init__(self, start, end):
+        self.start, self.end = start, end
+        self.deadline = time.monotonic() + (end - dt.datetime.now(dt.timezone.utc)).total_seconds()
+        self.remaining()
+
+    def remaining(self):
+        current = dt.datetime.now(dt.timezone.utc)
+        seconds = min((self.end - current).total_seconds(), self.deadline - time.monotonic())
+        need(self.start <= current and seconds > 0, "outside operation window; no further commands")
+        need(current.astimezone(dt.timezone(dt.timedelta(hours=9))).weekday() < 5,
+             "no weekend classroom runtime")
+        return seconds
+
+    def record(self):
+        return {"start": self.start.isoformat(), "end": self.end.isoformat(), "end_exclusive": True}
+
+
+def authorization_window(request):
+    need(request.get("node") == "k8s-control01", "authorization target differs")
+    raw = request.get("authorization_json")
+    need(isinstance(raw, str), "authorization document missing")
+    need(sha(raw.encode("utf-8")) == request.get("authorization_sha256"), "authorization checksum differs")
+    data = json.loads(raw)
+    need(isinstance(data, dict), "invalid authorization document")
+    need(re.fullmatch(r"[0-9a-f]{64}", request.get("input_sha256") or ""), "input digest missing")
+    start, end = validate_authorization(data, request["source_commit"], request["mode"], request["input_sha256"])
+    return OperationWindow(start, end)
 
 
 def redact(value):
@@ -107,13 +168,19 @@ def parse_zone(text):
 
 
 class Backend:
-    def __init__(self, node):
+    def __init__(self, node, window=None):
         self.node = node
+        self.window = window
         self.cache = tempfile.TemporaryDirectory(prefix="fds-kubectl-")
         self.snapshot_queries = {}
 
+    def command(self, argv, timeout=15):
+        if self.window is not None:
+            timeout = min(timeout, self.window.remaining())
+        return command(argv, timeout=timeout)
+
     def read_snapshot(self, argv):
-        result = command(argv)
+        result = self.command(argv)
         self.snapshot_queries[shlex.join(argv)] = result
         need(result["rc"] == 0 and not result.get("stdout_truncated"),
              "query failed: " + shlex.join(argv) + "; rc=" + str(result["rc"]) + "; " + result["stderr"][:2000])
@@ -165,7 +232,7 @@ class Backend:
                 "direct_permanent": read(["firewall-cmd", "--permanent", "--direct", "--get-all-rules"])}
 
     def kubectl(self, args):
-        return command(["/usr/bin/kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
+        return self.command(["/usr/bin/kubectl", "--kubeconfig=/etc/kubernetes/admin.conf",
                         "--cache-dir=" + self.cache.name, "--request-timeout=8s"] + args, timeout=18)
 
     def topology(self):
@@ -202,14 +269,14 @@ class Backend:
         return {"stable": stable, "sha256": fingerprint(stable), "queries": records}
 
     def query(self, plane, rule):
-        result = command(["firewall-cmd"] + (["--permanent"] if plane == "permanent" else []) +
+        result = self.command(["firewall-cmd"] + (["--permanent"] if plane == "permanent" else []) +
                          ["--zone=public", "--query-rich-rule=" + rule])
         need((result["rc"], result["stdout"].strip()) in ((0, "yes"), (1, "no")), "rich-rule query failed")
         return result["rc"] == 0
 
     def edit(self, plane, rule, action):
         need(plane in ("runtime", "permanent") and rule in RULES and action in ("add", "remove"), "invalid mutation")
-        return command(["firewall-cmd"] + (["--permanent"] if plane == "permanent" else []) +
+        return self.command(["firewall-cmd"] + (["--permanent"] if plane == "permanent" else []) +
                        ["--zone=public", "--" + action + "-rich-rule=" + rule])
 
 
@@ -287,7 +354,8 @@ def evolved(before, operations):
     return expected
 
 
-def apply_transaction(backend, journal, request):
+def apply_transaction(backend, journal, request, window):
+    window.remaining()
     need(request.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY), "runtime execution plan differs")
     before = backend.snapshot()
     need(fingerprint(before) == request["before_sha256"], "live firewall/NM state differs from inspection")
@@ -303,11 +371,13 @@ def apply_transaction(backend, journal, request):
                "plan_sha256": PLAN, "before": before, "topology_sha256": topology["sha256"],
                "execution_plan_sha256": fingerprint(RUNTIME_POLICY),
                "authorization_sha256": request["authorization_sha256"],
+               "authorization_window": window.record(),
                "status": "APPLYING", "operations": []}
     journal.save(receipt)
     try:
         for plane in ("runtime",):
             for rule in RULES:
+                window.remaining()
                 need(backend.snapshot() == evolved(before, receipt["operations"]), "concurrent firewall change")
                 present = backend.query(plane, rule)
                 need(present == (canonical_rule(rule) in before["planes"][plane]["rules"]), "rule changed after snapshot")
@@ -317,8 +387,11 @@ def apply_transaction(backend, journal, request):
                 journal.save(receipt)  # Durable intent before any firewall mutation.
                 if present:
                     continue
+                window.remaining()
                 result = backend.edit(plane, rule, "add")
                 op["result"] = result
+                op["status"] = "add_uncertain"
+                journal.save(receipt)  # Preserve the outcome even if confirmation cannot run.
                 exists = backend.query(plane, rule)
                 if result["rc"] == 0 and exists and "ALREADY_ENABLED" not in (result["stderr"] + result["stdout"]):
                     op["status"] = "added"
@@ -331,6 +404,7 @@ def apply_transaction(backend, journal, request):
         receipt["after"] = backend.snapshot()
         need(receipt["after"] == evolved(before, receipt["operations"]), "post-apply firewall mismatch")
         need(backend.topology()["sha256"] == receipt["topology_sha256"], "post-apply topology/readiness changed")
+        window.remaining()
         receipt["status"] = "RUNTIME_APPLIED_REVIEW_REQUIRED"
     except Exception as error:
         receipt["status"] = "PARTIAL_APPLY_REVIEW_REQUIRED"
@@ -340,7 +414,8 @@ def apply_transaction(backend, journal, request):
     return receipt
 
 
-def rollback_transaction(backend, journal, receipt, request):
+def rollback_transaction(backend, journal, receipt, request, window):
+    window.remaining()
     need(receipt.get("schema") == "fds.cp1-canary-receipt.v2" and receipt.get("phase") == "runtime",
          "legacy or non-runtime receipt requires separate recovery review")
     need(receipt.get("execution_plan_sha256") == request.get("execution_plan_sha256") == fingerprint(RUNTIME_POLICY),
@@ -356,18 +431,24 @@ def rollback_transaction(backend, journal, receipt, request):
         need(op["status"] != "added" or op["present_before"] is False, "refusing removal of a preexisting rule")
     need(backend.topology()["sha256"] == receipt["topology_sha256"], "membership changed; removing rules may disrupt joined nodes")
     need(backend.snapshot() == evolved(receipt["before"], operations), "firewall drift before rollback")
+    receipt["rollback_authorization_sha256"] = request["authorization_sha256"]
+    receipt["rollback_authorization_window"] = window.record()
     receipt["status"] = "ROLLING_BACK"
     journal.save(receipt)
     try:
         for op in reversed(operations):
             if op["status"] != "added":
                 continue
+            window.remaining()
             need(backend.snapshot() == evolved(receipt["before"], operations), "concurrent firewall change")
             need(backend.query(op["plane"], op["rule"]), "owned rule unexpectedly absent")
             op["status"] = "remove_pending"
             journal.save(receipt)
+            window.remaining()
             result = backend.edit(op["plane"], op["rule"], "remove")
             op["remove_result"] = result
+            op["status"] = "remove_uncertain"
+            journal.save(receipt)
             absent = not backend.query(op["plane"], op["rule"])
             op["status"] = "removed" if result["rc"] == 0 and absent else "remove_uncertain"
             journal.save(receipt)
@@ -375,6 +456,7 @@ def rollback_transaction(backend, journal, receipt, request):
         receipt["rollback_after"] = backend.snapshot()
         need(receipt["rollback_after"] == receipt["before"], "rollback snapshot mismatch")
         need(backend.topology()["sha256"] == receipt["topology_sha256"], "post-rollback readiness/topology changed")
+        window.remaining()
         receipt["status"] = "ROLLED_BACK_REVIEW_REQUIRED"
     except Exception as error:
         receipt["status"] = "PARTIAL_ROLLBACK_REVIEW_REQUIRED"
@@ -465,7 +547,8 @@ def main(request):
     journal = None
     try:
         need(request["node"] in NODES, "unknown target")
-        backend = Backend(request["node"])
+        window = authorization_window(request) if request["mode"] in ("apply", "rollback") else None
+        backend = Backend(request["node"], window=window)
         backend.identity()
         if request["mode"] == "inspect":
             result = inspect(backend)
@@ -483,10 +566,10 @@ def main(request):
             if mode == "apply":
                 age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(request["inspection_created_at"])).total_seconds()
                 need(0 <= age <= 900, "inspection older than 15 minutes; inspect again")
-                result = apply_transaction(backend, journal, request)
+                result = apply_transaction(backend, journal, request, window)
             elif mode == "rollback":
                 receipt = journal.load(request["receipt_sha256"])
-                result = rollback_transaction(backend, journal, receipt, request)
+                result = rollback_transaction(backend, journal, receipt, request, window)
             else:
                 private_path(journal.path)
                 result = json.loads(journal.path.read_bytes())

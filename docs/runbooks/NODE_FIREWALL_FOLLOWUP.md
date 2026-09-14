@@ -15,9 +15,9 @@
 
 ## 정본과 실행 조건
 
-발행 정본 v3.1.17, D34, named HEP/GNP 보호 통일 및 6대 firewalld disabled/inactive 목표, 기존 AC/Done을 유지한다. v18 전 선행 준비의 이유와 사용자 승인 범위는 [PR #2 선행 변경 이력](https://github.com/321Team/infra-kubernetes/blob/097ddb56d87b229a9eb465f72ea9f55d16524c51/docs/change/ICR-D-NET-01-01/ADVANCE_CHANGE_RECORD_20260910.md)을 따른다. CP 방화벽 보완 순서가 정본 HEP Bootstrap Allow→canary Worker→Worker 확대→CP 인계 순서를 대체하지 않는다.
+발행 정본 v3.1.18(72599ae49342b0fb8dbd3d8ee60314afb9f907bb) §6.6/6.6.1, D34, named HEP/GNP 보호 통일 및 6대 firewalld disabled/inactive 목표, 기존 AC/Done을 유지한다. 09-10 선행 준비 이력과 사용자 허용 범위는 [PR #2 선행 변경 이력](https://github.com/321Team/infra-kubernetes/blob/2911d625745d74eff035fa572b269df5445886fb/docs/change/ICR-D-NET-01-01/ADVANCE_CHANGE_RECORD_20260910.md)을 따른다. CP 방화벽 보완 순서가 정본 HEP Bootstrap Allow→canary Worker→Worker 확대→CP 인계 순서를 대체하지 않는다.
 
-1. PR #2 HEAD `097ddb56d87b229a9eb465f72ea9f55d16524c51`의 독립 리뷰와 CP1 Runtime 실제 적용·Positive/Negative/Regression 인수가 선행한다. onsite/inspect는 적용 영수증이 아니다.
+1. PR #2 HEAD `2911d625745d74eff035fa572b269df5445886fb`의 독립 리뷰와 CP1 Runtime 실제 적용·Positive/Negative/Regression 인수가 선행한다. onsite/inspect는 적용 영수증이 아니다.
 2. 본 PR 새 HEAD의 이하영(hayeounglee) 독립 리뷰와 실제 보호·백업·콘솔·복구·대상 상태 판단이 필요하다. 승인 JSON은 이 판단을 입력에 묶는 기록이며 GitHub 승인의 진위를 인증하지 않는다. 실제 링크의 작성자·결정·검토 HEAD를 사람이 대조한다.
 3. 평일 최대 2시간 창, 한 대상씩 진행한다. 다른 firewall/NM/Calico 변경, join/reset/member 변경, reload/reboot를 동결하고 직전 결과를 검토한 후 확대한다.
 4. 실제 창에서 새 inspect를 수집하고 15분 이내 입력을 사용한다. 잔여 구성·CP1 상태 검토를 해당 해시에 연결한다.
@@ -43,7 +43,7 @@ TARGET, CP1_TOPOLOGY, CP1_STATE, POLICY, INSPECTION, RESULT JSON을 검토한다
 
 ## CP1 영수증 및 실제 인수 기록
 
-허용 생산자는 위 PR #2 HEAD이며 helper SHA-256은 `25b497f7c300c03b76975cee554c1c926e6775674f97ed11254cb1625b635e8d`이다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 고정 생산자 fixture는 모의 계약 시험에만 사용한다.
+허용 생산자는 위 PR #2 HEAD이며 helper SHA-256은 `0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2`이다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 새 생산자의 authorization_window와 각 연산 시작 시각도 검사한다. 작업창은 [start, end), 최대 2시간이며 종료 시각의 연산을 허용하지 않는다. receipt ended_at은 결과 보존 시각이므로 창 밖일 수 있고, 전체 성공 상태와 기존 시각 검증을 별도로 적용한다. 고정 생산자 fixture는 모의 계약 시험에만 사용한다.
 
 `cp1-runtime-acceptance.template.json`을 실제 인수 기록으로 채운다. receipt_input_sha256은 CP1 제출 노드 JSON 파일 해시, receipt_sha256은 내부 영수증 내용 해시다. source/helper/reference plan/execution plan, run ID, 이하영 리뷰 링크·결정·시각, Positive/Negative/Regression 각각의 실제 증적 해시와 PASS를 연결한다. 인수 시각은 영수증 종료 이후여야 한다. 모의 시험이나 형식상 APPROVED를 운영 인수로 사용하지 않는다.
 
@@ -100,3 +100,5 @@ python3 -I scripts/run-node-firewall.py rollback --node k8s-worker01 \
 `promote-permanent`는 preflight/SSH 전에 NOT_IMPLEMENTED로 중단한다. Runtime 실제 시험·독립 인수 뒤 Permanent 반영 또는 보호 인계에 따른 회수 중 필요한 종료 절차를 별도 결정한다. Runtime은 reload/reboot로 사라질 수 있으므로 창 내 동결·종료 계획이 필요하다. 영속성·재부팅 인수는 미완료다.
 
 공식 근거: [Runtime과 Permanent](https://firewalld.org/documentation/configuration/runtime-versus-permanent.html), [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html). rc=0만으로 소유권을 단정하지 않으며 경고·query·전후 상태를 함께 검증한다.
+
+2026-09-14 변경: [생산자 갱신 검증](../change/ICR-D-NET-01-01/NODE_FIREWALL_PRODUCER_FOLLOWUP_20260914.md). 09-13 구 영수증/Permanent 두 수정의 CLOSED_STATIC 수용은 당시 범위로 유지하며 이번 새 pin/window 검증의 독립 리뷰와 실제 적용은 별도다.

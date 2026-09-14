@@ -313,7 +313,10 @@ def cp1_producer_receipt(preserve_first=False):
     backend = ProducerBackend()
     request = {**n.CP1_CONTRACT, "run_id": "20260910T070000Z-abcdef123456", "authorization_sha256": "c" * 64,
                "before_sha256": producer.fingerprint(backend.snapshot()), "topology_sha256": producer.fingerprint(stable)}
-    receipt = producer.apply_transaction(backend, journal, request)
+    with patch.object(dt, "datetime", FixedWeekday):
+        current = dt.datetime.now(dt.timezone.utc)
+        window = producer.OperationWindow(current - dt.timedelta(minutes=1), current + dt.timedelta(minutes=5))
+        receipt = producer.apply_transaction(backend, journal, request, window)
     assert receipt["status"] == "RUNTIME_APPLIED_REVIEW_REQUIRED", receipt
     return {"status": receipt["status"], "receipt": receipt, "receipt_sha256": producer.fingerprint(receipt)}
 

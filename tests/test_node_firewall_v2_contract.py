@@ -18,6 +18,31 @@ from test_node_firewall import (n, c, ROOT, FakeBackend, MemoryJournal,
 
 
 class ReceiptContract(unittest.TestCase):
+    def test_producer_lock_matches_current_contract_and_fixture_bytes(self):
+        lock = json.loads((ROOT / "tests/fixtures/PR2_PRODUCER_LOCK.json").read_bytes())
+        self.assertEqual(lock["commit"], n.CP1_CONTRACT["source_commit"])
+        self.assertEqual(lock["sha256"], n.CP1_CONTRACT["source_sha256"])
+        self.assertEqual(c.digest(ROOT / "tests/fixtures/pr2_cp_canary_node.py"), lock["sha256"])
+
+    def test_rehashed_missing_invalid_or_outside_window_is_rejected(self):
+        original = cp1_producer_receipt()
+        changes = {
+            "missing": lambda r: r.pop("authorization_window"),
+            "inclusive_end": lambda r: r["authorization_window"].update(end_exclusive=False),
+            "naive_start": lambda r: r["authorization_window"].update(start="2026-09-10T11:59:00"),
+            "empty_window": lambda r: r["authorization_window"].update(end=r["authorization_window"]["start"]),
+            "unbounded": lambda r: r["authorization_window"].update(end="2026-09-10T23:00:00+00:00"),
+            "before_window": lambda r: r.update(started_at="2026-09-10T11:00:00+00:00"),
+            "operation_at_end": lambda r: r["operations"][0].update(started_at=r["authorization_window"]["end"]),
+            "operation_before_start": lambda r: r["operations"][0].update(started_at="2026-09-10T11:00:00+00:00"),
+        }
+        for name, change in changes.items():
+            proof = copy.deepcopy(original)
+            change(proof["receipt"])
+            proof["receipt_sha256"] = n.fingerprint(proof["receipt"])
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                c.validate_cp1_receipt(proof)
+
     def test_pinned_producer_generates_accepted_v2_for_added_and_preserved_rules(self):
         for preserved in (False, True):
             proof = cp1_producer_receipt(preserved)
@@ -30,7 +55,7 @@ class ReceiptContract(unittest.TestCase):
         original = cp1_producer_receipt()
         changes = {
             "legacy": lambda r: r.update(schema="fds.cp1-canary-receipt.v1"),
-            "old_source": lambda r: r.update(source_commit="068661e076de02669170d3582f3d596d6e1a8eb3"),
+            "old_source": lambda r: r.update(source_commit="097ddb56d87b229a9eb465f72ea9f55d16524c51"),
             "helper": lambda r: r.update(source_sha256="f" * 64),
             "reference_plan": lambda r: r.update(plan_sha256="f" * 64),
             "execution_policy": lambda r: r.update(execution_plan_sha256="f" * 64),

@@ -1,5 +1,7 @@
 # 후속 변경 검토 및 검증 범위 v2
 
+> 2026-09-14 최신 생산자 계약: [후속 검증](NODE_FIREWALL_PRODUCER_FOLLOWUP_20260914.md), 로컬 Node 57/57 PASS. 아래 09-10의 74개 결과는 당시 이력이며 Worker 19개는 이번에 재실행하지 않았다.
+
 2026-09-10. **74/74 로컬 Linux 모의 테스트 PASS**. PR #4 테스트는 55개(기존 보완 33 + v2 계약/실패 분기 22), 병합된 PR #3 Worker 회귀는 19개다. 테스트 ID 중복 없이 계산했다. 실서버 firewalld·SSH 적용 PASS가 아니다.
 
 검토 소스는 scripts/node-firewall.py, scripts/run-node-firewall.py, node-firewall-v2.json 및 승인/CP1 인수 template이다. tests/fixtures/pr2_cp_canary_node.py는 PR #2 097ddb56d87b229a9eb465f72ea9f55d16524c51의 실제 생산자와 바이트가 같은 모의 시험 전용 파일이다. 영수증을 검증기에 맞춰 손으로 작성하지 않고 생산자의 apply_transaction을 fake backend로 실행한다. 운영 CP1 인수 기록을 대신하지 않는다.
