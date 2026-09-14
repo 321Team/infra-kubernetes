@@ -17,7 +17,7 @@
 
 발행 정본 v3.1.18(72599ae49342b0fb8dbd3d8ee60314afb9f907bb) §6.6/6.6.1, D34, named HEP/GNP 보호 통일 및 6대 firewalld disabled/inactive 목표, 기존 AC/Done을 유지한다. 09-10 선행 준비 이력과 사용자 허용 범위는 [PR #2 선행 변경 이력](https://github.com/321Team/infra-kubernetes/blob/f0388b1a372d19b5079e94ec6949ef443d774d2f/docs/change/ICR-D-NET-01-01/ADVANCE_CHANGE_RECORD_20260910.md)을 따른다. CP 방화벽 보완 순서가 정본 HEP Bootstrap Allow→canary Worker→Worker 확대→CP 인계 순서를 대체하지 않는다.
 
-1. PR #2 HEAD `f0388b1a372d19b5079e94ec6949ef443d774d2f`의 독립 리뷰와 CP1 Runtime 실제 적용·Positive/Negative/Regression 인수가 선행한다. onsite/inspect는 적용 영수증이 아니다.
+1. CP1 실행 소스 `264b273ab8ad79209bc0fec4a85c4497c946dbe3`의 독립 리뷰와 CP1 Runtime 실제 적용·Positive/Negative/Regression 인수가 선행한다. onsite/inspect는 적용 영수증이 아니다.
 2. 본 PR 새 HEAD의 이하영(hayeounglee) 독립 리뷰와 실제 보호·백업·콘솔·복구·대상 상태 판단이 필요하다. 승인 JSON은 이 판단을 입력에 묶는 기록이며 GitHub 승인의 진위를 인증하지 않는다. 실제 링크의 작성자·결정·검토 HEAD를 사람이 대조한다.
 3. 평일 최대 2시간 창, 한 대상씩 진행한다. 다른 firewall/NM/Calico 변경, join/reset/member 변경, reload/reboot를 동결하고 직전 결과를 검토한 후 확대한다.
 4. 실제 창에서 새 inspect를 수집하고 15분 이내 입력을 사용한다. 잔여 구성·CP1 상태 검토를 해당 해시에 연결한다.
