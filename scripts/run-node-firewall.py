@@ -193,15 +193,19 @@ def archive_output(directory):
     return archive, sidecar
 
 
-def load_checked(path, expected):
-    node.need(path and expected and re.fullmatch(r"[0-9a-f]{64}", expected), "input path and SHA256 are required")
+def read_checked(path):
+    """Read a small input once under O_NOFOLLOW; return (raw bytes, sha256 hex)."""
     path = Path(path)
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as handle:
         info = os.fstat(handle.fileno())
         node.need(stat.S_ISREG(info.st_mode) and info.st_size <= 8 * 1024 * 1024, "unsafe input")
         raw = handle.read(8 * 1024 * 1024 + 1)
-    node.need(len(raw) <= 8 * 1024 * 1024 and node.sha(raw) == expected, "input checksum mismatch")
+    node.need(len(raw) <= 8 * 1024 * 1024, "unsafe input")
+    return raw, node.sha(raw)
+
+
+def parse_unique(raw):
     def unique(pairs):
         data = {}
         for key, value in pairs:
@@ -209,6 +213,13 @@ def load_checked(path, expected):
             data[key] = value
         return data
     return json.loads(raw, object_pairs_hook=unique)
+
+
+def load_checked(path, expected):
+    node.need(path and expected and re.fullmatch(r"[0-9a-f]{64}", expected), "input path and SHA256 are required")
+    raw, actual = read_checked(path)
+    node.need(actual == expected, "input checksum mismatch")
+    return parse_unique(raw)
 
 
 def require_result(wrapper, status):
@@ -337,7 +348,8 @@ def main():
         node.need(args.mode != "promote-permanent",
                   "Permanent promotion NOT_IMPLEMENTED; Runtime acceptance and a separate reviewed change are required")
         commit = verify_source()
-        policy = load_checked(POLICY_PATH, digest(POLICY_PATH))
+        policy_raw, _ = read_checked(POLICY_PATH)
+        policy = parse_unique(policy_raw)
         node.validate_policy(policy)
         summary.update(source_commit=commit, policy_sha256=node.policy_hash())
         (out / "POLICY.json").write_bytes(node.encoded(policy))
