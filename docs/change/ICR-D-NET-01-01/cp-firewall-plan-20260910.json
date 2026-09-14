@@ -1,0 +1,1077 @@
+{
+  "schema": "fds.cp-firewall-plan.v1",
+  "status": "DRAFT_PLAN_REVIEW_REQUIRED",
+  "runtime_applied": false,
+  "policy_sha256": "bcf4780cb8c0630102cc2716be2fc97fdc74f81da26f6f78f5cca68dd5215565",
+  "evidence": {
+    "archive": "FDS_CP_Log_Collection_glrr0dsq.tar.gz",
+    "sha256": "265e7d3fe04c8c215b8c76847bac769c5445682d788c3f9ad2bf9afef100c594",
+    "ended_at": "2026-09-10T02:30:59.491401+00:00"
+  },
+  "baseline_commit": "2d93395a0e19ea67e5be199d7183a7edbaa6cf4c",
+  "inventory_commit": "5cbf3b657014b32a20cb5816d90d3ea5fe4951ab",
+  "execution_order": [
+    "k8s-control01",
+    "k8s-control02",
+    "k8s-control03"
+  ],
+  "candidate_add_count": 36,
+  "nodes": {
+    "k8s-control01": {
+      "ip": "10.1.93.102",
+      "zone": "public",
+      "interface": "ens160",
+      "before": {
+        "permanent": {
+          "fields": {
+            "target": "default",
+            "ingress-priority": "0",
+            "egress-priority": "0",
+            "icmp-block-inversion": "no",
+            "interfaces": "",
+            "sources": "",
+            "services": "dhcpv6-client ssh",
+            "ports": "",
+            "protocols": "",
+            "forward": "yes",
+            "masquerade": "no",
+            "forward-ports": "",
+            "source-ports": "",
+            "icmp-blocks": ""
+          },
+          "rich_rules": [
+            "rule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept"
+          ]
+        },
+        "runtime": {
+          "fields": {
+            "target": "default",
+            "ingress-priority": "0",
+            "egress-priority": "0",
+            "icmp-block-inversion": "no",
+            "interfaces": "ens160",
+            "sources": "",
+            "services": "dhcpv6-client ssh",
+            "ports": "",
+            "protocols": "",
+            "forward": "yes",
+            "masquerade": "no",
+            "forward-ports": "",
+            "source-ports": "",
+            "icmp-blocks": ""
+          },
+          "rich_rules": [
+            "rule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept"
+          ]
+        }
+      },
+      "before_sha256": "8a5482db359f122830f27c4859964e634390b591245d159fad236f4c82cc9e4e",
+      "operations": {
+        "permanent": [
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          }
+        ],
+        "runtime": [
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          }
+        ]
+      }
+    },
+    "k8s-control02": {
+      "ip": "10.1.93.103",
+      "zone": "public",
+      "interface": "ens160",
+      "before": {
+        "permanent": {
+          "fields": {
+            "target": "default",
+            "ingress-priority": "0",
+            "egress-priority": "0",
+            "icmp-block-inversion": "no",
+            "interfaces": "",
+            "sources": "",
+            "services": "dhcpv6-client ssh",
+            "ports": "",
+            "protocols": "",
+            "forward": "yes",
+            "masquerade": "no",
+            "forward-ports": "",
+            "source-ports": "",
+            "icmp-blocks": ""
+          },
+          "rich_rules": [
+            "rule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept"
+          ]
+        },
+        "runtime": {
+          "fields": {
+            "target": "default",
+            "ingress-priority": "0",
+            "egress-priority": "0",
+            "icmp-block-inversion": "no",
+            "interfaces": "ens160",
+            "sources": "",
+            "services": "dhcpv6-client ssh",
+            "ports": "",
+            "protocols": "",
+            "forward": "yes",
+            "masquerade": "no",
+            "forward-ports": "",
+            "source-ports": "",
+            "icmp-blocks": ""
+          },
+          "rich_rules": [
+            "rule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept"
+          ]
+        }
+      },
+      "before_sha256": "8a5482db359f122830f27c4859964e634390b591245d159fad236f4c82cc9e4e",
+      "operations": {
+        "permanent": [
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          }
+        ],
+        "runtime": [
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          }
+        ]
+      }
+    },
+    "k8s-control03": {
+      "ip": "10.1.93.104",
+      "zone": "public",
+      "interface": "ens160",
+      "before": {
+        "permanent": {
+          "fields": {
+            "target": "default",
+            "ingress-priority": "0",
+            "egress-priority": "0",
+            "icmp-block-inversion": "no",
+            "interfaces": "",
+            "sources": "",
+            "services": "dhcpv6-client ssh",
+            "ports": "",
+            "protocols": "",
+            "forward": "yes",
+            "masquerade": "no",
+            "forward-ports": "",
+            "source-ports": "",
+            "icmp-blocks": ""
+          },
+          "rich_rules": [
+            "rule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept"
+          ]
+        },
+        "runtime": {
+          "fields": {
+            "target": "default",
+            "ingress-priority": "0",
+            "egress-priority": "0",
+            "icmp-block-inversion": "no",
+            "interfaces": "ens160",
+            "sources": "",
+            "services": "dhcpv6-client ssh",
+            "ports": "",
+            "protocols": "",
+            "forward": "yes",
+            "masquerade": "no",
+            "forward-ports": "",
+            "source-ports": "",
+            "icmp-blocks": ""
+          },
+          "rich_rules": [
+            "rule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept"
+          ]
+        }
+      },
+      "before_sha256": "8a5482db359f122830f27c4859964e634390b591245d159fad236f4c82cc9e4e",
+      "operations": {
+        "permanent": [
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "permanent",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--permanent",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          }
+        ],
+        "runtime": [
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12A",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          },
+          {
+            "contract": "IF-12B",
+            "plane": "runtime",
+            "rule": "rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept",
+            "present_in_evidence": false,
+            "action": "candidate_add",
+            "query_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--query-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "add_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--add-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_argv": [
+              "firewall-cmd",
+              "--zone=public",
+              "--remove-rich-rule=rule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept"
+            ],
+            "rollback_requires": "successful add receipt, absent before change, protected service state"
+          }
+        ]
+      }
+    }
+  },
+  "limits": [
+    "Offline evidence plan; live identity/zone/rules and NetworkManager must be checked before apply.",
+    "A generated rollback command is not proof that its matching add ran.",
+    "No /24, direct CP 6443, Worker, NTP, join/reset or HEP/firewalld handoff changes.",
+    "CP2 residual configuration and etcd membership remain under baseline issue #10."
+  ]
+}

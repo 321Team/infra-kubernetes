@@ -1,0 +1,525 @@
+{
+  "schema": "fds.cp1-reinspection-summary.v1",
+  "derived_from": "FDS_CP1_Canary_jvgkgfm9.tar.gz",
+  "archive_sha256": "45a23e3039a37edf4ee17a540263a1a3c558ab1e0d50b7aa2f783f0fa8f61b55",
+  "execution_source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+  "mode": "inspect",
+  "runtime_applied": false,
+  "meaning": "Collection completeness; not port reachability, runtime apply, independent approval, or canonical alignment PASS",
+  "internal_manifest": {
+    "REQUEST.json": "4e68d93e05fe8be06ac8c526d999d4d04cb50a8b77aeb0a8b5240e6f65d7a98f",
+    "RESULT.json": "6a58b126153d3fa633ac33c7ec023862da1cfa2f2f10fad451019e0b52f70d7f",
+    "k8s-control01.json": "5fbbb035e1cbaaefcab61e94a382407e97c70b0b29249e4043bb514cd41afc97",
+    "k8s-control02.json": "7a90b96b948cbb6e70a77c945c2920adbd5e8efd086368e9d146bb42290e5a56",
+    "k8s-control03.json": "ae56c29b400abef669232315e383c12d1f560f6f4bd4949e3ba11c92e6179a0a"
+  },
+  "nodes": {
+    "k8s-control01": {
+      "created_at": "2026-09-10T04:56:17.117807+00:00",
+      "ended_at": "2026-09-10T04:56:21.008606+00:00",
+      "hostname": "k8s-control01",
+      "ip": "10.1.93.102",
+      "status": "INSPECTED_REVIEW_REQUIRED",
+      "before_sha256": "18d316967c24a16506734833f0bada6bb8febf86b0327bf35ed7a538871e3864",
+      "topology_sha256": "b4eb4932d00f53396e2fd55e704eb4246ce6a3d4a963d1029472f16c43e0c4af",
+      "canary_inputs_complete": true,
+      "gaps": [],
+      "failed_queries": [],
+      "tcp_to_cp1": [
+        {
+          "connected": true,
+          "destination": "10.1.93.102",
+          "port": 2379,
+          "source": "10.1.93.102"
+        },
+        {
+          "connected": true,
+          "destination": "10.1.93.102",
+          "port": 2380,
+          "source": "10.1.93.102"
+        },
+        {
+          "connected": true,
+          "destination": "10.1.93.102",
+          "port": 10250,
+          "source": "10.1.93.102"
+        }
+      ],
+      "source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+      "source_sha256": "5b1c9bccaf80cafc7f52eaf1ad9799d4a342981784f8fdb484013e27b19ae41b",
+      "transport": "PASS",
+      "json_sha256": "5fbbb035e1cbaaefcab61e94a382407e97c70b0b29249e4043bb514cd41afc97",
+      "query_results": {
+        "queries": {
+          "count": 15,
+          "all_rc_zero": true,
+          "truncated_keys": [],
+          "query_names": [
+            "active_zones",
+            "api_readyz",
+            "etcd_log",
+            "etcd_members",
+            "etcd_pod",
+            "etcd_status",
+            "kube-apiserver_log",
+            "kubeadm_version",
+            "listeners",
+            "nft",
+            "nm_device",
+            "nodes",
+            "public_permanent",
+            "public_runtime",
+            "units"
+          ]
+        },
+        "snapshot_queries": {
+          "count": 26,
+          "all_rc_zero": true,
+          "truncated_keys": [],
+          "query_names": [
+            "firewall-cmd --direct --get-all-rules",
+            "firewall-cmd --get-active-policies",
+            "firewall-cmd --get-default-zone",
+            "firewall-cmd --get-policies",
+            "firewall-cmd --get-zone-of-interface=ens160",
+            "firewall-cmd --info-policy=allow-host-ipv6",
+            "firewall-cmd --info-policy=gateway-dmz-to-HOST",
+            "firewall-cmd --info-policy=gateway-lan-to-HOST",
+            "firewall-cmd --info-policy=gateway-lan-to-work",
+            "firewall-cmd --info-policy=gateway-lan-to-world",
+            "firewall-cmd --info-policy=gateway-world-to-HOST",
+            "firewall-cmd --permanent --direct --get-all-rules",
+            "firewall-cmd --permanent --get-policies",
+            "firewall-cmd --permanent --info-policy=allow-host-ipv6",
+            "firewall-cmd --permanent --info-policy=gateway-dmz-to-HOST",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-HOST",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-work",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-world",
+            "firewall-cmd --permanent --info-policy=gateway-world-to-HOST",
+            "firewall-cmd --permanent --zone=public --list-all",
+            "firewall-cmd --state",
+            "firewall-cmd --zone=public --list-all",
+            "getenforce",
+            "ip -j -4 addr show dev ens160",
+            "nmcli -g GENERAL.CON-UUID device show ens160",
+            "nmcli -g connection.zone connection show uuid 2403bbcc-41f3-4439-81f7-4a3b6a3f582e"
+          ]
+        }
+      },
+      "topology": {
+        "members": [
+          {
+            "clientURLs": [
+              "https://10.1.93.102:2379"
+            ],
+            "id": "1755679419291778130",
+            "isLearner": false,
+            "name": "k8s-control01",
+            "peerURLs": [
+              "https://10.1.93.102:2380"
+            ]
+          }
+        ],
+        "nodes": [
+          [
+            "k8s-control01",
+            "75735bd5-937a-463f-a93f-a8e7e51fa7a1"
+          ]
+        ]
+      },
+      "firewall_summary": {
+        "hostname": "k8s-control01",
+        "ip": "10.1.93.102",
+        "active_zone": "public",
+        "default_zone": "public",
+        "nm_zone": "",
+        "selinux": "Enforcing",
+        "planes": {
+          "permanent": {
+            "fields": {
+              "egress-priority": "0",
+              "forward": "yes",
+              "forward-ports": "",
+              "icmp-block-inversion": "no",
+              "icmp-blocks": "",
+              "ingress-priority": "0",
+              "interfaces": "",
+              "masquerade": "no",
+              "ports": "",
+              "protocols": "",
+              "services": "dhcpv6-client ssh",
+              "source-ports": "",
+              "sources": "",
+              "target": "default"
+            },
+            "rules": [
+              "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+            ]
+          },
+          "runtime": {
+            "fields": {
+              "egress-priority": "0",
+              "forward": "yes",
+              "forward-ports": "",
+              "icmp-block-inversion": "no",
+              "icmp-blocks": "",
+              "ingress-priority": "0",
+              "interfaces": "ens160",
+              "masquerade": "no",
+              "ports": "",
+              "protocols": "",
+              "services": "dhcpv6-client ssh",
+              "source-ports": "",
+              "sources": "",
+              "target": "default"
+            },
+            "rules": [
+              "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+            ]
+          }
+        }
+      }
+    },
+    "k8s-control02": {
+      "created_at": "2026-09-10T04:56:21.591146+00:00",
+      "ended_at": "2026-09-10T04:56:24.809882+00:00",
+      "hostname": "k8s-control02",
+      "ip": "10.1.93.103",
+      "status": "INSPECTED_REVIEW_REQUIRED",
+      "before_sha256": "881f54336ac6e0687720b975bc6e0eb0d719beed81050f96886629f0c752092e",
+      "canary_inputs_complete": false,
+      "gaps": [],
+      "failed_queries": [],
+      "tcp_to_cp1": [
+        {
+          "connected": false,
+          "destination": "10.1.93.102",
+          "errno": 113,
+          "error": "[Errno 113] No route to host",
+          "port": 2379
+        },
+        {
+          "connected": false,
+          "destination": "10.1.93.102",
+          "errno": 113,
+          "error": "[Errno 113] No route to host",
+          "port": 2380
+        },
+        {
+          "connected": false,
+          "destination": "10.1.93.102",
+          "errno": 113,
+          "error": "[Errno 113] No route to host",
+          "port": 10250
+        }
+      ],
+      "residual_files": [
+        {
+          "exists": false,
+          "path": "/etc/kubernetes/manifests/etcd.yaml"
+        },
+        {
+          "exists": true,
+          "is_regular": true,
+          "is_symlink": false,
+          "mode": "0o600",
+          "mtime_ns": 1788958352896031827,
+          "path": "/etc/kubernetes/manifests/kube-apiserver.yaml",
+          "size": 3659,
+          "uid": 0
+        },
+        {
+          "exists": true,
+          "is_regular": true,
+          "is_symlink": false,
+          "mode": "0o600",
+          "mtime_ns": 1788958352897031813,
+          "path": "/etc/kubernetes/manifests/kube-controller-manager.yaml",
+          "size": 2939,
+          "uid": 0
+        },
+        {
+          "exists": true,
+          "is_regular": true,
+          "is_symlink": false,
+          "mode": "0o600",
+          "mtime_ns": 1788958352898021473,
+          "path": "/etc/kubernetes/manifests/kube-scheduler.yaml",
+          "size": 1726,
+          "uid": 0
+        },
+        {
+          "exists": false,
+          "path": "/var/lib/kubelet/config.yaml"
+        },
+        {
+          "exists": false,
+          "path": "/var/lib/kubelet/kubeadm-flags.env"
+        },
+        {
+          "exists": false,
+          "path": "/etc/kubernetes/kubelet.conf"
+        },
+        {
+          "exists": false,
+          "path": "/etc/kubernetes/bootstrap-kubelet.conf"
+        },
+        {
+          "exists": false,
+          "path": "/var/lib/etcd"
+        },
+        {
+          "exists": false,
+          "path": "/var/lib/etcd/member"
+        }
+      ],
+      "source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+      "source_sha256": "5b1c9bccaf80cafc7f52eaf1ad9799d4a342981784f8fdb484013e27b19ae41b",
+      "transport": "PASS",
+      "json_sha256": "7a90b96b948cbb6e70a77c945c2920adbd5e8efd086368e9d146bb42290e5a56",
+      "query_results": {
+        "queries": {
+          "count": 9,
+          "all_rc_zero": true,
+          "truncated_keys": [],
+          "query_names": [
+            "active_zones",
+            "join_window_kubelet",
+            "kubeadm_version",
+            "listeners",
+            "nft",
+            "nm_device",
+            "public_permanent",
+            "public_runtime",
+            "units"
+          ]
+        },
+        "snapshot_queries": {
+          "count": 26,
+          "all_rc_zero": true,
+          "truncated_keys": [],
+          "query_names": [
+            "firewall-cmd --direct --get-all-rules",
+            "firewall-cmd --get-active-policies",
+            "firewall-cmd --get-default-zone",
+            "firewall-cmd --get-policies",
+            "firewall-cmd --get-zone-of-interface=ens160",
+            "firewall-cmd --info-policy=allow-host-ipv6",
+            "firewall-cmd --info-policy=gateway-dmz-to-HOST",
+            "firewall-cmd --info-policy=gateway-lan-to-HOST",
+            "firewall-cmd --info-policy=gateway-lan-to-work",
+            "firewall-cmd --info-policy=gateway-lan-to-world",
+            "firewall-cmd --info-policy=gateway-world-to-HOST",
+            "firewall-cmd --permanent --direct --get-all-rules",
+            "firewall-cmd --permanent --get-policies",
+            "firewall-cmd --permanent --info-policy=allow-host-ipv6",
+            "firewall-cmd --permanent --info-policy=gateway-dmz-to-HOST",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-HOST",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-work",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-world",
+            "firewall-cmd --permanent --info-policy=gateway-world-to-HOST",
+            "firewall-cmd --permanent --zone=public --list-all",
+            "firewall-cmd --state",
+            "firewall-cmd --zone=public --list-all",
+            "getenforce",
+            "ip -j -4 addr show dev ens160",
+            "nmcli -g GENERAL.CON-UUID device show ens160",
+            "nmcli -g connection.zone connection show uuid 8914aee6-bdb7-4d97-a0ae-0640143ff9c5"
+          ]
+        }
+      },
+      "firewall_summary": {
+        "hostname": "k8s-control02",
+        "ip": "10.1.93.103",
+        "active_zone": "public",
+        "default_zone": "public",
+        "nm_zone": "",
+        "selinux": "Enforcing",
+        "planes": {
+          "permanent": {
+            "fields": {
+              "egress-priority": "0",
+              "forward": "yes",
+              "forward-ports": "",
+              "icmp-block-inversion": "no",
+              "icmp-blocks": "",
+              "ingress-priority": "0",
+              "interfaces": "",
+              "masquerade": "no",
+              "ports": "",
+              "protocols": "",
+              "services": "dhcpv6-client ssh",
+              "source-ports": "",
+              "sources": "",
+              "target": "default"
+            },
+            "rules": [
+              "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+            ]
+          },
+          "runtime": {
+            "fields": {
+              "egress-priority": "0",
+              "forward": "yes",
+              "forward-ports": "",
+              "icmp-block-inversion": "no",
+              "icmp-blocks": "",
+              "ingress-priority": "0",
+              "interfaces": "ens160",
+              "masquerade": "no",
+              "ports": "",
+              "protocols": "",
+              "services": "dhcpv6-client ssh",
+              "source-ports": "",
+              "sources": "",
+              "target": "default"
+            },
+            "rules": [
+              "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+            ]
+          }
+        }
+      }
+    },
+    "k8s-control03": {
+      "created_at": "2026-09-10T04:56:25.382953+00:00",
+      "ended_at": "2026-09-10T04:56:28.462487+00:00",
+      "hostname": "k8s-control03",
+      "ip": "10.1.93.104",
+      "status": "INSPECTED_REVIEW_REQUIRED",
+      "before_sha256": "5a56c0c2cafca98f831eaaddd096ceb43292b3c5e90b6873457eec10261a0baa",
+      "canary_inputs_complete": false,
+      "gaps": [],
+      "failed_queries": [],
+      "tcp_to_cp1": [
+        {
+          "connected": false,
+          "destination": "10.1.93.102",
+          "errno": 113,
+          "error": "[Errno 113] No route to host",
+          "port": 2379
+        },
+        {
+          "connected": false,
+          "destination": "10.1.93.102",
+          "errno": 113,
+          "error": "[Errno 113] No route to host",
+          "port": 2380
+        },
+        {
+          "connected": false,
+          "destination": "10.1.93.102",
+          "errno": 113,
+          "error": "[Errno 113] No route to host",
+          "port": 10250
+        }
+      ],
+      "source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+      "source_sha256": "5b1c9bccaf80cafc7f52eaf1ad9799d4a342981784f8fdb484013e27b19ae41b",
+      "transport": "PASS",
+      "json_sha256": "ae56c29b400abef669232315e383c12d1f560f6f4bd4949e3ba11c92e6179a0a",
+      "query_results": {
+        "queries": {
+          "count": 8,
+          "all_rc_zero": true,
+          "truncated_keys": [],
+          "query_names": [
+            "active_zones",
+            "kubeadm_version",
+            "listeners",
+            "nft",
+            "nm_device",
+            "public_permanent",
+            "public_runtime",
+            "units"
+          ]
+        },
+        "snapshot_queries": {
+          "count": 26,
+          "all_rc_zero": true,
+          "truncated_keys": [],
+          "query_names": [
+            "firewall-cmd --direct --get-all-rules",
+            "firewall-cmd --get-active-policies",
+            "firewall-cmd --get-default-zone",
+            "firewall-cmd --get-policies",
+            "firewall-cmd --get-zone-of-interface=ens160",
+            "firewall-cmd --info-policy=allow-host-ipv6",
+            "firewall-cmd --info-policy=gateway-dmz-to-HOST",
+            "firewall-cmd --info-policy=gateway-lan-to-HOST",
+            "firewall-cmd --info-policy=gateway-lan-to-work",
+            "firewall-cmd --info-policy=gateway-lan-to-world",
+            "firewall-cmd --info-policy=gateway-world-to-HOST",
+            "firewall-cmd --permanent --direct --get-all-rules",
+            "firewall-cmd --permanent --get-policies",
+            "firewall-cmd --permanent --info-policy=allow-host-ipv6",
+            "firewall-cmd --permanent --info-policy=gateway-dmz-to-HOST",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-HOST",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-work",
+            "firewall-cmd --permanent --info-policy=gateway-lan-to-world",
+            "firewall-cmd --permanent --info-policy=gateway-world-to-HOST",
+            "firewall-cmd --permanent --zone=public --list-all",
+            "firewall-cmd --state",
+            "firewall-cmd --zone=public --list-all",
+            "getenforce",
+            "ip -j -4 addr show dev ens160",
+            "nmcli -g GENERAL.CON-UUID device show ens160",
+            "nmcli -g connection.zone connection show uuid 087a8148-6fc1-4da3-8c76-15b7c5d5c0fe"
+          ]
+        }
+      },
+      "firewall_summary": {
+        "hostname": "k8s-control03",
+        "ip": "10.1.93.104",
+        "active_zone": "public",
+        "default_zone": "public",
+        "nm_zone": "",
+        "selinux": "Enforcing",
+        "planes": {
+          "permanent": {
+            "fields": {
+              "egress-priority": "0",
+              "forward": "yes",
+              "forward-ports": "",
+              "icmp-block-inversion": "no",
+              "icmp-blocks": "",
+              "ingress-priority": "0",
+              "interfaces": "",
+              "masquerade": "no",
+              "ports": "",
+              "protocols": "",
+              "services": "dhcpv6-client ssh",
+              "source-ports": "",
+              "sources": "",
+              "target": "default"
+            },
+            "rules": [
+              "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+            ]
+          },
+          "runtime": {
+            "fields": {
+              "egress-priority": "0",
+              "forward": "yes",
+              "forward-ports": "",
+              "icmp-block-inversion": "no",
+              "icmp-blocks": "",
+              "ingress-priority": "0",
+              "interfaces": "ens160",
+              "masquerade": "no",
+              "ports": "",
+              "protocols": "",
+              "services": "dhcpv6-client ssh",
+              "source-ports": "",
+              "sources": "",
+              "target": "default"
+            },
+            "rules": [
+              "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

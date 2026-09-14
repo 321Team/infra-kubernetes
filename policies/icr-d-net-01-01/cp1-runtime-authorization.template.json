@@ -1,0 +1,23 @@
+{
+  "advance_record": "ICR-D-NET-01-01-ADV-20260910",
+  "backup_available": null,
+  "coexistence_risk_reviewed": null,
+  "console_recovery_available": null,
+  "execution_decision_url": null,
+  "execution_plan_sha256": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
+  "hostname": "k8s-control01",
+  "independent_reviewer": "hayeounglee",
+  "input_sha256": null,
+  "maintenance_freeze": null,
+  "mode": null,
+  "no_join_before_runtime_acceptance": null,
+  "operator": "GWONUK",
+  "protection_review_sha256": null,
+  "review_decision": null,
+  "review_url": null,
+  "rollback_plan_sha256": null,
+  "schema": "fds.cp1-runtime-authorization.v2",
+  "source_commit": null,
+  "window_end": null,
+  "window_start": null
+}
