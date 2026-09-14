@@ -187,10 +187,10 @@ class ControllerTests(unittest.TestCase):
             path = Path(temp) / "cp1.json"
             data = {"hostname": "k8s-control01", "canary_inputs_complete": True, "snapshot": {}, "topology": {},
                     "before_sha256": n.fingerprint({}), "topology_sha256": n.fingerprint({}),
-                    "created_at": (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=16)).isoformat()}
+                    "created_at": (dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=31)).isoformat()}
             path.write_bytes(n.encoded({"source_commit": "b" * 40, "source_sha256": c.digest(c.NODE_SOURCE), "transport": "PASS", "result": data}))
             args = argparse.Namespace(mode="apply", input=path, input_sha256=c.digest(path))
-            with self.assertRaisesRegex(ValueError, "15 minutes"):
+            with self.assertRaisesRegex(ValueError, "30 minutes"):
                 c.request_for(args, "b" * 40, "run")
             args.input_sha256 = "0" * 64
             with self.assertRaisesRegex(ValueError, "checksum"):
@@ -363,9 +363,12 @@ class AuthorizationTests(unittest.TestCase):
         for field, value in (("source_commit", "f" * 40), ("input_sha256", "f" * 64),
                              ("hostname", "k8s-control02"), ("mode", "rollback"),
                              ("review_decision", "COMMENTED"), ("independent_reviewer", "GWONUK"),
-                             ("review_url", "https://github.com/321Team/infra-kubernetes/pull/1#pullrequestreview-1")):
+                             ("review_url", "https://github.com/other/infra-kubernetes/pull/2#pullrequestreview-1")):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.check(dict(self.data, **{field: value}))
+
+    def test_followup_code_review_in_same_repository_is_accepted(self):
+        self.check(dict(self.data, review_url="https://github.com/321Team/infra-kubernetes/pull/5#pullrequestreview-1"))
 
     def test_expired_or_unbounded_window_is_rejected(self):
         current = dt.datetime.now(dt.timezone.utc)

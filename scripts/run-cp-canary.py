@@ -170,8 +170,7 @@ def request_for(args, commit, run_id):
         data = wrapper["result"]
         node.need(data["hostname"] == "k8s-control01" and data["canary_inputs_complete"], "CP1 inspection is incomplete")
         node.need(node.fingerprint(data["snapshot"]) == data["before_sha256"] and node.fingerprint(data["topology"]) == data["topology_sha256"], "inspection state hash differs")
-        age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(data["created_at"])).total_seconds()
-        node.need(0 <= age <= 900, "inspection older than 15 minutes; inspect again")
+        node.validate_inspection_age(data["created_at"])
         request.update(inspection_created_at=data["created_at"], before_sha256=data["before_sha256"], topology_sha256=data["topology_sha256"])
     elif args.mode == "rollback":
         node.need(args.input is not None, "rollback requires the CP1 result JSON")
