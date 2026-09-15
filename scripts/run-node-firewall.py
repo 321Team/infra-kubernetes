@@ -35,7 +35,8 @@ POLICY_PATH = KIT / "policies/icr-d-net-01-01/node-firewall-v2.json"
 def controller_env():
     # Keep the user's approved executable search path, but do not forward arbitrary tool/credential settings.
     result = {k: os.environ[k] for k in ("HOME", "USER", "LOGNAME", "PATH") if k in os.environ}
-    result.update(LANG="C", LC_ALL="C")
+    # Ansible requires a UTF-8 locale; plain C makes locale.getlocale()[1] None.
+    result.update(LANG="C.UTF-8", LC_ALL="C.UTF-8")
     return result
 
 
