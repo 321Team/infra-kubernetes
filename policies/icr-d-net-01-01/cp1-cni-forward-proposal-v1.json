@@ -1,16 +1,16 @@
 {
   "schema": "fds.cp1-cni-forward-proposal.v1",
   "status": "PROPOSED_NOT_EXECUTABLE",
-  "revision": 2,
+  "revision": 3,
   "purpose": "DIAGNOSTIC_ONLY",
   "host": "k8s-control01",
   "policy": {
     "name": "fds-cp1-cni-probe",
     "ingress_zones": [
-      "ANY"
+      "fds-cni-trial"
     ],
     "egress_zones": [
-      "ANY"
+      "fds-cni-trial"
     ],
     "target": "CONTINUE",
     "priority": -500,
@@ -35,8 +35,18 @@
     "scope": "TICKET_ONLY",
     "reference": "ADV-20260910_STYLE_LIMITED_PREPARATION",
     "baseline_revision_changed": false,
-    "independent_review_status": "PENDING",
-    "exception_approval_record": null,
+    "independent_review_status": "CONDITIONAL_EXCEPTION_APPROVAL_RECEIVED_INTERFACE_DESIGN_REVIEW_PENDING",
+    "exception_approval_record": {
+      "type": "ISSUE_COMMENT_CONDITIONAL_APPROVAL",
+      "url": "https://github.com/321Team/infra-kubernetes/pull/10#issuecomment-5674188689",
+      "reviewer": "hayeounglee",
+      "reviewed_head": "994e0cf189403291858fa6f198dead87627f01d6",
+      "comment_updated_at": "2026-09-15T03:23:37Z",
+      "scope": "DESIGN_PROPOSAL_EXCEPTION_ONLY",
+      "additional_condition": "RESTRICT_INGRESS_EGRESS_TO_CALICO_INTERFACE_BOUND_ZONES_BEFORE_IMPLEMENTATION",
+      "additional_condition_status": "DESIGN_REFLECTED_REVIEW_PENDING",
+      "formal_pr_approved_review": false
+    },
     "implementation_requires_explicit_exception_approval": true,
     "acceptance_criteria_credit": false,
     "acceptance_criteria_excluded": [
@@ -52,10 +62,61 @@
     "proposed_max_duration_seconds": 1200,
     "proposed_cleanup_reserve_seconds": 180,
     "timing_implemented": false,
-    "automatic_extension_allowed": false
+    "automatic_extension_allowed": false,
+    "implementation_requires_interface_condition_resolution": true,
+    "removal_includes_policy_zone_and_bindings": true
   },
   "same_node_only": true,
   "authorizes_cp1_acceptance": false,
   "authorizes_cp2_change": false,
-  "authorizes_execution": false
+  "authorizes_execution": false,
+  "zone": {
+    "name": "fds-cni-trial",
+    "target": "default",
+    "forward": false,
+    "set_as_default": false,
+    "sources": [],
+    "services": [],
+    "ports": [],
+    "rich_rules": [],
+    "masquerade": false,
+    "forward_ports": [],
+    "permanent_interfaces": [],
+    "runtime_interface_names": null,
+    "runtime_interface_names_status": "RESOLVE_FROM_CURRENT_TRIAL",
+    "required_runtime_interface_count": 2,
+    "interface_selection": "EXACT_TRIAL_POD_HOST_VETH_PEERS",
+    "required_correlations": [
+      "TRIAL_NAMESPACE_UID",
+      "POD_UID",
+      "CP1_NODE",
+      "POD_IP",
+      "POD_ETH0_IFINDEX_IFLINK",
+      "HOST_VETH_IFINDEX_PEER",
+      "POD_IP_HOST_ROUTE"
+    ],
+    "name_prefix_only_is_identity_proof": false,
+    "wildcard_binding_allowed": false,
+    "physical_interface_binding_allowed": false,
+    "tunnel_interface_binding_allowed": false,
+    "existing_system_pod_interface_binding_allowed": false,
+    "explicit_excluded_interfaces": [
+      "ens160",
+      "lo",
+      "vxlan.calico"
+    ],
+    "requires_preexisting_explicit_binding_absent": true,
+    "requires_nm_unmanaged": true,
+    "requires_ifcfg_absent": true,
+    "nm_profile_changes_allowed": false,
+    "ifcfg_changes_allowed": false,
+    "requires_permanent_binding_unchanged": true,
+    "trial_pod_to_host_access_may_be_more_restricted": true,
+    "requires_restore_pretrial_bindings": true,
+    "delete_runtime_and_permanent_zone_on_trial_exit": true
+  },
+  "requires_generated_ingress_and_egress_interface_match": true,
+  "requires_no_zone_intra_forward_bypass": true,
+  "requires_negative_packet_arrival_evidence": true,
+  "implementation_started": false
 }
