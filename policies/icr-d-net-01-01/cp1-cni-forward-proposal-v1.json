@@ -1,6 +1,8 @@
 {
   "schema": "fds.cp1-cni-forward-proposal.v1",
   "status": "PROPOSED_NOT_EXECUTABLE",
+  "revision": 2,
+  "purpose": "DIAGNOSTIC_ONLY",
   "host": "k8s-control01",
   "policy": {
     "name": "fds-cp1-cni-probe",
@@ -17,12 +19,43 @@
     "protocol": "tcp",
     "destination_port": 8080,
     "permanent_disabled": true,
-    "runtime_enable_after_review": true
+    "runtime_enable_after_review": true,
+    "runtime_enable_requires_exception_and_execution_decision": true,
+    "delete_permanent_on_trial_exit": true,
+    "retain_after_trial": false,
+    "final_reapply_allowed": false
   },
   "block_evidence": "FDS_CP1_CNI_Diagnose_7aqtz7d4:routes",
   "requires_live_block_ownership_validation": true,
   "requires_controlled_reload_and_runtime_restoration": true,
-  "requires_consumer_extension": true,
+  "requires_consumer_extension": false,
+  "requires_restore_to_original_receipt_after": true,
+  "diagnostic_evidence_is_acceptance_receipt": false,
+  "exception": {
+    "scope": "TICKET_ONLY",
+    "reference": "ADV-20260910_STYLE_LIMITED_PREPARATION",
+    "baseline_revision_changed": false,
+    "independent_review_status": "PENDING",
+    "exception_approval_record": null,
+    "implementation_requires_explicit_exception_approval": true,
+    "acceptance_criteria_credit": false,
+    "acceptance_criteria_excluded": [
+      "P1-K8S-01",
+      "P1-SEC-01",
+      "ICR-D-NET-01-01"
+    ],
+    "worker_hep_gnp_prerequisite": false,
+    "worker_hep_gnp_schedule_delay_allowed": false,
+    "removal_required_regardless_of_trial_result": true,
+    "removal_timing": "SAME_DIAGNOSTIC_WINDOW_AND_BEFORE_CP1_HEP_GNP_STAGE",
+    "removal_includes_runtime_and_permanent": true,
+    "proposed_max_duration_seconds": 1200,
+    "proposed_cleanup_reserve_seconds": 180,
+    "timing_implemented": false,
+    "automatic_extension_allowed": false
+  },
   "same_node_only": true,
+  "authorizes_cp1_acceptance": false,
+  "authorizes_cp2_change": false,
   "authorizes_execution": false
 }
