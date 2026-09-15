@@ -20,9 +20,10 @@ tool = importlib.util.module_from_spec(spec); spec.loader.exec_module(tool)
 
 def binding():
     observed = dict(product_uuid='vmware-fixture', machine_id_sha256='b'*64, sources_sha256=tool.hashes())
-    decision = dict(observed, schema='fds.cni-kernel-lab-decision.v1', lab_vm='cp1-cni-lab',
+    decision = dict(observed, schema='fds.cni-kernel-lab-decision.v2', lab_vm='cp1-cni-lab',
         lan_segment='FDS-CNI-LAB', execution_approved=True, operator='MOCK_ONLY', snapshot_reference='MOCK_ONLY',
-        review_url='https://github.com/321Team/infra-kubernetes/pull/999#issuecomment-123', scope='KERNEL_COMPONENT_ONLY')
+        review_url='https://github.com/321Team/infra-kubernetes/pull/11#issuecomment-123',
+        reviewed_bundle_sha256=tool.bundle_digest(observed['sources_sha256']), scope='KERNEL_COMPONENT_ONLY')
     return observed, decision
 
 
@@ -75,9 +76,8 @@ class Boundaries(unittest.TestCase):
         self.assertFalse(tool.FLAGS['qualification_created'])
         self.assertFalse(tool.FLAGS['production_node_recovery_tested'])
 
-    def test_production_sources_remain_pinned(self):
+    def test_shared_transaction_and_original_firewall_helper_remain_pinned(self):
         wanted = {'cni_diag_core.py':'286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59',
-                  'cp1-cni-diagnostic-node.py':'574d2160360e924f2eb74f40c04b6059dc4b459c09cedf2d93c7d1b61cc6e486',
                   'node-firewall.py':'93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa'}
         for name,digest in wanted.items(): self.assertEqual(tool.hashes()[name],digest)
 

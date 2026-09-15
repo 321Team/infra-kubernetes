@@ -60,6 +60,43 @@ def hashes():
     return {n: hashlib.sha256((HERE / n).read_bytes()).hexdigest() for n in SOURCES}
 
 
+def bundle_digest(source_hashes):
+    return hashlib.sha256(json.dumps(source_hashes, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def verify_staged_sources(job, executing=False):
+    need(job == job_path(job.name), 'Outside lab root')
+    node.safe_dir(job)
+    request = read_json(job / 'REQUEST.json')
+    expected = request['observed']['sources_sha256']
+    need(set(expected) == set(SOURCES), 'Staged source manifest differs')
+    for name in SOURCES:
+        need(hashlib.sha256(node.safe_read(job / name)).hexdigest() == expected[name], 'Staged source changed')
+    if executing:
+        need(HERE == job and hashes() == expected, 'Execute only the verified job staged source')
+    return request
+
+
+def manual_recover(job):
+    """A mutable checkout locates/validates an old job, never recovers it itself."""
+    verify_staged_sources(job)
+    docs = read_json(job / 'UNITS.json')
+    need(set(docs) == set(documents(job, 'normal')), 'Unexpected staged unit names')
+    result = read_json(job / 'RESULT.json')
+    allow_missing = bool(result.get('disarm_intent')) or result.get('mutation_attempted') is False
+    for name, body in docs.items():
+        path = UNITS / name
+        need(not path.is_symlink(), 'Unit symlink is not owned: ' + name)
+        if path.exists():
+            need(node.safe_read(path).decode() == body, 'Unit ownership mismatch: ' + name)
+        else:
+            need(allow_missing, 'Missing owned unit: ' + name)
+    # The old source revalidates its own generated unit bodies before stopping
+    # any cgroup. Do not compare old unit bodies with this checkout's generator.
+    os.execve('/usr/bin/python3', ['/usr/bin/python3', '-I', '-B',
+              str(job / SOURCES[0]), '_recover', job.name], ENV)
+
+
 def call(argv, timeout=15, env=None, accepted=(0,), output_limit=4_000_000):
     """Bounded output, process group termination, no shell or inherited bus address."""
     with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
@@ -139,13 +176,16 @@ def prerequisites():
 
 
 def authorize(decision, observed):
-    need(decision.get('schema') == 'fds.cni-kernel-lab-decision.v1', 'Lab decision schema required')
+    need(decision.get('schema') == 'fds.cni-kernel-lab-decision.v2', 'Lab decision v2 required; refresh inspect/decision')
     need(decision.get('lab_vm') == 'cp1-cni-lab' and decision.get('lan_segment') == 'FDS-CNI-LAB', 'Wrong lab identity')
     for field in ('product_uuid', 'machine_id_sha256', 'sources_sha256'):
         need(decision.get(field) == observed[field], 'Decision binding differs: ' + field)
     need(decision.get('execution_approved') is True, 'Lab execution decision required')
-    need(decision.get('snapshot_reference') and decision.get('operator'), 'Snapshot/operator reference required')
-    need(re.fullmatch(r'https://github\.com/321Team/(?:infra-kubernetes|fds-project-baseline)/(?:pull|issues)/[0-9]+#(?:pullrequestreview|issuecomment)-[0-9]+',
+    need(all(isinstance(decision.get(k), str) and decision[k].strip()
+             for k in ('snapshot_reference', 'operator')), 'Snapshot/operator reference required')
+    need(decision.get('reviewed_bundle_sha256') == bundle_digest(observed['sources_sha256']),
+         'Reviewed bundle digest differs or missing')
+    need(re.fullmatch(r'https://github\.com/321Team/infra-kubernetes/pull/11#(?:pullrequestreview|issuecomment)-[0-9]+',
                       decision.get('review_url', '')), 'Source review URL required')
     need(decision.get('scope') == 'KERNEL_COMPONENT_ONLY', 'Full production qualification is not supported')
 
@@ -184,6 +224,7 @@ def validate_units(job, allow_missing=False):
     need(docs == documents(job, read_json(job / 'REQUEST.json')['scenario']), 'Unit manifest differs from source')
     for name, text in docs.items():
         path = UNITS / name
+        need(not path.is_symlink(), 'Unit symlink is not owned: ' + name)
         if not path.exists():
             need(allow_missing, 'Missing owned unit: ' + name)
         else:
@@ -243,9 +284,7 @@ def start(decision_path, scenario):
 class Lab:
     def __init__(self, job, recovery=False):
         self.job = job
-        self.request = read_json(job / 'REQUEST.json')
-        for name in SOURCES:
-            need(hashlib.sha256(node.safe_read(job / name)).hexdigest() == self.request['observed']['sources_sha256'][name], 'Staged source changed')
+        self.request = verify_staged_sources(job, executing=True)
         self.recovery = recovery
         self.end = time.monotonic() + 110 if recovery else None
         self.result = read_json(job / 'RESULT.json')
@@ -406,7 +445,8 @@ class Lab:
         need(not self.net('r', query), 'Selected tuple already in conntrack')
         listener = self.net(destination['name'], ['/usr/bin/python3', '-I', '-B', str(self.job / SOURCES[0]),
                    '_probe', self.job.name, destination['name'], '127.0.0.1', str(port), '0'])
-        need(json.loads(listener).get('status') == 200 and json.loads(listener).get('body') == self.job.name + '/' + destination['name'], 'Destination listener not ready')
+        need(json.loads(listener).get('tcp_connected') is True and json.loads(listener).get('status') == 200 and
+             json.loads(listener).get('body') == self.job.name + '/' + destination['name'], 'Destination listener not ready')
         self.net('r', ['/usr/sbin/nft', 'add', 'table', 'inet', 'fds_ki_trace'])
         self.net('r', ['/usr/sbin/nft', 'add', 'chain', 'inet', 'fds_ki_trace', 'pre',
                       '{ type filter hook prerouting priority -301; policy accept; }'])
@@ -450,9 +490,19 @@ class Lab:
                         expected_connected=port == 8080 and source['name'] != 'c' and destination['name'] != 'c',
                         packet_capture_sha256=hashlib.sha256(node.safe_read(capture)).hexdigest(),
                         nft_trace_sha256=hashlib.sha256(trace_raw).hexdigest(), nft_trace_nonempty=bool(trace_raw),
-                        verdict='OBSERVED_REVIEW_REQUIRED', component_attribution='REQUIRES_TRACE_REVIEW')
+                        component_attribution='REQUIRES_TRACE_REVIEW')
+        errors = []
+        if observed.get('tcp_connected') is not observed['expected_connected']:
+            errors.append('TCP_CONNECT_EXPECTATION_MISMATCH')
+        if observed['expected_connected'] and (observed.get('status') != 200 or
+                                              observed.get('body') != observed['expected_body']):
+            errors.append('HTTP_RESPONSE_EXPECTATION_MISMATCH')
+        if not arrived or not trace_raw:
+            errors.append('PACKET_TRACE_EVIDENCE_MISSING')
+        observed.update(expectation_errors=errors, expected_result_matches=not errors,
+                        verdict='COMPONENT_FAILED_REVIEW_REQUIRED' if errors else 'OBSERVED_REVIEW_REQUIRED')
         self.result['component_flows'][label] = observed; node.save_json(self.job / 'RESULT.json', self.result)
-        need(arrived and trace_raw, 'Packet/trace evidence missing; no PASS inferred from timeout')
+        need(not errors, 'Component flow failed: ' + label + ': ' + ', '.join(errors))
 
 
 def cleanup(lab):
@@ -515,11 +565,12 @@ def disarm(lab, docs):
 
 
 def execute(job, recovery=False):
-    node.safe_dir(job)
-    need(job.parent == ROOT, 'Outside lab root')
+    # Even direct _recover/_work entry must reject a newer checkout before STOP,
+    # service/cgroup actions or transaction mutation.
+    verify_staged_sources(job, executing=True)
+    recovery_unit_check(job, read_json(job / 'RESULT.json'))
     if recovery:
         node.atomic(job / 'STOP', b'recovery-only\n')
-        recovery_unit_check(job, read_json(job / 'RESULT.json'))
         observed_work = system(['show', unit_name(job, 'work') + '.service', '-p', 'ActiveState', '-p', 'Result', '-p', 'ExecMainCode', '-p', 'ExecMainStatus'])
         node.atomic(job / ('WORK_RECOVERY_' + str(time.time_ns()) + '.log'), observed_work.encode(), exclusive=True)
         if system(['show', unit_name(job, 'work') + '.service', '-p', 'LoadState', '--value']) != 'not-found':
@@ -570,6 +621,8 @@ def execute(job, recovery=False):
             lab.result.update(phase='RECOVERY_REQUIRED', recovery_error=str(error))
             node.save_json(job / 'RESULT.json', lab.result)
             raise
+        need(lab.result.get('status') != 'COMPONENT_FAILED_REVIEW_REQUIRED',
+             'Component test failed; cleanup outcome and evidence are preserved')
 
 
 def collect(job):
@@ -620,12 +673,13 @@ def main():
             source_hashes=hashes(), requires_reviewed_lab_decision=True, production_qualification_supported=False), indent=2)); return
     if args.mode == 'inspect':
         observed = prerequisites()
+        observed['executor_bundle_sha256'] = bundle_digest(observed['sources_sha256'])
         node.safe_dir(ROOT / 'inspect', create=True)
         output = Path(tempfile.mkdtemp(prefix='FDS_CNI_Kernel_Inspect_', dir=ROOT / 'inspect'))
-        template = dict(schema='fds.cni-kernel-lab-decision.v1', lab_vm='cp1-cni-lab', lan_segment='FDS-CNI-LAB',
+        template = dict(schema='fds.cni-kernel-lab-decision.v2', lab_vm='cp1-cni-lab', lan_segment='FDS-CNI-LAB',
             product_uuid=observed['product_uuid'], machine_id_sha256=observed['machine_id_sha256'],
             sources_sha256=observed['sources_sha256'], execution_approved=False, operator='', snapshot_reference='',
-            review_url='', scope='KERNEL_COMPONENT_ONLY')
+            review_url='', reviewed_bundle_sha256='', scope='KERNEL_COMPONENT_ONLY')
         node.save_json(output / 'INSPECT.json', observed); node.save_json(output / 'lab-decision.template.json', template)
         print('INSPECT=' + str(output / 'INSPECT.json')); print('DECISION_TEMPLATE=' + str(output / 'lab-decision.template.json')); return
     if args.mode == '_probe':
@@ -637,10 +691,15 @@ def main():
         port, sport = int(args.extra[2]), int(args.extra[3])
         need(port in (8080,8081) and (sport == 0 or 40000 <= sport < 60000), 'Outside fixture port')
         connection = http.client.HTTPConnection(ip, port, timeout=3, source_address=('', sport))
+        result = dict(status=None, tcp_connected=False, connected=False)
         try:
+            connection.connect()
+            result.update(tcp_connected=True, connected=True)
+            connection.auto_open = 0  # A subsequent HTTP error must not trigger a new TCP connection.
             connection.request('GET', '/'); r = connection.getresponse()
-            result = dict(status=r.status, body=r.read(1024).decode(), connected=True)
-        except OSError as error: result = dict(status=None, error=str(error), connected=False)
+            result.update(status=r.status, body=r.read(1024).decode())
+        except (OSError, http.client.HTTPException, UnicodeError) as error:
+            result.update(error=str(error), error_stage='HTTP' if result['tcp_connected'] else 'CONNECT')
         finally: connection.close()
         print(json.dumps(result)); return
     need(os.geteuid() == 0, 'Root required')
@@ -678,7 +737,7 @@ def main():
     if args.mode == 'collect': collect(job); return
     if args.mode == 'recover':
         # Direct recovery also handles interrupted staging before a timer was armed.
-        execute(job, recovery=True); return
+        manual_recover(job); return
     execute(job, recovery=args.mode == '_recover')
 
 

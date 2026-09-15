@@ -690,6 +690,23 @@ def disarm(io):
     io.save(io.result)
 
 
+POSITIVE_FLOWS = (('a', 'direct'), ('b', 'direct'), ('a', 'service'), ('a', 'dns'), ('b', 'dns'))
+CONTROL_FLOWS = (('a', 'service'), ('a', 'dns'), ('b', 'dns'))
+
+
+def require_probes(probes, flows):
+    for peer, flow in flows:
+        need(probes.get(peer, {}).get(flow, {}).get('passed') is True,
+             'Expected positive flow failed or untested: ' + peer + '/' + flow)
+
+
+def require_diagnostic_success(io):
+    need(io.result.get('diagnostic_outcome') == 'SUCCEEDED' and
+         io.result.get('status') == 'DIAGNOSTIC_ONLY_REVIEW_REQUIRED' and
+         io.result.get('cleanup_complete') is True and io.result.get('recovery_disarmed') is True,
+         'Diagnostic failed or incomplete; inspect preserved state and evidence')
+
+
 def cleanup(io):
     io.cleanup_mode = True
     io.result['phase'] = 'RECOVERING'
@@ -703,14 +720,22 @@ def cleanup(io):
         io.management()
     probes = io.result.get('probes', {})
     values = [probes.get(p, {}).get(k, {}).get('passed')
-              for p, k in (('a', 'direct'), ('b', 'direct'), ('a', 'service'), ('a', 'dns'), ('b', 'dns'))]
+              for p, k in POSITIVE_FLOWS]
     io.result['positive_summary'] = {'passed': sum(v is True for v in values),
-        'failed': sum(v is False for v in values), 'not_tested': sum(v is None for v in values), 'total': 5}
+        'failed': sum(v is False for v in values),
+        'not_tested': sum(v is not True and v is not False for v in values), 'total': 5}
+    within_window = (not io.boot_changed and time.time() <= io.request['budget']['wall_end'] and
+                     time.clock_gettime(time.CLOCK_BOOTTIME) <= io.request['budget']['boot_start'] + 1200)
+    failed = (bool(io.result.get('diagnostic_error')) or
+              io.result.get('diagnostic_outcome') != 'SUCCEEDED' or
+              not all(v is True for v in values) or not within_window)
+    if failed:
+        io.result['diagnostic_outcome'] = 'FAILED'
+        io.result.setdefault('diagnostic_error', 'Diagnosis incomplete, positive flow failed, or window exceeded')
     io.result.update(cleanup_complete=True, phase='COMPLETE', ended_at=time.time(),
-                     finished_within_window=not io.boot_changed and
-                         time.time() <= io.request['budget']['wall_end'] and
-                         time.clock_gettime(time.CLOCK_BOOTTIME) <= io.request['budget']['boot_start'] + 1200,
-                     status='DIAGNOSTIC_ONLY_REVIEW_REQUIRED', runtime_negative='NOT_FULLY_TESTED')
+                     finished_within_window=within_window,
+                     status='DIAGNOSTIC_FAILED_REVIEW_REQUIRED' if failed else 'DIAGNOSTIC_ONLY_REVIEW_REQUIRED',
+                     runtime_negative='NOT_FULLY_TESTED')
     io.save(io.result)
     disarm(io)
 
@@ -731,13 +756,20 @@ def run_job(job, recovery=False):
         if io.result.get('cleanup_complete'):
             if not io.result.get('recovery_disarmed'):
                 disarm(io)
+            if not recovery:
+                require_diagnostic_success(io)
             return
         try:
             if not recovery:
+                io.result['diagnostic_outcome'] = 'RUNNING'
+                io.save(io.result)
                 io.preflight()
                 peers = io.create_workload()
                 io.result['probes_before'] = io.probes(peers, bound=False, include_negative=False)
                 io.save(io.result)
+                # Direct Pod HTTP may fail before this diagnostic. Service/DNS
+                # are the control flows that must work before firewall mutation.
+                require_probes(io.result['probes_before'], CONTROL_FLOWS)
                 io.core.Transaction(io, io.result).prepare(peers, job)
                 # Retain generated native rules for independent path review.
                 nft = json.loads(io.cmd(['nft', '-j', 'list', 'table', 'inet', 'firewalld']))
@@ -746,14 +778,18 @@ def run_job(job, recovery=False):
                 io.result['native_scope'] = io.core.validate_native_policy(nft, peers)
                 io.result['probes'] = io.probes(peers)
                 io.save(io.result)
+                require_probes(io.result['probes'], POSITIVE_FLOWS)
+                io.result['diagnostic_outcome'] = 'SUCCEEDED'
+                io.save(io.result)
         except Exception as error:
+            io.result['diagnostic_outcome'] = 'FAILED'
             io.result['diagnostic_error'] = io.helper.redact(str(error))
             io.save(io.result)
         finally:
             try:
                 cleanup(io)
             except Exception as error:
-                io.result.update(cleanup_complete=False, phase='RECOVERY_REQUIRED',
+                io.result.update(cleanup_complete=False, phase='RECOVERY_REQUIRED', status='RECOVERY_REQUIRED',
                                  cleanup_error=io.helper.redact(str(error)))
                 try:
                     io.emergency_disable()
@@ -761,6 +797,8 @@ def run_job(job, recovery=False):
                     io.result['emergency_disable_error'] = io.helper.redact(str(emergency))
                 io.save(io.result)
                 raise  # Timer remains armed; never resume diagnosis.
+        if not recovery:
+            require_diagnostic_success(io)
 
 
 def main():
@@ -780,7 +818,7 @@ def main():
         print(json.dumps({'management_acknowledged': True}))
     elif sys.argv[1] == 'poll':
         state = json.loads(safe_read(job / 'STATE.json'))
-        print(json.dumps({k: state.get(k) for k in ('phase', 'management_nonce', 'cleanup_complete', 'status')}))
+        print(json.dumps({k: state.get(k) for k in ('phase', 'management_nonce', 'cleanup_complete', 'recovery_disarmed', 'status')}))
     elif sys.argv[1] == 'status':
         result = json.loads(safe_read(job / 'STATE.json'))
         files = {}

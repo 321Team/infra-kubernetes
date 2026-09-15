@@ -41,7 +41,11 @@ sudo /usr/bin/python3 -I -B scripts/run-cni-kernel-integration.py inspect
 
 ## 2. 결정 입력
 
-검토 완료 후 실제 사실에 맞게 template의 operator / snapshot_reference / review_url / execution_approved를 확정한다. schema, source hashes, VM product_uuid·machine-id hash, lab_vm=cp1-cni-lab, lan_segment=FDS-CNI-LAB, scope=KERNEL_COMPONENT_ONLY가 모두 일치해야 start가 진행된다. 리뷰 URL은 실제 검토/결정 근거이며 오프라인 실행기의 URL 형식 검사가 GitHub 승인 내용까지 증명하지는 않는다.
+결정 schema는 `fds.cni-kernel-lab-decision.v2`다. 딥리뷰 보완 전 v1 초안과 이전 소스 inspect는 새 실행 입력으로 재사용하지 않는다. 새 소스 4개 해시를 검증한 뒤 inspect를 다시 수행한다. VM 준비·RPM 설치 전체를 반복할 필요는 없다.
+
+독립 검토 완료 후 실제 사실에 맞게 template의 operator / snapshot_reference / review_url / reviewed_bundle_sha256 / execution_approved를 확정한다. `reviewed_bundle_sha256`는 새 INSPECT의 `executor_bundle_sha256`와 같아야 한다. 이 값은 source 4개의 이름→SHA256 사전을 키 정렬·공백 없는 JSON으로 직렬화한 SHA256이다. 리뷰 기록에 해당 digest와 실행 HEAD를 함께 남겨 사람이 대조할 수 있게 한다. 초안의 digest는 빈칸이고 실행 승인은 false로 생성된다.
+
+review_url은 **infra-kubernetes PR #11의 해당 소스 독립 리뷰 또는 승인 근거 댓글**이어야 한다. 설계 승인·작성자 HOLD 댓글·다른 PR 승인을 넣지 않는다. schema, source hashes, VM product_uuid·machine-id hash, lab_vm=cp1-cni-lab, lan_segment=FDS-CNI-LAB, scope=KERNEL_COMPONENT_ONLY가 모두 일치해야 start가 진행된다. 오프라인 실행기는 URL의 PR/형식과 digest 연결을 검사한다. GitHub 작성자·리뷰 상태·내용의 진위를 조회하거나 독립 승인을 생성하지 않으므로 실제 승인 내용을 별도로 대조한다.
 
 VM 식별과 source hash는 재부팅 전후 동일한 환경에 입력을 묶는 장치다. NIC의 실제 LAN Segment 설정 자체는 VMware 화면/현장 확인 근거로 별도 검토한다. 작업 시작 후 최대 20분, 마지막 3분은 회수용이다. 매번 종료시각을 직접 계산해 적는 방식이 아니다.
 
@@ -59,7 +63,8 @@ sudo /usr/bin/python3 -I -B scripts/run-cni-kernel-integration.py start \
 - worker는 systemd service에서 실행한다. 콘솔/호출자의 연결 종료가 진단 프로세스의 수명을 소유하지 않는다.
 - 실제 private firewalld의 XML/CLI/compiled nft 형식을 공통 Transaction/parser로 검사한다. 알려지지 않은 상태는 중단하고 실제 반환값을 증적으로 남긴다.
 - A↔B TCP8080, A↔B TCP8081, C↔A TCP8080의 6개 관측을 수집한다. listener의 job/role 응답, 새 conntrack tuple, ingress capture, nft trace를 기록한다.
-- HTTP 성공/실패와 기대값, packet/trace를 검토자가 대조한다. 실패 timeout만으로 차단 PASS를 출력하지 않는다. 자동 verdict는 OBSERVED_REVIEW_REQUIRED다.
+- TCP 성립 여부를 HTTP 처리 결과와 별도로 보존한다. A↔B 8080은 TCP 연결·HTTP 200·해당 job/role 응답을 모두 요구한다. 8081 및 outside pair는 TCP 미연결을 요구한다. 연결 후 HTTP 오류가 나도 TCP 연결 성공은 유지하므로 차단 성공으로 처리하지 않는다.
+- 기대 통신 결과 불일치 또는 packet/trace 누락은 COMPONENT_FAILED_REVIEW_REQUIRED로 저장하고 안전한 회수 후 work service가 non-zero로 끝난다. 기대값 일치의 자동 verdict는 OBSERVED_REVIEW_REQUIRED이며, 차단 component attribution은 실제 packet/trace 독립 검토로 남긴다. 송신 timeout만으로 차단 PASS를 출력하지 않는다.
 - 정리 시 공통 Transaction.withdraw를 먼저 시도한다. 실패해도 해당 실패 기록을 보존하고 서비스 cgroup 종료·소유 namespace 제거로 시험 자원을 격리 해제한다. 이 대체 정리는 공통 회수 코드의 성공으로 집계하지 않는다.
 
 정상 관측부터 한 건씩 제출한다. 첫 actual compiler/CLI 실패를 해결하기 전에 다른 시나리오를 일괄 실행하지 않는다.
@@ -81,7 +86,11 @@ collect는 worker/recovery의 transaction lock을 잠깐 확보해 증적 snapsh
 sudo /usr/bin/python3 -I -B scripts/run-cni-kernel-integration.py recover JOB_ID
 ```
 
+현재 checkout의 recover는 위치 확인·검증만 수행한다. root 소유 job·보관 소스 SHA256·unit 파일을 확인한 뒤 **해당 job에 보관한 실행기의 `_recover`**로 프로세스를 교체한다. 실제 회수는 보관 소스의 unit 생성 규칙과 journal을 재검증한 뒤 진행한다. checkout B에서 작업 A를 회수해도 B의 변경 코드는 실행하지 않는다. 직접 `_work`/`_recover`로 우회하면 보관 경로·실행 소스 불일치 검사에서 변경 전에 거절한다. 보관 소스/manifest를 최신 파일로 덮어쓰지 않는다.
+
 확인된 소유 unit/cgroup만 중지하고 같은 journal을 따라 정리한다. namespace 이름 재사용/inode 불일치, 생성 결과 미확정 또는 unit 내용 변경은 자동 삭제하지 않는다. `RESOURCES.json`, `UNITS.json`, `RESULT.json`, command log를 근거로 콘솔에서 소유를 먼저 확인한다. 임의의 다른 namespace/프로세스를 삭제·종료하거나 원 VM의 firewall reload로 대체하지 않는다.
+
+work의 진단 실패와 recover의 정리 성공은 별도 결과다. 실패한 시험을 안전하게 회수하면 recover는 성공 종료할 수 있지만 RESULT의 COMPONENT_FAILED_REVIEW_REQUIRED는 보존한다. start 성공은 비동기 실행 요청 접수이며, collect 성공은 증적 반출 성공이다. 둘 다 시험 성공을 의미하지 않는다.
 
 archive는 `/var/lib/fds/cni-kernel-lab/exports/FDS_CNI_Kernel_Component_.../`에 생성되고 ARCHIVE/SIDECAR 경로가 출력된다. 앞서 사용한 `sudo install -m0600 -o UID -g GID`로 해당 두 파일을 사용자 홈에 복사한 뒤 HGFS로 반출한다. 결과 파일의 전후 SHA256을 확인하고 공유 폴더를 read-only로 복원한다.
 

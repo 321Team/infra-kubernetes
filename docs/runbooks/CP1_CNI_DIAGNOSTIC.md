@@ -26,6 +26,15 @@
 
 ## 시간·연결 단절·회수
 
+### 실패 판정과 종료코드
+
+- firewall 변경 전 Service HTTP 및 양쪽 DNS control flow가 모두 PASS여야 한다. 장애 진단 대상인 변경 전 direct Pod HTTP의 실패는 허용한다. 변경 후 direct HTTP 양방향·Service HTTP·DNS 양쪽의 5개 positive가 모두 PASS여야 진단 성공으로 기록한다.
+- node는 `diagnostic_outcome`과 `cleanup_complete`/`recovery_disarmed`를 따로 저장한다. 진단 오류·미시험·positive 실패·작업창 초과는 안전한 회수가 끝나도 `DIAGNOSTIC_FAILED_REVIEW_REQUIRED`를 유지하고 work service는 non-zero로 종료한다. 성공한 회수 service는 반복 실패로 처리하지 않는다.
+- controller `--execute`는 안전한 COMPLETE 상태, 진단 성공, positive 5/5 및 작업창 내 완료를 확인해야 rc=0이다. qualification/SSH/ACK/전달 해시 오류·poll 기한 초과는 증적 마감 후 non-zero다. 최초 원격 identity 조회/JSON 오류도 RESULT/archive에 남긴다. 로컬 source 검증·사전 점검을 통과하기 전에는 원격 실행과 증적 디렉터리 생성을 시작하지 않는다.
+- `--collect`의 rc=0 / OPERATION_STATUS=EVIDENCE_COLLECTED는 실패 상태를 포함한 증적 수집 성공이다. 원격 진단 결과는 별도로 읽는다. `--recover`의 rc=0 / RECOVERY_REQUESTED는 비동기 회수 요청 접수이며 회수 완료가 아니다. 같은 RUN_ID를 collect하여 cleanup/disarm을 확인한다.
+
+### 회수 순서
+
 1. 컨트롤러 사전 점검 후 시작 시각을 기록한다. 최대 20분 중 마지막 3분을 회수에 예약한다. 과거 18:00/19:00 등의 날짜별 작업창을 재사용하지 않는다.
 2. 방화벽/Kubernetes 변경 전 root 소유 실행 소스·입력·상태 기록을 보관하고, 독립 **복구 service + timer**를 설치·활성 상태로 확인한다. 서비스는 다음 부팅에도 회수부터 수행한다. 기본 상태 확인을 마치지 못하면 변경을 시작하지 않는다.
 3. 진단 본체는 별도 systemd service에서 실행한다. SSH 종료가 본체 수명을 결정하지 않는다. timer는 17분 경계에서 본체 cgroup을 중지하고 같은 lock을 얻은 뒤 회수한다. 실패 시 30초 뒤 재시도하며 새 진단으로 돌아가지 않는다.

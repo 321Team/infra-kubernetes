@@ -76,7 +76,9 @@ sudo install -o "$(id -un)" -g "$(id -gn)" -m 0600 \
 
 새 `scripts/run-cni-kernel-integration.py`가 **첫 커널 컴포넌트 시험 진입점**을 제공한다. [CNI_KERNEL_COMPONENT.md](CNI_KERNEL_COMPONENT.md)의 추가 inspect → 새 소스 독립 검토/실행 결정 → normal 한 건 → 증적 검토 순서로 진행한다. 현재 코드는 STATIC/MOCK 검증 단계이며 시험 VM에서의 실제 실행은 아직 미수행이다.
 
-이 도구는 새 network namespace의 private firewalld/D-Bus와 합성 peer를 사용해 기존 `cni_diag_core.Transaction` 및 parser를 실제 커널에 연결한다. 생산 core/node/controller/helper의 코드는 변경하지 않는다. 운영 hostname·원 CP1 receipt·qualification을 복제/변조하거나 production `--execute`의 검사를 해제하지 않는다.
+이 도구는 새 network namespace의 private firewalld/D-Bus와 합성 peer를 사용해 기존 `cni_diag_core.Transaction` 및 parser를 실제 커널에 연결한다. 공통 Transaction/parser와 기존 node-firewall helper는 유지한다. 딥리뷰 후 production 진단 controller/node의 실패 판정·종료코드·증적 보존을 보완했으므로 이전 소스 해시를 새 qualification 근거로 재사용하지 않는다. 운영 hostname·원 CP1 receipt·qualification을 복제/변조하거나 production `--execute`의 검사를 해제하지 않는다.
+
+딥리뷰 K11-01~05 보완 후에는 새 HEAD 독립 리뷰와 변경된 source 4개에 대한 추가 inspect·v2 결정 입력이 필요하다. `reviewed_bundle_sha256`와 PR #11의 실제 독립 리뷰를 대조한다. 이전 v1 결정 초안은 새 실행기에 적용하지 않는다.
 
 **전체 격리 통합시험 harness가 완성된 것은 아니다.** 실제 VM NIC·터널·기존 Calico Pod fixture와 production node adapter의 API/SSH·부팅·원6개 복원 경로는 추가 구현/검토가 필요하다. 새 컴포넌트의 관측과 recovery wrapper를 production qualification으로 제출할 수 없다. 출력 schema와 stage를 분리하고 전체 production 흐름 7개·회수 6개를 NOT_TESTED로 유지한다.
 

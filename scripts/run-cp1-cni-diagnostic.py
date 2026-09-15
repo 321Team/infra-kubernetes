@@ -90,6 +90,18 @@ def verify_evidence_files(qualification, directory):
              'Referenced packet/trace artifact not supplied')
 
 
+def validate_execution_result(result):
+    """A retrieved archive is not proof of a successful diagnostic execution."""
+    state = result.get('state', {})
+    need(state.get('phase') == 'COMPLETE' and state.get('cleanup_complete') is True and
+         state.get('recovery_disarmed') is True, 'Execution has no confirmed safe terminal state')
+    need(result.get('status') == state.get('status') == 'DIAGNOSTIC_ONLY_REVIEW_REQUIRED' and
+         state.get('diagnostic_outcome') == 'SUCCEEDED' and not state.get('diagnostic_error') and
+         state.get('positive_summary') == dict(passed=5, failed=0, not_tested=0, total=5) and
+         state.get('finished_within_window') is True,
+         'Diagnostic failed or incomplete; cleanup success does not make diagnosis successful')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
@@ -121,16 +133,19 @@ def main():
     os.umask(0o077)
     directory = Path(tempfile.mkdtemp(prefix='FDS_CP1_CNI_Diagnostic_', dir='/home/server01_ansible'))
     data = {'source_commit': commit, 'preflight': preflight, 'files_sha256': hashes,
-            'purpose': 'DIAGNOSTIC_ONLY', 'acceptance_criteria_credit': False}
-    code = ('import socket,os,json;print(json.dumps({"host":socket.gethostname().split(".")[0],'
-            '"connection":os.environ.get("SSH_CONNECTION","").split()}))')
-    identity = controller.run(controller.ssh_argv(NODE, ['/usr/bin/python3', '-I', '-c', code]), timeout=25)
-    observed = json.loads(identity.stdout)
-    need(identity.returncode == 0 and observed['host'] == NODE and len(observed['connection']) == 4 and
-         observed['connection'][0] == controller.SOURCE_IP and observed['connection'][2] == controller.node.CP[NODE],
-         'Remote SSH source/destination identity differs')
+            'purpose': 'DIAGNOSTIC_ONLY', 'acceptance_criteria_credit': False,
+            'operation': 'execute' if args.execute else 'recover_request' if args.recover else 'collect',
+            'operation_status': 'INCOMPLETE'}
     run_id = args.collect or args.recover
     try:
+        code = ('import socket,os,json;print(json.dumps({"host":socket.gethostname().split(".")[0],'
+                '"connection":os.environ.get("SSH_CONNECTION","").split()}))')
+        identity = controller.run(controller.ssh_argv(NODE, ['/usr/bin/python3', '-I', '-c', code]), timeout=25)
+        need(identity.returncode == 0, 'Remote identity query failed')
+        observed = json.loads(identity.stdout)
+        need(observed['host'] == NODE and len(observed['connection']) == 4 and
+             observed['connection'][0] == controller.SOURCE_IP and observed['connection'][2] == controller.node.CP[NODE],
+             'Remote SSH source/destination identity differs')
         if args.execute:
             need(args.decision and args.qualification, '--execute requires --decision and --qualification')
             decision = json.loads(args.decision.read_text())
@@ -152,8 +167,9 @@ def main():
             job = REMOTE_ROOT + run_id
             until = time.monotonic() + min(1200, max(1, request['issued_at'] + 1200 - time.time()))
             last_phase = None
+            remote = ['sudo', '-n', '/usr/bin/python3', '-I', '-B', job + '/' + FILES[1]]
+            terminal_observed = False
             while time.monotonic() < until:
-                remote = ['sudo', '-n', '/usr/bin/python3', '-I', '-B', job + '/' + FILES[1]]
                 polled = controller.run(controller.ssh_argv(NODE, remote + ['poll', job]), timeout=25)
                 need(polled.returncode == 0, 'SSH polling unavailable; local recovery remains armed')
                 state = json.loads(polled.stdout)
@@ -163,9 +179,11 @@ def main():
                     ack = controller.run(controller.ssh_argv(NODE, remote + ['ack', job, state['management_nonce']]), timeout=15)
                     need(ack.returncode == 0, 'Management acknowledgement failed; local recovery will withdraw')
                     data['management_ssh_observed_at'] = time.time()
-                if state.get('cleanup_complete') or state.get('phase') == 'RECOVERY_REQUIRED':
+                if (state.get('cleanup_complete') is True and state.get('recovery_disarmed') is True) or state.get('phase') == 'RECOVERY_REQUIRED':
+                    terminal_observed = True
                     break
                 time.sleep(2)
+            data['poll_deadline_exceeded'] = not terminal_observed
             response = controller.run(controller.ssh_argv(NODE, remote + ['status', job]), timeout=30)
         else:
             need(re.fullmatch(r'[0-9]{14}-[0-9a-f]{12}', run_id), 'Invalid run ID')
@@ -180,25 +198,41 @@ def main():
             response = controller.run(controller.ssh_argv(NODE, remote), timeout=30)
         data.update(rc=response.returncode, stderr=controller.node.redact(response.stderr)[:4000])
         need(response.returncode == 0, 'Remote response unavailable; collect existing run before retrying')
-        data['result'] = json.loads(response.stdout) if response.stdout.strip() else {'recovery_requested': True}
+        if args.recover:
+            # systemctl --no-block acknowledges a request, never completed recovery.
+            data['result'] = {'status': 'RECOVERY_REQUESTED', 'recovery_requested': True,
+                              'recovery_completion_confirmed': False}
+        else:
+            data['result'] = json.loads(response.stdout)
+            need(isinstance(data['result'], dict) and isinstance(data['result'].get('state'), dict),
+                 'Remote diagnostic state missing')
         for name, entry in data['result'].pop('files', {}).items():
             need(name in {'STATE.json', 'REQUEST.json', 'ARMED.json', 'ACK.json', 'COMMANDS.jsonl', 'ACTIVE_NFT.json',
                           'negative-a.pcap', 'negative-b.pcap'}, 'Unexpected evidence filename')
             raw = base64.b64decode(entry['base64'], validate=True)
             need(hashlib.sha256(raw).hexdigest() == entry['sha256'], 'Transport evidence digest mismatch')
             (directory / ('REMOTE_' + name)).write_bytes(raw)
+        if args.execute:
+            need(not data['poll_deadline_exceeded'], 'Polling deadline exceeded; collect existing run')
+            validate_execution_result(data['result'])
+        data['operation_status'] = ('EXECUTION_COMPLETE' if args.execute else
+                                    'RECOVERY_REQUESTED' if args.recover else 'EVIDENCE_COLLECTED')
     except Exception as error:
         data['error'] = controller.node.redact(str(error))
     finally:
         data['run_id'] = run_id
+        data['controller_exit_code'] = 1 if 'error' in data else 0
         (directory / 'RESULT.json').write_text(json.dumps(data, indent=2) + '\n')
         archive, sidecar = controller.archive_output(directory)
         print('RUN_ID=' + str(run_id))
         print('STATUS=' + ('INCOMPLETE' if 'error' in data else data['result'].get('status', 'REVIEW_REQUIRED')))
         print('ARCHIVE=' + str(archive))
         print('SIDECAR=' + str(sidecar))
+        print('OPERATION_STATUS=' + data['operation_status'])
         if run_id:
             print('COLLECT=python3 scripts/run-cp1-cni-diagnostic.py --collect ' + run_id)
+    if 'error' in data:
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':
