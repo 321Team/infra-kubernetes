@@ -2,6 +2,32 @@
 
 2026-09-15. [PR #11 검토 댓글](https://github.com/321Team/infra-kubernetes/pull/11#issuecomment-5675589656)에 따라 실제 플랫폼·패킷 경로·독립 회수 검증을 준비한다. 이 댓글은 상황 및 코드 검토이며 정식 APPROVED가 아니다.
 
+## 현장 배치 확정 — server04
+
+2026-09-15 사용자가 자원 여유를 확인하고 **물리 server04 사용**을 선택했다. 앞선 server03 우선 권고를 대체한다. 여유 자원 확인을 반복 요청하지 않는다. 이는 배치 선택이며 VM 복사·격리·부팅 또는 통합시험이 완료됐다는 기록은 아니다.
+
+| 항목 | 적용할 구성 |
+|---|---|
+| 물리 호스트 | server04 — 정본 Windows Host IP `10.1.93.22` |
+| 기존 VM | k8s-control03 유지. 이 VM을 시험 대상으로 전환하지 않음 |
+| 시험 VM 표시 이름 | `cp1-cni-lab` |
+| 새 복제본 위치 | server04의 `C:\Project321team\lab\cp1-cni-lab` — 기존 폴더와 분리된 새 경로 |
+| 초기 할당 | 4 vCPU, RAM 8GB. 원 가상 디스크 용량·가상 NIC 모델 유지 |
+| 시험 네트워크 | 전용 LAN Segment `FDS-CNI-LAB`; 복제본의 모든 NIC를 이 구간에만 연결 |
+| 관리 방법 | server04의 VMware 콘솔. 운영용 ansible inventory에 복제본을 등록하지 않음 |
+| 추가 peer | NIC/터널 시험 단계에 같은 server04의 별도 `cni-peer-lab`을 계획. 초기안 2 vCPU·RAM 2GB, 아직 생성 미확인 |
+
+### 복사부터 첫 부팅까지
+
+1. **기존 백업이 실제로 있는 PC**의 `D:\server02` 폴더에서 별도 복사본을 만들어 server04의 위 새 경로로 전송한다. `.vmx` 하나만 옮기지 않고 가상 디스크와 snapshot chain을 포함한 VM 폴더 전체를 옮긴다. server04에도 같은 `D:` 경로가 있다고 가정하지 않는다.
+2. 원본 `C:\Project321team\server02`, 원 백업 `D:\server02`, 복구 자료 `C:\Project321team\FDS_CP1_Recovery`는 보존한다. 새 복제본의 디스크가 원 백업이나 운영 폴더의 파일을 참조하지 않는지 확인한다. 외부 parent 디스크 참조가 있으면 독립 복사가 완성되지 않은 상태이므로 먼저 해당 의존성을 해결한다.
+3. server04 Workstation에서 **새 복제 폴더 안의 `.vmx`**를 열고, 전원을 켜기 전에 표시 이름을 `cp1-cni-lab`, RAM 8GB, CPU 총 4개(예: 1 processor × 4 cores)로 설정한다. VMware 표시 이름과 Linux hostname은 별개다. 이 준비 단계에서 게스트 hostname·IP·Kubernetes 설정은 변경하지 않는다.
+4. **전원 OFF 상태에서 모든 Network Adapter**를 확인한다. `LAN segment`에 새 `FDS-CNI-LAB`을 만들고 각 NIC에 선택한다. Bridged/NAT/기존 VMnet 연결이나 다른 네트워크로 연결된 추가 NIC를 남기지 않는다. 기존 CP3의 NIC 설정은 건드리지 않는다.
+5. 이 구성을 확인한 뒤 시험 복제본만 부팅한다. 이동/복사 여부를 묻는 창이 나오면 **I copied it**을 선택한다. 콘솔 로그인 후 `hostnamectl`과 `ip -br address`로 관측한다. 기존 이름/IP가 표시되더라도 격리된 복제본의 관측이며 운영 CP1의 새 증적이 아니다.
+6. 현재 문서와 준비 소스를 검증된 파일 전송으로 넣고 아래 읽기 전용 수집을 수행한다. 파일 전달을 위해 운영망 NIC를 추가하지 않는다. 준비 수집 결과를 확보한 다음, 실제 변경 시험 전에 시험 VM의 복원점을 보관한다.
+
+백업 부팅은 현재 CP1 상태를 재현했다는 증거가 아니다. 특히 Runtime-only 방화벽 규칙은 디스크 백업의 부팅만으로 복원됐다고 가정하지 않는다. 복제된 원 영수증이나 hostname이 생산 실행기의 검사를 통과하게 만들기 위해 값을 변경하지 않는다. 실제 통합시험용 진입점과 데이터 출처는 아래 3절의 잔여 구현 범위다.
+
 ## 지금 진행할 범위
 
 `collect-cni-integration-preflight.py`로 **격리 시험 후보 VM의 현재 환경만 조회**한다. 패키지 설치, 서비스 시작/중지, firewall reload, 정책·라우팅 변경, Kubernetes 접속, SSH 접속, 패킷 송신은 없다. 로컬 새 증적 디렉터리와 archive/checksum만 작성한다. 기본 실행은 PLAN_ONLY다.
