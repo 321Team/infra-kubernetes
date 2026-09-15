@@ -2,6 +2,8 @@
 
 2026-09-15. [PR #11 검토 댓글](https://github.com/321Team/infra-kubernetes/pull/11#issuecomment-5675589656)에 따라 실제 플랫폼·패킷 경로·독립 회수 검증을 준비한다. 이 댓글은 상황 및 코드 검토이며 정식 APPROVED가 아니다.
 
+**현재 재개 위치:** 복제본 부팅·conntrack 보완·18:20 준비 증적 검토까지 완료했다. 새 [커널 컴포넌트 진입점](CNI_KERNEL_COMPONENT.md)의 추가 inspect와 독립 리뷰가 다음 단계다. 아래 복사·부팅·기존 준비 수집 절차는 완료 이력의 기준으로 보존하며 반복하지 않는다. 전체 통합시험은 3절과 4절의 잔여 범위로 관리한다.
+
 ## 현장 배치 확정 — server04
 
 2026-09-15 사용자가 자원 여유를 확인하고 **물리 server04 사용**을 선택했다. 앞선 server03 우선 권고를 대체한다. 여유 자원 확인을 반복 요청하지 않는다. 이는 배치 선택이며 VM 복사·격리·부팅 또는 통합시험이 완료됐다는 기록은 아니다.
@@ -28,7 +30,7 @@
 
 백업 부팅은 현재 CP1 상태를 재현했다는 증거가 아니다. 특히 Runtime-only 방화벽 규칙은 디스크 백업의 부팅만으로 복원됐다고 가정하지 않는다. 복제된 원 영수증이나 hostname이 생산 실행기의 검사를 통과하게 만들기 위해 값을 변경하지 않는다. 실제 통합시험용 진입점과 데이터 출처는 아래 3절의 잔여 구현 범위다.
 
-## 지금 진행할 범위
+## 기존 준비 수집 범위
 
 `collect-cni-integration-preflight.py`로 **격리 시험 후보 VM의 현재 환경만 조회**한다. 패키지 설치, 서비스 시작/중지, firewall reload, 정책·라우팅 변경, Kubernetes 접속, SSH 접속, 패킷 송신은 없다. 로컬 새 증적 디렉터리와 archive/checksum만 작성한다. 기본 실행은 PLAN_ONLY다.
 
@@ -70,13 +72,15 @@ sudo install -o "$(id -un)" -g "$(id -gn)" -m 0600 \
 
 결과에는 플랫폼 식별 정보가 있으므로 원문 archive를 PR 댓글에 게시하지 않는다. PR에는 판정·해시·검토 결과만 남긴다.
 
-## 3. 실제 시험 전 해결할 실행 진입점
+## 3. 실제 시험 진입점과 남은 통합 범위
 
-현재 생산 실행기는 `ansible01`/`k8s-control01`, 원 CP1 영수증, 실제 qualification을 요구한다. **일반 시험 VM에서 생산용 `--execute`를 바로 실행할 수 있는 범용 통합시험 harness는 아직 없다.** 준비 수집기는 이 제한을 우회하지 않는다.
+새 `scripts/run-cni-kernel-integration.py`가 **첫 커널 컴포넌트 시험 진입점**을 제공한다. [CNI_KERNEL_COMPONENT.md](CNI_KERNEL_COMPONENT.md)의 추가 inspect → 새 소스 독립 검토/실행 결정 → normal 한 건 → 증적 검토 순서로 진행한다. 현재 코드는 STATIC/MOCK 검증 단계이며 시험 VM에서의 실제 실행은 아직 미수행이다.
 
-후속 구현에서는 격리 시험의 진입점, 승인 대상 소스, 시험 데이터 출처를 먼저 명확히 한다. 실제 firewalld 상태/compiled nft를 읽는 adapter와 독립 systemd service/timer 경로를 시험할 수 있어야 한다. 모의 adapter를 실제 시험으로 기록하면 안 된다. 격리 시험을 위해 source를 변경했다면 생산 bundle과 다른 대상으로 기록하고 검증 범위를 재검토한다.
+이 도구는 새 network namespace의 private firewalld/D-Bus와 합성 peer를 사용해 기존 `cni_diag_core.Transaction` 및 parser를 실제 커널에 연결한다. 생산 core/node/controller/helper의 코드는 변경하지 않는다. 운영 hostname·원 CP1 receipt·qualification을 복제/변조하거나 production `--execute`의 검사를 해제하지 않는다.
 
-호스트 이름 변경, 원 CP1 영수증 복제/조작, qualification PASS 값 수동 작성으로 차단을 우회하지 않는다. hostname·원 영수증 등 생산 계약을 어떻게 격리 시험에서 보존하거나 분리할지는 아직 검토할 구현 항목이다. 이 항목이 해결되기 전에는 아래 표는 시험 설계이며 변경 실행 지시가 아니다.
+**전체 격리 통합시험 harness가 완성된 것은 아니다.** 실제 VM NIC·터널·기존 Calico Pod fixture와 production node adapter의 API/SSH·부팅·원6개 복원 경로는 추가 구현/검토가 필요하다. 새 컴포넌트의 관측과 recovery wrapper를 production qualification으로 제출할 수 없다. 출력 schema와 stage를 분리하고 전체 production 흐름 7개·회수 6개를 NOT_TESTED로 유지한다.
+
+18:20:48 KST 준비 증적 검토로 conntrack 보완 및 PREPARATION_REVIEW_REQUIRED(blockers=[])를 확인했고, 설치 전 새 시험 snapshot 생성도 화면으로 확인했다. 기존 RPM 설치·전체 준비 수집은 반복하지 않는다. 새 inspect는 추가 daemon/mount 도구·namespace 권한과 새로운 소스/VM 식별 바인딩을 확보하는 용도다.
 
 ## 4. 시험 순서와 증적
 

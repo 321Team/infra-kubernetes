@@ -1,0 +1,4 @@
+939f58f54a36dacac8216b14f4437493e9cf18745b06f5b30532ffed3de26ee5  scripts/run-cni-kernel-integration.py
+286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59  scripts/cni_diag_core.py
+574d2160360e924f2eb74f40c04b6059dc4b459c09cedf2d93c7d1b61cc6e486  scripts/cp1-cni-diagnostic-node.py
+93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa  scripts/node-firewall.py
