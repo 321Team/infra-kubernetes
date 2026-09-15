@@ -48,6 +48,8 @@
 
 ## 사용 순서
 
+2026-09-15 독립 검토 후속으로 [격리 Linux 통합시험 착수 절차](CNI_ISOLATED_INTEGRATION.md)와 읽기 전용 `collect-cni-integration-preflight.py`를 추가했다. 이 도구는 시험 후보 VM의 플랫폼을 조회하며 qualification을 만들지 않는다. 일반 시험 VM용 실제 통합시험 진입점은 아직 별도 구현·검토가 필요하다.
+
 로컬 검토와 현재 사용할 수 있는 명령:
 
 ```bash
