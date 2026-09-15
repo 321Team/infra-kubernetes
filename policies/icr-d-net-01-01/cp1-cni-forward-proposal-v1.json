@@ -1,0 +1,28 @@
+{
+  "schema": "fds.cp1-cni-forward-proposal.v1",
+  "status": "PROPOSED_NOT_EXECUTABLE",
+  "host": "k8s-control01",
+  "policy": {
+    "name": "fds-cp1-cni-probe",
+    "ingress_zones": [
+      "ANY"
+    ],
+    "egress_zones": [
+      "ANY"
+    ],
+    "target": "CONTINUE",
+    "priority": -500,
+    "source_cidr": "10.244.246.64/26",
+    "destination_cidr": "10.244.246.64/26",
+    "protocol": "tcp",
+    "destination_port": 8080,
+    "permanent_disabled": true,
+    "runtime_enable_after_review": true
+  },
+  "block_evidence": "FDS_CP1_CNI_Diagnose_7aqtz7d4:routes",
+  "requires_live_block_ownership_validation": true,
+  "requires_controlled_reload_and_runtime_restoration": true,
+  "requires_consumer_extension": true,
+  "same_node_only": true,
+  "authorizes_execution": false
+}
