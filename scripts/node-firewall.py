@@ -170,14 +170,34 @@ def redact(value):
     except (ValueError, TypeError):
         structured = None
     if isinstance(structured, (dict, list)):
-        sensitive = {"certificate-key", "token", "password", "client-key-data", "client-certificate-data"}
+        def credential_key(key):
+            # Match credential variants, not every Kubernetes field ending in key.
+            compact = re.sub(r"[^a-z0-9]", "", key.lower())
+            return bool(re.search(r"(?:token|password|passwd|secret|credentials?)(?:data)?$", compact)
+                        or compact.endswith(("privatekey", "privatekeydata", "clientkey", "clientkeydata",
+                                             "certificatekey", "clientcertificatedata", "tlskey", "apikey",
+                                             "accesskey", "secretkey")))
 
-        def scrub(item):
+        def scrub(item, path=(), credential=False):
             if isinstance(item, dict):
-                return {key: "[REDACTED]" if key.lower() in sensitive else scrub(val)
-                        for key, val in item.items()}
+                result = {}
+                env_value = (len(path) > 0 and path[-1] == "env"
+                             and isinstance(item.get("name"), str) and credential_key(item["name"]))
+                secret_payload = item.get("kind") == "Secret"
+                for key, val in item.items():
+                    projected_config = (key == "serviceAccountToken" and path[-2:] == ("projected", "sources")
+                                        and isinstance(val, dict)
+                                        and set(val) <= {"path", "audience", "expirationSeconds"})
+                    token_mount_config = key == "automountServiceAccountToken" and isinstance(val, bool)
+                    sensitive = credential or (credential_key(key) and not projected_config and not token_mount_config)
+                    sensitive = sensitive or (env_value and key == "value")
+                    sensitive = sensitive or (secret_payload and key in ("data", "stringData"))
+                    result[key] = scrub(val, path + (key,), sensitive)
+                return result
             if isinstance(item, list):
-                return [scrub(val) for val in item]
+                return [scrub(val, path, credential) for val in item]
+            if credential:
+                return "[REDACTED]"
             return redact(item) if isinstance(item, str) else item
 
         return json.dumps(scrub(structured), ensure_ascii=False, indent=2)
