@@ -1,0 +1,27 @@
+{
+  "schema": "fds.cp1-cni-implementation-validation.v1",
+  "verified_at_utc": "2026-09-15T05:30:58.568990+00:00",
+  "stage": "STATIC_MOCK",
+  "tests": {
+    "run": 83,
+    "passed": 83,
+    "failed": 0,
+    "fault_injection_cases": 48
+  },
+  "files_sha256": {
+    "scripts/cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+    "scripts/cp1-cni-diagnostic-node.py": "574d2160360e924f2eb74f40c04b6059dc4b459c09cedf2d93c7d1b61cc6e486",
+    "scripts/run-cp1-cni-diagnostic.py": "bde6963754aed1c05f3ea034e565e343f9c3decc6c6828b9098ea416129e3364",
+    "tests/test_cni_diagnostic.py": "aede56d691230d61593962ec71b5069621beb3136ce1fb6d59cc637bed20a0b1"
+  },
+  "linux_integration": "NOT_RUN",
+  "ci": "NOT_RUN",
+  "cp1_runtime": "NOT_RUN",
+  "runtime_execution_ready": false,
+  "limitations": [
+    "PID1 is supervisord, not systemd",
+    "CapEff=0; no network administration capabilities",
+    "Actual packet/trace/systemd recovery qualification is pending",
+    "Non-peer negative paths on CP1 are NOT_TESTED"
+  ]
+}
