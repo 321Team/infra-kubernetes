@@ -1,0 +1,108 @@
+{
+  "actual_mutations": false,
+  "assessment": {
+    "atomic_snapshot": false,
+    "authorizes_apply": false,
+    "authorizes_cp1_acceptance": false,
+    "authorizes_cp2_change": false,
+    "fixed_dataplane_sha256": "eb3b9f7d41f7506545906f027c54985b1859181ee87a2e6934bfe3668c3ff6e9",
+    "kernel_ipsets": 5,
+    "opaque_expressions": 329,
+    "paired_context_changed": [],
+    "pod_replacement_qualified": false,
+    "query_count": 71,
+    "schema": "fds.cp1-cni-dataplane-assessment.v1",
+    "status": "PAIRED_DATAPLANE_COVERED",
+    "warnings": {
+      "native_text": [
+        "# Warning: table ip mangle is managed by iptables-nft, do not touch!",
+        "# Warning: table ip filter is managed by iptables-nft, do not touch!",
+        "# Warning: table ip nat is managed by iptables-nft, do not touch!",
+        "# Warning: table ip6 nat is managed by iptables-nft, do not touch!",
+        "# Warning: XT target MASQUERADE not found",
+        "# Warning: table ip6 filter is managed by iptables-nft, do not touch!",
+        "# Warning: table ip raw is managed by iptables-nft, do not touch!"
+      ],
+      "native_text_after": [
+        "# Warning: table ip mangle is managed by iptables-nft, do not touch!",
+        "# Warning: table ip filter is managed by iptables-nft, do not touch!",
+        "# Warning: table ip nat is managed by iptables-nft, do not touch!",
+        "# Warning: table ip6 nat is managed by iptables-nft, do not touch!",
+        "# Warning: XT target MASQUERADE not found",
+        "# Warning: table ip6 filter is managed by iptables-nft, do not touch!",
+        "# Warning: table ip raw is managed by iptables-nft, do not touch!"
+      ]
+    }
+  },
+  "authorizes_apply": false,
+  "capture_sha256": "1b6d58711ebf0eed46105bf45b1501efaf14a13b650f5758bd745f995e821db8",
+  "counterexamples": [
+    {
+      "name": "hidden_set_broadened_both_samples",
+      "outcome": "DIFFERENT_FIXED_STATE",
+      "result": "PASS"
+    },
+    {
+      "name": "hidden_set_changed_between_samples",
+      "outcome": "REJECTED: dataplane changed during paired observation",
+      "result": "PASS"
+    },
+    {
+      "name": "hidden_set_direction_changed",
+      "outcome": "DIFFERENT_FIXED_STATE",
+      "result": "PASS"
+    },
+    {
+      "name": "hidden_conntrack_scope_changed",
+      "outcome": "DIFFERENT_FIXED_STATE",
+      "result": "PASS"
+    },
+    {
+      "name": "hidden_dnat_destination_changed",
+      "outcome": "DIFFERENT_FIXED_STATE",
+      "result": "PASS"
+    },
+    {
+      "name": "missing_kernel_sets",
+      "outcome": "REJECTED: capture query inventory differs",
+      "result": "PASS"
+    },
+    {
+      "name": "warning_in_authoritative_save",
+      "outcome": "REJECTED: incomplete compatibility query",
+      "result": "PASS"
+    },
+    {
+      "name": "truncated_native",
+      "outcome": "REJECTED: incomplete compatibility query",
+      "result": "PASS"
+    },
+    {
+      "name": "boolean_exit_status",
+      "outcome": "REJECTED: incomplete compatibility query",
+      "result": "PASS"
+    },
+    {
+      "name": "arp_guard_address_changed",
+      "outcome": "DIFFERENT_FIXED_STATE",
+      "result": "PASS"
+    },
+    {
+      "name": "native_verdict_disagrees_with_save",
+      "outcome": "REJECTED: native/saved terminal verdict differs",
+      "result": "PASS"
+    },
+    {
+      "name": "api_context_raced",
+      "outcome": "REJECTED: paired context changed: endpointslices",
+      "result": "PASS"
+    },
+    {
+      "name": "native_counters_only",
+      "outcome": "SAME_FIXED_STATE",
+      "result": "PASS"
+    }
+  ],
+  "runtime_pod_replacement_tested": false,
+  "test_kind": "OFFLINE_REPLAY_AND_IN_MEMORY_MUTATIONS"
+}

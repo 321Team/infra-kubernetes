@@ -233,9 +233,21 @@ class ObserverTests(unittest.TestCase):
                 else: key = prefix + 'ipsets/' + o.NAME
             return copy.deepcopy(record['queries'][key + suffix])
         Node.command = staticmethod(command)
-        captured = o.collect(Node, lambda backend: {'calico_image': 'pinned', 'namespace_policies': []})
+        compatibility_calls = []
+        def compatibility_command(node, argv, timeout):
+            compatibility_calls.append(argv)
+            self.assertLessEqual(timeout, 5)
+            return {'rc': 0, 'stdout': 'read-only query fixture', 'stderr': ''}
+        with patch.object(o, 'compatibility_command', side_effect=compatibility_command):
+            captured = o.collect(Node, lambda backend: {'calico_image': 'pinned', 'namespace_policies': []},
+                                 compatibility=True)
         self.assertTrue(captured['complete'], captured['errors'])
         self.assertIn('native_after', captured['queries'])
+        for key in ('iptables_save', 'ip6tables_save', 'ipsets'):
+            self.assertIn(key, captured['queries']); self.assertIn(key + '_after', captured['queries'])
+        self.assertEqual(compatibility_calls.count(['iptables-save', '-c']), 2)
+        self.assertEqual(compatibility_calls.count(['ip6tables-save', '-c']), 2)
+        self.assertEqual(compatibility_calls.count(['ipset', 'save']), 2)
         self.assertTrue(all('reload' not in a and '--add-disable' not in a for a in calls))
 
     def test_unit_query_failure_preserves_capture_and_cannot_reuse_prior_success(self):

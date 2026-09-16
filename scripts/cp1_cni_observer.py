@@ -11,6 +11,7 @@ import re
 import shlex
 import time
 import hashlib
+import importlib.util
 
 from cp1_cni_membership import need, encoded, fingerprint, same, entries, boot, number
 from cp1_cni_guard import verified_guard, query_units
@@ -92,13 +93,20 @@ def objects(raw):
     return result
 
 
-def native_view(raw, mode, *, withdrawal_only=False):
+def native_view(raw, mode, *, withdrawal_only=False, compatibility=None):
     """Retain all foreign objects/rule order; vary only the verified owned delta.
 
     Handles and counters are retained (counter values normalized). No generic
     recursive removal of CNI keys, set elements, timeouts or quota data.
     """
     need(mode in ('BASELINE', 'DISABLED', 'ACTIVE'), 'native mode differs')
+    supplemental = {}
+    if compatibility is not None:
+        from cp1_cni_dataplane import covered
+        need(set(compatibility) == {'iptables_save', 'ip6tables_save', 'ipsets'},
+             'all compatibility streams required')
+        proof = covered(raw, compatibility['iptables_save'], compatibility['ip6tables_save'], compatibility['ipsets'])
+        supplemental = {key: proof[key] for key in ('xtables', 'kernel_ipsets')}
     native = copy.deepcopy(raw)
     need(isinstance(native.get('nftables'), list) and native['nftables'], 'native rules absent')
     remainder, own_sets, own_chains, own_rules, dispatch = [], [], [], [], []
@@ -120,7 +128,7 @@ def native_view(raw, mode, *, withdrawal_only=False):
                 # xt statements omit extension payloads. An unchanged JSON
                 # representation cannot prove unchanged ipset contents or
                 # xtables match parameters. Do not grant using this digest.
-                need(withdrawal_only or 'xt' not in expr,
+                need(withdrawal_only or compatibility is not None or 'xt' not in expr,
                      'XT_COMPAT_COVERAGE_REQUIRED: nft JSON alone is incomplete')
         if kind == 'counter':
             need(all(type(value.get(k)) is int and value[k] >= 0 for k in ('packets', 'bytes')),
@@ -154,7 +162,7 @@ def native_view(raw, mode, *, withdrawal_only=False):
             raise ValueError('unrecognized reference to owned name')
     if mode == 'BASELINE':
         need(not own_sets and not own_chains and not own_rules and not dispatch, 'owned object collision')
-        return {'fixed': {'nftables': remainder}, 'entries': [], 'owned': []}
+        return {'fixed': {'nftables': remainder, **supplemental}, 'entries': [], 'owned': []}
     need(len(own_sets) == 1, 'one native owned set required')
     value = own_sets[0]
     need(set(value) <= {'family', 'table', 'name', 'type', 'flags', 'handle', 'elem'} and
@@ -202,7 +210,7 @@ def native_view(raw, mode, *, withdrawal_only=False):
         need(dispatch, 'owned policy unreachable')
         need(all(set(r) <= {'family', 'table', 'chain', 'handle', 'expr', 'comment'}
                  for r in own_rules + dispatch), 'unknown owned rule field')
-    return {'fixed': {'nftables': remainder + [{'set': definition}]}, 'entries': found,
+    return {'fixed': {'nftables': remainder + [{'set': definition}], **supplemental}, 'entries': found,
             'owned': own_chains + own_rules + dispatch}
 
 
@@ -291,7 +299,11 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False)
                         need(not ('cali'.startswith(prefix_if) or prefix_if.startswith('cali')),
                              'cali scope assigned to non-public zone')
             plane_data[plane]['direct'] = q[prefix + 'direct' + suffix]
-        native = native_view(parse_json(q['native' + suffix]), 'ACTIVE' if enabled_now else 'DISABLED')
+        compatibility_keys = ('iptables_save', 'ip6tables_save', 'ipsets')
+        compatibility = ({key: q[key + suffix] for key in compatibility_keys}
+                         if any(key + suffix in q for key in compatibility_keys) else None)
+        native = native_view(parse_json(q['native' + suffix]), 'ACTIVE' if enabled_now else 'DISABLED',
+                             compatibility=compatibility)
         need(native['entries'] == daemon_entries, 'observer native/daemon entries differ')
         current = {'inventory': plane_data, 'native': native['fixed'],
                    'host': parse_json(q['host' + suffix]), 'protection': parse_json(q['protection' + suffix]),
@@ -316,7 +328,15 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False)
             'guard_armed': guard['armed'], 'guard_deadline': guard['deadline']}
 
 
-def collect(node, protection_reader):
+def compatibility_command(node, argv, timeout):
+    # Reuse the tested bounded spooling/multicall implementation. node.command
+    # resolves symlinks into argv[0], which breaks iptables-save multicall.
+    spec = importlib.util.spec_from_file_location('cp1_dataplane_collector', ROOT / 'scripts/collect-cp1-cni-dataplane.py')
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    return module.command(node, argv, timeout)
+
+
+def collect(node, protection_reader, *, compatibility=False):
     """Read local state twice with a 25-second total helper command budget.
 
     protection_reader must use the same bounded helper, returning the full
@@ -362,6 +382,14 @@ def collect(node, protection_reader):
                     for kind in ('policy', 'ipset'):
                         read(plane + '/' + kind + '-description' + suffix, prefix + ['--' + kind + '=' + NAME, '--get-description'])
             read('native' + suffix, ['nft', '-j', 'list', 'ruleset'])
+            if compatibility:
+                for key, argv in (('iptables_save', ['iptables-save', '-c']),
+                                  ('ip6tables_save', ['ip6tables-save', '-c']), ('ipsets', ['ipset', 'save'])):
+                    remaining = started + 25 - time.monotonic()
+                    need(remaining > 0, 'whole observation budget exhausted')
+                    value = compatibility_command(node, argv, min(5, remaining))
+                    record['queries'][key + suffix] = value
+                    success(value)
         for key, argv in (('version', ['firewall-cmd', '--version']), ('state', ['firewall-cmd', '--state']),
                           ('selinux', ['getenforce']), ('configuration', ['cat', '/etc/firewalld/firewalld.conf'])):
             read(key + '_after', argv)
@@ -422,7 +450,7 @@ class LocalObserver:
                 'truncated': result.get('stdout_truncated', False) is not False or result.get('stderr_truncated', False) is not False}
 
     def __call__(self):
-        capture = collect(self.node, protection)
+        capture = collect(self.node, protection, compatibility=True)
         # Preserve collected diagnostics even when a subsequent unit query
         # fails. A failed observation cannot reuse an earlier successful one.
         self.evidence = {'capture': capture}
@@ -444,6 +472,6 @@ class LocalObserver:
         return owned_snapshot(capture, self.activation, self.clock())
 
     def withdrawal(self):
-        capture = collect(self.node, protection)
+        capture = collect(self.node, protection, compatibility=True)
         self.evidence = {'withdrawal_capture': capture}
         return snapshot_from_records(capture, self.activation, None, self.clock(), withdrawal=True)
