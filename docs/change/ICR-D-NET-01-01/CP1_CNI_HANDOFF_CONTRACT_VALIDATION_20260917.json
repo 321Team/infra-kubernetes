@@ -1,0 +1,41 @@
+{
+  "schema": "fds.cp1-cni-handoff-validation.v1",
+  "created_at_utc": "2026-09-16T15:53:37.066413+00:00",
+  "parent_commit": "ed53205fb142c86715281cbe4eca6a44b0171c90",
+  "result": "STATIC_MOCK_PASS",
+  "test_command": "python3 -B -m unittest discover -s tests -p 'test_*.py' -v",
+  "total_tests": 84,
+  "new_tests": 23,
+  "existing_tests": 61,
+  "python": "3.12.14",
+  "original_producer": "REAL_PINNED_CODE_WITH_MOCK_BACKEND",
+  "cni_producer": "MOCK_RECORD_ONLY_NOT_IMPLEMENTED",
+  "production_consumer_connected": false,
+  "runtime_run": false,
+  "new_ci_run": false,
+  "server_changes": false,
+  "authorization_or_join_created": false,
+  "review_scope": "DRAFT_OFFLINE_CONSISTENCY_ONLY",
+  "limitations": [
+    "Human assertions and archive digest links are not authenticated review or decoded packet evidence.",
+    "Full state collector, operation producer and rollback implementation are not supplied.",
+    "HOST/external path preservation and Join lifetime remain unresolved.",
+    "Legacy CP2/CP3 controller remains unchanged and rejects new CNI drift."
+  ],
+  "new_files_sha256": {
+    "scripts/check-cp1-cni-handoff.py": "8fbc4d03fd76fecd27bd6f82a3672f4d0220ed1db8c331c61d9310c98d7db1d3",
+    "tests/test_cp1_cni_handoff.py": "9fdeaa1f7332ba12762ced6bca3c71f5591b1a052b810f2c09478aefd4c23bd0",
+    "policies/icr-d-net-01-01/cp1-cni-handoff-contract.template.json": "12a096d96a451f7d99e1ba675ae8efae9805263f88e94802afb5747c852376f3",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_HANDOFF_CONTRACT_20260917.md": "3e3dc44ba75d299117be687e9f2aed59b9b9033025a8f270ec1c7d8f1790ef52",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_HANDOFF_CONTRACT_TEST_20260917.txt": "992f8234161de691bd305be57c49c54552e2825a787bf74883528960a7b229e5"
+  },
+  "unchanged_dependencies_sha256": {
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc",
+    "tests/test_node_firewall.py": "4dea5af611bcdac93157da99f530be7ef406727c84cd9746e4c3ef03e6cd8c36",
+    "tests/test_node_firewall_v2_contract.py": "f79ec698c02ea1b8d2b9e11c5412bceff0da81ed6359475544a58f9674aee838",
+    "tests/fixtures/PR2_PRODUCER_LOCK.json": "ccd2b6413819973d03ee5de66028110f43eb42462ff37013c87d3035600f9dca",
+    "NODE_FIREWALL_SOURCE_SHA256SUMS": "85ad9be551da237d34ef7519e387f6cbf01f4bb6cf8262d178327fc82b38894d"
+  }
+}

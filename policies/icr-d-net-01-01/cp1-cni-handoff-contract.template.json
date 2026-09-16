@@ -1,0 +1,34 @@
+{
+  "schema": "fds.cp1-cni-handoff-contract.v1",
+  "status": "DRAFT_NOT_EXECUTABLE",
+  "scope": {
+    "host": "k8s-control01",
+    "source_cidr": "10.244.246.64/26",
+    "destination_cidr": "10.244.246.64/26",
+    "ingress": "cali+",
+    "egress": "cali+",
+    "layer4": "ALL",
+    "same_node_only": true,
+    "purpose": "PRE_JOIN_CANDIDATE"
+  },
+  "original_input_sha256": null,
+  "original_receipt_sha256": null,
+  "before": null,
+  "changes": [],
+  "producer": {
+    "source_commit": null,
+    "source_sha256": null,
+    "plan_sha256": null
+  },
+  "review": {
+    "reviewer": null,
+    "decision": null,
+    "url": null,
+    "reviewed_at": null
+  },
+  "window": {
+    "start": null,
+    "end": null,
+    "end_exclusive": true
+  }
+}
