@@ -145,7 +145,7 @@ class Boundaries(unittest.TestCase):
     def test_accelerated_cases_are_separate_from_production_time(self):
         job=tool.job_path('a'*16)
         for scenario in ('kill','deadline','cleanup-retry'):
-            self.assertIn('OnActiveSec=90s',tool.documents(job,scenario)[tool.unit_name(job,'recover')+'.timer'])
+            self.assertIn('OnActiveSec=300s',tool.documents(job,scenario)[tool.unit_name(job,'recover')+'.timer'])
         self.assertEqual(tool.core.DURATION,1200)
 
     def test_command_timeout_is_clamped_to_remaining_window(self):

@@ -1,9 +1,21 @@
-## 2026-09-16 R5 — 캡처 증적과 종료 처리 일괄 보완
+## 2026-09-16 R6 — 가속 회수 시간과 장애 지점 기록
+
+R5 `b930b07`의 normal job `3c42bc094b1c1ad7`은 6개 흐름의 packet/trace 대조와 최종 unit 정리까지 확인했다. [Runtime 검토](https://github.com/321Team/infra-kubernetes/pull/11#issuecomment-5697557472). 이 결과는 해당 소스에 한정한다.
+
+- 실제 R5 준비시간 약 103초에 비해 기존 가속 timer 90초가 짧았다. `kill/deadline/cleanup-retry`를 300초로 보완했으며 normal/reboot의 1020초 예약·1200초 전체 작업창은 유지한다.
+- `scenario_observation`에 목표 `PRIVATE_POLICY_ACTIVE` 도달 시각과 주입 의도를 기록한다. 회수 전에 worker에서 관측한 SIGKILL 종료와 요청 의도를 구분한다. 목표 미도달이면 `NOT_REACHED`와 실패 상태를 보존한다.
+- deadline 경과는 같은 부팅의 monotonic 시각으로 확인한다. 시간 경과만으로 실제 timer 기동 출처를 확정하지 않으며 journal과 함께 검토한다. cleanup-retry의 의도적 첫 실패는 목표 도달과 worker SIGKILL 관측이 있어야 주입한다.
+- RESULT와 COMPONENT_SUMMARY에 시나리오 기록을 함께 반출한다. 자동 qualification/PASS를 생성하지 않는다.
+- 운영 node/controller도 종료 후 unit 정리로 보완했으므로 kernel/production bundle이 모두 변경된다. [R6 변경·검증](../change/ICR-D-NET-01-01/CNI_RECOVERY_R6_REVIEW_20260916.md)을 기준으로 검토한다. 완료된 R5 job은 원래 staged source로 보존·수집한다.
+
+**R6는 추가 VM 실행 지시가 아니다.** 변경 소스 독립 리뷰와 필요한 실행 범위·입력 대조가 남아 있다. R5 normal 승인 댓글을 새 소스·장애 주입 시험·운영 실행 승인으로 승계하지 않는다.
+
+## 이전 제출 기록 — 2026-09-16 R5 — 캡처 증적과 종료 처리 일괄 보완
 
 c679의 job `3c11f64a9e41c9f0`에서 첫 HTTP 200과 같은 tuple의 nft accept가 관측됐으나 PCAP은 헤더뿐이었다.
 공통 원복·시험 자원 정리는 완료됐고, 수동 recover 1회 뒤 예약 해제를 확인했다. 나머지 5개 흐름은 NOT_TESTED다.
 [R5 검토 기록](../change/ICR-D-NET-01-01/CNI_CAPTURE_R5_REVIEW_20260916.md)에 근거·수정 범위·검증·남은 확인을 묶었다.
-로컬 회귀 246/246 PASS이며 대상 VM의 새 tcpdump/systemd 경로는 아직 실행하지 않았다.
+R5 제출 당시 로컬 회귀 246/246 PASS였으며, 이후 실제 normal 결과는 위 R6 문단의 R5 Runtime 링크에 기록했다.
 새 kernel bundle: `3184ef3ebdaea8f1ca12843055510cacdfd212e65db41ce1829df5cb1723b619`.
 
 - `communication_status`와 `evidence_status`를 구분한다. PCAP/trace 누락은 통신 관측과 별도로 실패다.
@@ -75,7 +87,7 @@ SELINUX_LAYOUT.json, 최초 실패 journal, 수집 시점 journal 및 별도 수
 
 collect의 텍스트 반출본에서 UUID 형태 문자열은 SHA256 표기로 바꾼다. 원본 job/실행 입력은 VM에 보존하며 EXPORT_REDACTION.json에 원본·반출본 해시와 치환 수를 남긴다. pcap 등 바이너리에 UUID 형태 문자열이 있으면 자동 반출을 중단한다. 이는 UUID 평문 반출 방지이며 모든 식별정보의 익명화를 보장하지 않는다. **반출된 REQUEST/decision은 실행 입력으로 재사용하지 않는다.** inspect·template 원본은 VM 내부 바인딩에 필요하므로 전송 시 별도 사본을 비식별 처리하고 원본은 로컬에 보관한다.
 
-보완 소스는 독립 리뷰와 새 inspect/실행 입력 대조가 필요하다. 164f8d5의 APPROVED를 새 digest 승인으로 재사용하지 않는다. R5는 실행 중인 unit 삭제를 collect로 옮겼으며 대상 VM 종료 동작은 검증 대기다. kill/deadline/cleanup-retry/reboot 실행을 이번 절차가 허용하지 않는다.
+보완 소스는 독립 리뷰와 새 inspect/실행 입력 대조가 필요하다. 164f8d5의 APPROVED를 새 digest 승인으로 재사용하지 않는다. R5는 실행 중인 unit 삭제를 collect로 옮겼고 해당 소스의 normal 종료를 확인했다. R6 변경분의 대상 VM 검증은 미수행이다. kill/deadline/cleanup-retry/reboot 실행을 이번 절차가 허용하지 않는다.
 
 전체 격리 통합시험 qualification을 완성하는 도구는 아니다. 운영 node adapter의 API/SSH/Calico Pod 검증과 생산 recovery service 경로는 이 wrapper로 실행되지 않는다. `RUNTIME_ISOLATED` qualification을 만들거나 기존 생산 계약을 우회하지 않는다. 실제 VM NIC·터널·기존 Pod 경로와 운영 복구 검증은 후속 범위다. `PRODUCTION_MATRIX.json`의 흐름 7개·복구 6개는 NOT_TESTED로 유지하고, 이번 실제 관측은 `component_flows`와 별도 scope로 기록한다.
 
@@ -175,11 +187,11 @@ archive는 `/var/lib/fds/cni-kernel-lab/exports/FDS_CNI_Kernel_Component_.../`�
 |---|---|---|
 | normal | 공통 prepare/withdraw 및 6개 실제 커널 흐름 관측 | Calico/물리 NIC의 통합 결과는 아님 |
 | kill | private policy 활성화 후 자기 worker에 SIGKILL, 독립 회수 | 이 wrapper의 cgroup/영속 ledger 경로 |
-| deadline | private policy 활성화 후 timer에 의한 회수 대기 | 90초 가속 timer이며 production 20분 검증 아님 |
+| deadline | private policy 활성화 후 timer에 의한 회수 대기 | 300초 가속 timer이며 production 20분 검증 아님 |
 | cleanup-retry | SIGKILL 후 첫 회수에 의도적 실패, timer 재시도 | 이 wrapper의 retry 검증, 생산 복구 adapter 검증 아님 |
 | reboot | WAIT_REBOOT 기록 후 operator의 실제 VM 재부팅 대기 | VM을 코드가 재부팅하지 않음; namespace 소멸/부팅 정리이며 원 CP1 6개 복원 증명 아님 |
 
-kill/cleanup-retry도 회수 timer는 90초다. 준비가 그보다 늦으면 목표 mutation 이전에 회수될 수 있으며 해당 목표 시험을 완료로 집계하지 않는다. 각 시나리오는 별도 실행·증적이다. reboot는 승인된 별도 시험 창에서 수행한다.
+kill/cleanup-retry도 회수 timer는 300초다. 준비가 그보다 늦으면 목표 mutation 이전에 회수될 수 있으며 해당 목표 시험을 완료로 집계하지 않는다. 각 시나리오는 별도 실행·증적이다. reboot는 승인된 별도 시험 창에서 수행한다.
 
 ## 다음 통합 범위
 

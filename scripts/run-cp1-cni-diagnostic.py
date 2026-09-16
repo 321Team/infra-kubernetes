@@ -95,11 +95,41 @@ def validate_execution_result(result):
     state = result.get('state', {})
     need(state.get('phase') == 'COMPLETE' and state.get('cleanup_complete') is True and
          state.get('recovery_disarmed') is True, 'Execution has no confirmed safe terminal state')
+    need(state.get('unit_cleanup_protocol') == 1 and state.get('unit_cleanup_complete') is True and
+         state.get('unit_cleanup_pending') is False and not result.get('collection_error'),
+         'Execution unit cleanup incomplete; collect this run, do not start another')
     need(result.get('status') == state.get('status') == 'DIAGNOSTIC_ONLY_REVIEW_REQUIRED' and
          state.get('diagnostic_outcome') == 'SUCCEEDED' and not state.get('diagnostic_error') and
          state.get('positive_summary') == dict(passed=5, failed=0, not_tested=0, total=5) and
          state.get('finished_within_window') is True,
          'Diagnostic failed or incomplete; cleanup success does not make diagnosis successful')
+
+
+def finalize_remote_if_ready(controller, remote, response):
+    """Use only the existing job's staged node; legacy status stays read-only."""
+    if response.returncode != 0:
+        return response
+    result = json.loads(response.stdout)
+    state = result.get('state', {})
+    if (state.get('unit_cleanup_protocol') == 1 and state.get('unit_cleanup_pending') is True and
+            state.get('cleanup_complete') is True and (state.get('recovery_disarmed') is True or
+            state.get('unit_cleanup_intent') is True)):
+        # remote ends in ['status', protected_job]. No newer local source is sent.
+        need(remote[-2] == 'status', 'Invalid staged collection command')
+        try:
+            finalized = controller.run(controller.ssh_argv(NODE, remote[:-2] + ['collect', remote[-1]]), timeout=30)
+            need(finalized.returncode == 0, 'Staged finalization response unavailable')
+            payload = json.loads(finalized.stdout)
+            need(isinstance(payload, dict) and isinstance(payload.get('state'), dict),
+                 'Staged finalization returned invalid state')
+            response = finalized
+        except Exception as error:
+            # Preserve the already retrieved evidence if finalization/transport is
+            # uncertain. The old snapshot remains pending; execute cannot pass it.
+            result['collection_error'] = controller.node.redact(str(error))
+            response = subprocess.CompletedProcess(args=remote, returncode=0,
+                         stdout=json.dumps(result), stderr='')
+    return response
 
 
 def main():
@@ -185,6 +215,7 @@ def main():
                 time.sleep(2)
             data['poll_deadline_exceeded'] = not terminal_observed
             response = controller.run(controller.ssh_argv(NODE, remote + ['status', job]), timeout=30)
+            response = finalize_remote_if_ready(controller, remote + ['status', job], response)
         else:
             need(re.fullmatch(r'[0-9]{14}-[0-9a-f]{12}', run_id), 'Invalid run ID')
             job = REMOTE_ROOT + run_id
@@ -196,6 +227,8 @@ def main():
                 remote = ['sudo', '-n', '/usr/bin/python3', '-I', '-B',
                           job + '/' + FILES[1], 'status', job]
             response = controller.run(controller.ssh_argv(NODE, remote), timeout=30)
+            if args.collect:
+                response = finalize_remote_if_ready(controller, remote, response)
         data.update(rc=response.returncode, stderr=controller.node.redact(response.stderr)[:4000])
         need(response.returncode == 0, 'Remote response unavailable; collect existing run before retrying')
         if args.recover:
@@ -206,9 +239,11 @@ def main():
             data['result'] = json.loads(response.stdout)
             need(isinstance(data['result'], dict) and isinstance(data['result'].get('state'), dict),
                  'Remote diagnostic state missing')
+            data['unit_cleanup_pending'] = data['result']['state'].get('unit_cleanup_pending')
+            data['unit_cleanup_complete'] = data['result']['state'].get('unit_cleanup_complete')
         for name, entry in data['result'].pop('files', {}).items():
             need(name in {'STATE.json', 'REQUEST.json', 'ARMED.json', 'ACK.json', 'COMMANDS.jsonl', 'ACTIVE_NFT.json',
-                          'negative-a.pcap', 'negative-b.pcap'}, 'Unexpected evidence filename')
+                          'negative-a.pcap', 'negative-b.pcap', 'UNIT_EXIT_STATE.json'}, 'Unexpected evidence filename')
             raw = base64.b64decode(entry['base64'], validate=True)
             need(hashlib.sha256(raw).hexdigest() == entry['sha256'], 'Transport evidence digest mismatch')
             (directory / ('REMOTE_' + name)).write_bytes(raw)

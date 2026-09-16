@@ -123,10 +123,10 @@ def unit_documents(job, seconds):
     return {recovery + '.service': service, recovery + '.timer': timer}
 
 
-def system(argv, timeout=15):
+def system(argv, timeout=15, accepted=(0,)):
     result = subprocess.run(['/usr/bin/systemctl'] + argv, text=True, capture_output=True,
                             timeout=timeout, env={'PATH': '/usr/sbin:/usr/bin', 'LC_ALL': 'C.UTF-8'})
-    need(result.returncode == 0, 'systemctl failed: ' + ' '.join(argv[:2]))
+    need(result.returncode in accepted, 'systemctl failed: ' + ' '.join(argv[:2]))
     return result.stdout.strip()
 
 
@@ -160,6 +160,13 @@ def install(data):
             result_path = ROOT / old['run_id'] / 'STATE.json'
             state = json.loads(safe_read(result_path)) if result_path.exists() else {}
             need(state.get('cleanup_complete') is True, 'Prior job needs recovery; do not repeat')
+            need(state.get('recovery_disarmed') is True, 'Prior job recovery is still armed')
+            need(not state.get('unit_cleanup_pending') and
+                 (state.get('unit_cleanup_protocol') != 1 or state.get('unit_cleanup_complete') is True),
+                 'Collect prior job to finalize unit cleanup; do not repeat')
+        work, recovery = unit_names(job)
+        for name in (work + '.service', recovery + '.service', recovery + '.timer'):
+            need(system(['show', name, '-p', 'LoadState', '--value']) == 'not-found', 'Existing unit collision')
         job.mkdir(mode=0o700)
         for name, content in sources.items():
             need(sha(content.encode()) == request['files_sha256'][name], 'Source digest mismatch')
@@ -168,11 +175,15 @@ def install(data):
         remaining = min(1200, request['issued_at'] + 1200 - time.time())
         request['budget'] = {'boot_id': boot_id(), 'boot_start': time.clock_gettime(time.CLOCK_BOOTTIME)
                              - (1200 - remaining), 'wall_end': request['issued_at'] + 1200}
+        request.update(unit_cleanup_protocol=1, recovery_delay_seconds=max(1, int(remaining - 180)))
         save_json(job / 'REQUEST.json', request, exclusive=True)
         save_json(job / 'STATE.json', {'run_id': request['run_id'], 'phase': 'STAGED',
-                                      'cleanup_complete': False}, exclusive=True)
+                                      'cleanup_complete': False, 'recovery_disarmed': False,
+                                      'mutation_attempted': False,
+                                      'unit_cleanup_protocol': 1, 'unit_cleanup_pending': True,
+                                      'unit_cleanup_complete': False}, exclusive=True)
         save_json(active, {'run_id': request['run_id']})
-        units = unit_documents(job, remaining - 180)
+        units = unit_documents(job, request['recovery_delay_seconds'])
         save_json(job / 'UNITS.json', units, exclusive=True)
         for name, content in units.items():
             atomic(UNITS / name, content.encode(), exclusive=True)
@@ -667,27 +678,165 @@ def manifests(namespace):
     return result
 
 
+def verify_staged_job(job):
+    safe_dir(job)
+    need(job.parent == ROOT and re.fullmatch(r'[0-9]{14}-[a-f0-9]{12}', job.name), 'Invalid job path')
+    request = json.loads(safe_read(job / 'REQUEST.json'))
+    need(Path(__file__).resolve() == job / FILES[1], 'Use this job staged source for mutable operations')
+    for name in FILES:
+        need(sha(safe_read(job / name)) == request['files_sha256'][name], 'Staged source changed')
+    return request
+
+
+def validate_owned_units(job, result, request):
+    need(request.get('unit_cleanup_protocol') == 1, 'Unsupported unit cleanup protocol')
+    delay = request.get('recovery_delay_seconds')
+    need(type(delay) is int and 1 <= delay <= 1020, 'Invalid stored recovery delay')
+    docs = json.loads(safe_read(job / 'UNITS.json'))
+    need(docs == unit_documents(job, delay), 'Recovery unit manifest differs from source')
+    for name, body in docs.items():
+        path = UNITS / name
+        need(not path.is_symlink(), 'Recovery unit symlink is not owned')
+        if path.exists():
+            need(safe_read(path).decode() == body, 'Recovery unit changed; do not remove')
+        else:
+            need(result.get('unit_cleanup_intent') is True or result.get('mutation_attempted') is False,
+                 'Recovery unit unexpectedly absent')
+    return docs
+
+
+def verify_recovery_disabled(job, run=None):
+    run = system if run is None else run
+    _, recovery = unit_names(job)
+    for suffix in ('.timer', '.service'):
+        need(run(['is-enabled', recovery + suffix], accepted=(0, 1, 3, 4)) in ('disabled', 'not-found'),
+             'Recovery trigger remains enabled')
+    raw = run(['show', recovery + '.timer', '-p', 'ActiveState', '-p', 'Job'])
+    state = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
+    need(state.get('ActiveState') in ('inactive', 'failed') and state.get('Job') in ('', '0'),
+         'Recovery timer remains active or queued')
+
+
 def disarm(io):
     need(io.result.get('cleanup_complete') is True, 'Cannot disarm before cleanup confirmation')
+    request = verify_staged_job(io.job)
+    validate_owned_units(io.job, io.result, request)
     _, recovery = unit_names(io.job)
-    units = json.loads(safe_read(io.job / 'UNITS.json'))
-    for name, text in units.items():
-        if (UNITS / name).exists():
-            need(safe_read(UNITS / name).decode() == text, 'Recovery unit changed; do not remove')
-        else:
-            need(io.result.get('disarm_intent') is True, 'Recovery unit unexpectedly absent')
-    io.result['disarm_intent'] = True
+    io.result.update(disarm_intent=True, recovery_disarmed=False,
+                     unit_cleanup_pending=True, unit_cleanup_complete=False)
     io.save(io.result)
     if (UNITS / (recovery + '.timer')).exists():
         system(['disable', '--now', recovery + '.timer'])
     if (UNITS / (recovery + '.service')).exists():
         system(['disable', recovery + '.service'])
-    for name in units:
-        if (UNITS / name).exists():
-            (UNITS / name).unlink()
-    system(['daemon-reload'])
+    verify_recovery_disabled(io.job)
+    # The recovery service can be our own cgroup. Keep its definition until exit.
     io.result['recovery_disarmed'] = True
     io.save(io.result)
+
+
+def terminal_unit_states(job, docs, run=None):
+    run = system if run is None else run
+    work, _ = unit_names(job)
+    states = {}
+    for name in [work + '.service', *docs]:
+        raw = run(['show', name, '-p', 'LoadState', '-p', 'ActiveState', '-p', 'MainPID',
+                      '-p', 'Job', '-p', 'Result', '-p', 'ExecMainCode', '-p', 'ExecMainStatus',
+                      '-p', 'FragmentPath', '-p', 'DropInPaths', '-p', 'Transient'])
+        state = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
+        need(state.get('LoadState') in ('loaded', 'not-found'), 'Unexpected owned unit load state')
+        need(state.get('DropInPaths') == '', 'Foreign or unknown unit drop-in; finalization blocked')
+        if state['LoadState'] == 'loaded':
+            expected = (Path('/run/systemd/transient') if name == work + '.service' else UNITS) / name
+            need(state.get('FragmentPath') == str(expected), 'Foreign unit fragment; finalization blocked')
+            if name == work + '.service':
+                need(state.get('Transient') == 'yes', 'Work unit is not the owned transient service')
+        states[name] = state
+    return states
+
+
+def units_terminal(states):
+    return all(s.get('ActiveState') in ('inactive', 'failed') and s.get('Job') in ('', '0') and
+               (s.get('MainPID') == '0' or (name.endswith('.timer') or s.get('LoadState') == 'not-found')
+                and s.get('MainPID') in (None, '0')) for name, s in states.items())
+
+
+def finalize_units(job, result):
+    request = verify_staged_job(job)
+    need(result.get('cleanup_complete') is True and (result.get('recovery_disarmed') is True or
+         result.get('unit_cleanup_intent') is True),
+         'Unit finalization requires cleanup and disarm')
+    docs = validate_owned_units(job, result, request)
+    # Keep finalization below the controller's 30s response budget, including
+    # systemctl calls. Uncertain completion remains retryable via the same job.
+    operation_deadline = time.monotonic() + 20
+    def bounded_system(args, **kwargs):
+        remaining = operation_deadline - time.monotonic()
+        need(remaining > 0, 'Unit finalization budget exhausted')
+        kwargs['timeout'] = min(kwargs.get('timeout', 15), remaining)
+        return system(args, **kwargs)
+    try:
+        verify_recovery_disabled(job, bounded_system)
+    except Exception:
+        result.update(recovery_disarmed=False, unit_cleanup_pending=True, unit_cleanup_complete=False)
+        save_json(job / 'STATE.json', result)
+        raise
+    result['recovery_disarmed'] = True
+    deadline = time.monotonic() + 5
+    while True:
+        states = terminal_unit_states(job, docs, bounded_system)
+        if units_terminal(states): break
+        need(time.monotonic() < deadline, 'Owned unit still running or queued; finalization pending')
+        time.sleep(0.1)
+    # Persist the original terminal observation before removing anything. A retry
+    # after reload failure must not replace failed exit evidence with not-found.
+    if not (job / 'UNIT_EXIT_STATE.json').exists():
+        save_json(job / 'UNIT_EXIT_STATE.json', states, exclusive=True)
+    validate_owned_units(job, result, request)
+    result.update(unit_cleanup_intent=True, unit_cleanup_pending=True, unit_cleanup_complete=False)
+    save_json(job / 'STATE.json', result)
+    for name in docs:
+        path = UNITS / name
+        if path.exists(): path.unlink()
+    bounded_system(['daemon-reload'])
+    try:
+        verify_recovery_disabled(job, bounded_system)
+    except Exception:
+        result['recovery_disarmed'] = False
+        save_json(job / 'STATE.json', result)
+        raise
+    need(units_terminal(terminal_unit_states(job, docs, bounded_system)), 'Owned unit became active during finalization')
+    need(all(not (UNITS / n).exists() and not (UNITS / n).is_symlink() for n in docs),
+         'Owned unit file remains after finalization')
+    result.update(unit_cleanup_pending=False, unit_cleanup_complete=True)
+    result.pop('unit_cleanup_error', None)
+    save_json(job / 'STATE.json', result)
+
+
+def collect_job(job):
+    # Called only by the validated staged node, outside work/recovery cgroups.
+    verify_staged_job(job)
+    with lock(job / 'transaction.lock', nonblock=True):
+        result = json.loads(safe_read(job / 'STATE.json'))
+        if result.get('unit_cleanup_protocol') == 1 and result.get('unit_cleanup_pending') is True:
+            try:
+                finalize_units(job, result)
+            except Exception as error:
+                result['unit_cleanup_error'] = str(error)
+                save_json(job / 'STATE.json', result)
+
+
+def status_payload(job):
+    result = json.loads(safe_read(job / 'STATE.json'))
+    files = {}
+    for name in ('STATE.json', 'REQUEST.json', 'ARMED.json', 'ACK.json', 'COMMANDS.jsonl', 'ACTIVE_NFT.json',
+                 'negative-a.pcap', 'negative-b.pcap', 'UNIT_EXIT_STATE.json'):
+        path = job / name
+        if path.exists():
+            raw = safe_read(path)
+            need(len(raw) <= 8_000_000, 'Evidence too large for transport; retrieve from protected job path')
+            files[name] = {'sha256': sha(raw), 'base64': base64.b64encode(raw).decode()}
+    return {'status': result.get('status', result['phase']), 'state': result, 'files': files}
 
 
 POSITIVE_FLOWS = (('a', 'direct'), ('b', 'direct'), ('a', 'service'), ('a', 'dns'), ('b', 'dns'))
@@ -743,6 +892,8 @@ def cleanup(io):
 def run_job(job, recovery=False):
     safe_dir(job)
     need(job.parent == ROOT and re.fullmatch(r'[0-9]{14}-[a-f0-9]{12}', job.name), 'Invalid job path')
+    request = verify_staged_job(job)
+    validate_owned_units(job, json.loads(safe_read(job / 'STATE.json')), request)
     if recovery:
         atomic(job / 'STOP', b'recovery-only\n')
         work, _ = unit_names(job)
@@ -762,6 +913,7 @@ def run_job(job, recovery=False):
         try:
             if not recovery:
                 io.result['diagnostic_outcome'] = 'RUNNING'
+                io.result['mutation_attempted'] = True
                 io.save(io.result)
                 io.preflight()
                 peers = io.create_workload()
@@ -806,7 +958,7 @@ def main():
         install(INSTALL_DATA)
         return
     need(os.geteuid() == 0 and socket.gethostname().split('.')[0] == 'k8s-control01', 'CP1 root required')
-    need(len(sys.argv) in (3, 4) and sys.argv[1] in ('run', 'recover', 'status', 'poll', 'ack'), 'Invalid node invocation')
+    need(len(sys.argv) in (3, 4) and sys.argv[1] in ('run', 'recover', 'status', 'collect', 'poll', 'ack'), 'Invalid node invocation')
     job = Path(sys.argv[2])
     need(job.parent == ROOT and re.fullmatch(r'[0-9]{14}-[a-f0-9]{12}', job.name), 'Invalid job path')
     if sys.argv[1] == 'ack':
@@ -819,17 +971,18 @@ def main():
     elif sys.argv[1] == 'poll':
         state = json.loads(safe_read(job / 'STATE.json'))
         print(json.dumps({k: state.get(k) for k in ('phase', 'management_nonce', 'cleanup_complete', 'recovery_disarmed', 'status')}))
-    elif sys.argv[1] == 'status':
-        result = json.loads(safe_read(job / 'STATE.json'))
-        files = {}
-        for name in ('STATE.json', 'REQUEST.json', 'ARMED.json', 'ACK.json', 'COMMANDS.jsonl', 'ACTIVE_NFT.json',
-                     'negative-a.pcap', 'negative-b.pcap'):
-            path = job / name
-            if path.exists():
-                raw = safe_read(path)
-                need(len(raw) <= 8_000_000, 'Evidence too large for transport; retrieve from protected job path')
-                files[name] = {'sha256': sha(raw), 'base64': base64.b64encode(raw).decode()}
-        print(json.dumps({'status': result.get('status', result['phase']), 'state': result, 'files': files}))
+    elif sys.argv[1] in ('status', 'collect'):
+        collection_error = None
+        if sys.argv[1] == 'collect':
+            try:
+                collect_job(job)
+            except Exception as error:
+                # A busy transaction/source check must not destroy available evidence.
+                collection_error = str(error)
+        payload = status_payload(job)
+        if collection_error: payload['collection_error'] = collection_error
+        print(json.dumps(payload))
+
     else:
         run_job(job, sys.argv[1] == 'recover')
 

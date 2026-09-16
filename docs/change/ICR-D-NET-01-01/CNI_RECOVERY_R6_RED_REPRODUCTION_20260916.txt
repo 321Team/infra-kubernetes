@@ -1,0 +1,19 @@
+BASE=b930b07be8f0716b147585e5cdab04a757737aa8
+MOCK_SYSTEMD=true
+EXPECTED_EXIT_CODE=1
+test_disarm_keeps_running_recovery_definition (test_cni_recovery_lifecycle.ProductionUnits.test_disarm_keeps_running_recovery_definition) ... FAIL
+
+======================================================================
+FAIL: test_disarm_keeps_running_recovery_definition (test_cni_recovery_lifecycle.ProductionUnits.test_disarm_keeps_running_recovery_definition)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/fds-r6-red-7z8nmfps/tests/test_cni_recovery_lifecycle.py", line 73, in test_disarm_keeps_running_recovery_definition
+    self.assertEqual(set(p.name for p in self.units.iterdir()), set(self.docs))
+AssertionError: Items in the second set but not the first:
+'fds-cni-recover-20260916000000-aaaaaaaaaaaa.service'
+'fds-cni-recover-20260916000000-aaaaaaaaaaaa.timer'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.003s
+
+FAILED (failures=1)

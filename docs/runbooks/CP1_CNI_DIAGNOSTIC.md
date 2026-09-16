@@ -1,3 +1,16 @@
+## 2026-09-16 R6 — 운영 recovery 종료 후 unit 정리
+
+R5의 실제 normal은 kernel wrapper 범위이며 운영 실행기 qualification을 대체하지 않는다. R6는 운영 disarm에서 실행 중인 recovery unit을 삭제하지 않도록 보완한다. 변경된 운영 소스는 새 exact-source qualification과 실행 결정이 필요하다.
+
+- `recovery_disarmed=true`는 timer 비활성·대기 job 부재와 service/timer disabled 확인 후 기록한다. 실행 중인 recovery service의 unit 파일은 보존한다.
+- 새 job의 `unit_cleanup_protocol=1`을 확인한 controller는 기존 `--collect`와 execute의 최종 수집에서 **해당 job의 staged node**로 종료 후 정리를 요청한다. 이전 job에 protocol이 없으면 status 조회만 수행하며 새 node 소스를 덮어쓰지 않는다.
+- 정리는 source/manifest/파일 소유권을 다시 확인하고 work/recovery/timer의 종료·PID·queued job 및 fragment/drop-in을 대조한다. 활성 service를 중지하지 않는다. 다른 unit은 제거하지 않는다.
+- `UNIT_EXIT_STATE.json`에 최초 terminal 상태를 보존한 뒤 owned unit 파일을 삭제/reload한다. 도중 실패는 `unit_cleanup_pending=true`로 반출하며 동일 job collect로 재시도한다.
+- `--execute` rc=0은 진단 성공·작업창과 함께 `unit_cleanup_complete=true`, `unit_cleanup_pending=false`까지 요구한다. `--collect` rc=0은 pending/실패 상태를 포함한 증적 수집 성공이며 Runtime 성공이 아니다. 최종 정리 응답 유실 시 먼저 받은 증적과 오류를 보존한다.
+- 새 install은 이전 job의 cleanup/disarm과 새 protocol의 unit 정리까지 확인한다. direct run/recover/collect도 staged source 검증 전에 STOP 또는 systemctl 변경을 하지 않는다.
+
+[R6 자체 점검·검증과 미검증 범위](../change/ICR-D-NET-01-01/CNI_RECOVERY_R6_REVIEW_20260916.md). 현재 R6는 STATIC/MOCK 검증 단계이며 CP1/CP2 적용 지시나 qualification 증적이 아니다.
+
 # CP1 CNI 진단 실행기 — 실행 코드 리뷰용
 
 2026-09-15 구현. **현재 검증은 STATIC/MOCK이며 실서버 실행 지시가 아니다.** 코드 독립 리뷰, 관측 패키지와 일치하는 격리 Linux 통합시험, 실행 결정이 남아 있다. 아래 `--execute`는 이 조건 충족 후 사용하는 인터페이스다.
@@ -30,7 +43,7 @@
 
 - firewall 변경 전 Service HTTP 및 양쪽 DNS control flow가 모두 PASS여야 한다. 장애 진단 대상인 변경 전 direct Pod HTTP의 실패는 허용한다. 변경 후 direct HTTP 양방향·Service HTTP·DNS 양쪽의 5개 positive가 모두 PASS여야 진단 성공으로 기록한다.
 - node는 `diagnostic_outcome`과 `cleanup_complete`/`recovery_disarmed`를 따로 저장한다. 진단 오류·미시험·positive 실패·작업창 초과는 안전한 회수가 끝나도 `DIAGNOSTIC_FAILED_REVIEW_REQUIRED`를 유지하고 work service는 non-zero로 종료한다. 성공한 회수 service는 반복 실패로 처리하지 않는다.
-- controller `--execute`는 안전한 COMPLETE 상태, 진단 성공, positive 5/5 및 작업창 내 완료를 확인해야 rc=0이다. qualification/SSH/ACK/전달 해시 오류·poll 기한 초과는 증적 마감 후 non-zero다. 최초 원격 identity 조회/JSON 오류도 RESULT/archive에 남긴다. 로컬 source 검증·사전 점검을 통과하기 전에는 원격 실행과 증적 디렉터리 생성을 시작하지 않는다.
+- controller `--execute`는 안전한 COMPLETE 상태, 진단 성공, positive 5/5, 작업창 내 완료 및 unit 정리 완료를 확인해야 rc=0이다. qualification/SSH/ACK/전달 해시 오류·poll 기한 초과는 증적 마감 후 non-zero다. 최초 원격 identity 조회/JSON 오류도 RESULT/archive에 남긴다. 로컬 source 검증·사전 점검을 통과하기 전에는 원격 실행과 증적 디렉터리 생성을 시작하지 않는다.
 - `--collect`의 rc=0 / OPERATION_STATUS=EVIDENCE_COLLECTED는 실패 상태를 포함한 증적 수집 성공이다. 원격 진단 결과는 별도로 읽는다. `--recover`의 rc=0 / RECOVERY_REQUESTED는 비동기 회수 요청 접수이며 회수 완료가 아니다. 같은 RUN_ID를 collect하여 cleanup/disarm을 확인한다.
 
 ### 회수 순서

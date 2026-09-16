@@ -40,7 +40,8 @@ kernel = load('regression_kernel', 'run-cni-kernel-integration.py')
 def complete_state():
     return dict(status='DIAGNOSTIC_ONLY_REVIEW_REQUIRED', phase='COMPLETE',
                 cleanup_complete=True, recovery_disarmed=True, diagnostic_outcome='SUCCEEDED',
-                positive_summary=dict(passed=5, failed=0, not_tested=0, total=5), finished_within_window=True)
+                positive_summary=dict(passed=5, failed=0, not_tested=0, total=5), finished_within_window=True,
+                unit_cleanup_protocol=1, unit_cleanup_complete=True, unit_cleanup_pending=False)
 
 
 def controller_child(case, output):
@@ -53,6 +54,10 @@ def controller_child(case, output):
         cp1_hep_transition_not_started=True, same_cp1_change_conflict_clear=True)))
     qualification.write_text('{}')
     state = complete_state()
+    if case in ('unit_pending', 'unit_collect_success', 'unit_collect_rc', 'unit_collect_export_pending', 'unit_collect_export_rc'):
+        state.update(unit_cleanup_complete=False, unit_cleanup_pending=True)
+    if case == 'legacy_collect':
+        for key in ('unit_cleanup_protocol', 'unit_cleanup_complete', 'unit_cleanup_pending'): state.pop(key)
     if case in ('unsafe_terminal', 'poll_deadline', 'immediate_deadline'):
         state.update(status='RECOVERY_REQUIRED' if case == 'unsafe_terminal' else 'RUNNING',
                      phase='RECOVERY_REQUIRED' if case == 'unsafe_terminal' else 'RUNNING',
@@ -87,6 +92,16 @@ def controller_child(case, output):
                 return response(data=dict(state, recovery_disarmed=False))
             return response(data=state)
         if 'ack' in argv: return response(rc=1)
+        if 'collect' in argv:
+            assert argv[-3].startswith(controller.REMOTE_ROOT), argv
+            if case in ('unit_collect_rc', 'unit_collect_export_rc'): return response(rc=1)
+            if case == 'unit_collect_success':
+                state.update(unit_cleanup_complete=True, unit_cleanup_pending=False)
+                exit_raw = b'{"MOCK_ONLY":true}'
+                result['files']['UNIT_EXIT_STATE.json'] = dict(base64=base64.b64encode(exit_raw).decode(),
+                                                              sha256=hashlib.sha256(exit_raw).hexdigest())
+            else: state['unit_cleanup_error'] = 'MOCK_BUSY_UNIT'
+            return response(data=result)
         if 'status' in argv:
             if case == 'empty_status': return response(stdout='')
             return response(rc=int(case == 'status'), data=result)
@@ -108,8 +123,8 @@ def controller_child(case, output):
         ssh_argv=lambda host,args: ['MOCK_SSH',host,*args], archive_output=archive)
     original_inputs, original_load = controller.execution_inputs, controller.load
     args = ['program','--execute','--decision',str(decision),'--qualification',str(qualification)]
-    if case in ('collect_failed', 'recover_request'):
-        args = ['program','--collect' if case == 'collect_failed' else '--recover','20260915000000-aaaaaaaaaaaa']
+    if case in ('collect_failed', 'recover_request', 'unit_collect_export_pending', 'legacy_collect', 'unit_collect_export_rc'):
+        args = ['program','--recover' if case == 'recover_request' else '--collect','20260915000000-aaaaaaaaaaaa']
     ticks = iter([0, 0, 1201] if case == 'poll_deadline' else [0, 1201])
     clock = (lambda: next(ticks)) if case in ('poll_deadline','immediate_deadline') else time.monotonic
     with patch.object(sys,'argv',args), patch.object(controller.socket,'gethostname',return_value='ansible01'), \
@@ -156,9 +171,32 @@ class ControllerRegressions(unittest.TestCase):
         self.assertEqual(result['operation_status'], 'RECOVERY_REQUESTED')
         self.assertFalse(result['result']['recovery_completion_confirmed'])
 
+    def test_execute_finalizes_staged_units_before_success(self):
+        result = self.run_case('unit_collect_success', True)
+        self.assertEqual(result['operation_status'], 'EXECUTION_COMPLETE')
+        self.assertTrue(result['unit_cleanup_complete'])
+
+    def test_collect_can_export_pending_without_claiming_execution_complete(self):
+        result = self.run_case('unit_collect_export_pending', True)
+        self.assertEqual(result['operation_status'], 'EVIDENCE_COLLECTED')
+        self.assertTrue(result['unit_cleanup_pending'])
+        self.assertEqual(result['result']['state']['unit_cleanup_error'], 'MOCK_BUSY_UNIT')
+
+    def test_old_staged_node_is_read_only_without_protocol(self):
+        result = self.run_case('legacy_collect', True)
+        self.assertEqual(result['operation_status'], 'EVIDENCE_COLLECTED')
+        self.assertIsNone(result['unit_cleanup_complete'])
+
+    def test_failed_finalization_transport_keeps_initial_evidence(self):
+        result = self.run_case('unit_collect_export_rc', True)
+        self.assertEqual(result['operation_status'], 'EVIDENCE_COLLECTED')
+        self.assertTrue(result['unit_cleanup_pending'])
+        self.assertIn('collection_error', result['result'])
+
 
 for _case in ('qualification','launch','poll','ack','artifact_hash','status','unsafe_terminal',
-              'poll_deadline','immediate_deadline','identity_rc','identity_json','diagnostic_failed','empty_status'):
+              'poll_deadline','immediate_deadline','identity_rc','identity_json','diagnostic_failed','empty_status',
+              'unit_pending', 'unit_collect_rc'):
     def test(self, case=_case): self.run_case(case)
     setattr(ControllerRegressions, 'test_' + _case + '_fails_after_archiving', test)
 
@@ -184,6 +222,7 @@ class NodeRegressions(unittest.TestCase):
                                                            validate_native_policy=Mock(return_value={})))
         self.fixture.probes = lambda peers, **kw: copy.deepcopy(self.pre if kw else self.post)
         for p in (patch.object(node,'safe_dir'), patch.object(node,'lock',return_value=nullcontext()),
+                  patch.object(node,'verify_staged_job'), patch.object(node,'validate_owned_units'),
                   patch.object(node,'Linux',return_value=self.fixture), patch.object(node,'save_json'),
                   patch.object(node,'safe_read',return_value=b'{}'),
                   patch.object(node,'system',return_value='not-found'), patch.object(node,'atomic'),

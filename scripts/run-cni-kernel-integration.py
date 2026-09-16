@@ -515,7 +515,7 @@ def documents(job, scenario):
     unit[unit_name(job, 'recover') + '.service'] = (prefix + 'Type=oneshot\nTimeoutStartSec=150\n'
         'ExecStart=/usr/bin/python3 -I -B ' + program + ' _recover ' + job.name + '\n[Install]\nWantedBy=multi-user.target\n')
     # Accelerated cases test this wrapper's recovery, not production 20-minute behavior.
-    delay = 90 if scenario in ('kill', 'deadline', 'cleanup-retry') else 1020
+    delay = 300 if scenario in ('kill', 'deadline', 'cleanup-retry') else 1020
     unit[unit_name(job, 'recover') + '.timer'] = ('[Unit]\nDescription=FDS component deadline/retry\n[Timer]\n'
         'OnActiveSec=' + str(delay) + 's\nOnUnitInactiveSec=30s\nAccuracySec=1s\nUnit=' + unit_name(job, 'recover') + '.service\n[Install]\nWantedBy=timers.target\n')
     unit[unit_name(job, 'bus') + '.service'] = (prefix + 'Type=exec\nRuntimeMaxSec=1200\n'
@@ -651,7 +651,8 @@ def start(decision_path, scenario):
         need(system(['is-enabled', recovery + '.service']) == 'enabled', 'Boot recovery not armed')
         next_time = system(['show', recovery + '.timer', '-p', 'NextElapseUSecMonotonic', '--value'])
         need(next_time not in ('', '0'), 'Timer has no scheduled deadline')
-        node.save_json(job / 'ARMED.json', dict(next_elapse=next_time, armed_at=time.time()))
+        node.save_json(job / 'ARMED.json', dict(next_elapse=next_time, armed_at=time.time(),
+                       armed_boottime=time.clock_gettime(time.CLOCK_BOOTTIME), armed_monotonic=time.monotonic()))
         system(['start', '--no-block', unit_name(job, 'work') + '.service'])
     print('STATUS=STARTED_KERNEL_COMPONENT_ONLY')
 
@@ -884,12 +885,53 @@ class Lab:
         need(not observed['expectation_errors'], 'Component flow failed: ' + label + ': ' + ', '.join(observed['expectation_errors']))
 
 
+def mark_scenario_target(lab):
+    """A durable reach/intent marker is not proof that the fault took place."""
+    scenario = lab.request['scenario']
+    if scenario == 'normal': return
+    lab.guard()
+    event = dict(scenario=scenario, target_state='REACHED', target_phase='PRIVATE_POLICY_ACTIVE',
+                 target_reached_at=time.time(), target_reached_boottime=time.clock_gettime(time.CLOCK_BOOTTIME),
+                 injection_intent={'kill':'SIGKILL', 'cleanup-retry':'SIGKILL_THEN_RECOVERY_RETRY',
+                                   'deadline':'WAIT_TIMER', 'reboot':'WAIT_OPERATOR_REBOOT'}[scenario],
+                 verdict='REVIEW_REQUIRED')
+    lab.result['scenario_observation'] = event
+    node.save_json(lab.job / 'RESULT.json', lab.result)
+
+
+def record_scenario_recovery(lab, work_state=None):
+    scenario = lab.request['scenario']
+    if scenario == 'normal': return
+    event = lab.result.setdefault('scenario_observation', dict(scenario=scenario, target_state='NOT_REACHED'))
+    event.update(recovery_observed_at=time.time(), boot_changed=lab.boot_changed, verdict='REVIEW_REQUIRED')
+    if work_state is not None:
+        event.setdefault('work_before_recovery_stop', work_state)
+    if event.get('target_state') != 'REACHED':
+        event['verdict'] = 'NOT_REACHED'
+        lab.result.setdefault('component_error', 'Scenario target not reached: ' + scenario)
+    else:
+        state = event.get('work_before_recovery_stop', {})
+        # SIGKILL intent alone is insufficient: record the exited worker observed
+        # BEFORE recovery stops it, so recovery's own signal cannot count as injection.
+        event['sigkill_observed'] = (state.get('ExecMainCode') == '2' and state.get('ExecMainStatus') == '9'
+                                     and state.get('ActiveState') == 'failed')
+        if (lab.job / 'ARMED.json').exists() and not lab.boot_changed:
+            armed = read_json(lab.job / 'ARMED.json')
+            if 'armed_monotonic' in armed:
+                event['armed_elapsed_seconds'] = time.monotonic() - armed['armed_monotonic']
+        if scenario == 'deadline':
+            event['accelerated_deadline_elapsed'] = event.get('armed_elapsed_seconds', -1) >= 300
+    node.save_json(lab.job / 'RESULT.json', lab.result)
+
+
 def cleanup(lab):
     """Recover core transaction when available, then remove only owned fixture resources.
 
     Namespace teardown is the independent containment fallback. Failure to restore
     the private firewall is retained as a failed component test, never hidden.
     """
+    if hasattr(lab, 'request') and lab.request.get('scenario', 'normal') != 'normal':
+        record_scenario_recovery(lab)
     docs = recovery_unit_check(lab.job, lab.result)
     if lab.result.get('cleanup_complete'):
         disarm(lab, docs)
@@ -994,9 +1036,11 @@ def execute(job, recovery=False):
     # service/cgroup actions or transaction mutation.
     verify_staged_sources(job, executing=True)
     recovery_unit_check(job, read_json(job / 'RESULT.json'))
+    work_state = None
     if recovery:
         node.atomic(job / 'STOP', b'recovery-only\n')
         observed_work = system(['show', unit_name(job, 'work') + '.service', '-p', 'ActiveState', '-p', 'Result', '-p', 'ExecMainCode', '-p', 'ExecMainStatus'])
+        work_state = dict(line.split('=', 1) for line in observed_work.splitlines() if '=' in line)
         node.atomic(job / ('WORK_RECOVERY_' + str(time.time_ns()) + '.log'), observed_work.encode(), exclusive=True)
         if system(['show', unit_name(job, 'work') + '.service', '-p', 'LoadState', '--value']) != 'not-found':
             system(['stop', unit_name(job, 'work') + '.service'])
@@ -1006,7 +1050,10 @@ def execute(job, recovery=False):
             return
         if recovery:
             lab.result['recovery_attempts'] += 1; node.save_json(job / 'RESULT.json', lab.result)
-            if lab.request['scenario'] == 'cleanup-retry' and lab.result['recovery_attempts'] == 1:
+            record_scenario_recovery(lab, work_state)
+            if (lab.request['scenario'] == 'cleanup-retry' and lab.result['recovery_attempts'] == 1 and
+                    lab.result.get('scenario_observation', {}).get('target_state') == 'REACHED' and
+                    lab.result['scenario_observation'].get('sigkill_observed') is True):
                 lab.result['injected_cleanup_retry'] = True; node.save_json(job / 'RESULT.json', lab.result)
                 raise ValueError('Intentional first recovery attempt failure; retry timer remains armed')
             try:
@@ -1024,6 +1071,7 @@ def execute(job, recovery=False):
             lab.result['native_scope'] = core.validate_native_policy(nft, peers[:2])
             lab.result['phase'] = 'PRIVATE_POLICY_ACTIVE'; node.save_json(job / 'RESULT.json', lab.result)
             scenario = lab.request['scenario']
+            mark_scenario_target(lab)
             if scenario in ('kill', 'cleanup-retry'):
                 lab.result['intentional_sigkill_at'] = time.time(); node.save_json(job / 'RESULT.json', lab.result)
                 os.kill(os.getpid(), signal.SIGKILL)
@@ -1095,6 +1143,7 @@ def collect(job):
                    if label in flows else dict(communication='NOT_TESTED', evidence='NOT_TESTED') for label in labels},
             recovery={key: result.get(key) for key in ('shared_transaction_restored', 'cleanup_complete',
                 'fixture_namespaces_absent', 'host_configuration_unchanged', 'recovery_disarmed', 'unit_cleanup_complete')},
+            scenario_observation=result.get('scenario_observation', {'verdict': 'NOT_APPLICABLE'}),
             acceptance_criteria_credit=False))
         matrix = dict(schema='fds.cni-kernel-component-matrix.v1', scope='NOT_PRODUCTION_QUALIFICATION',
                       cases={n: 'NOT_TESTED' for n in core.QUALIFICATION_CASES},
