@@ -1,0 +1,45 @@
+{
+  "actual_cp1_tested": false,
+  "authorizes_deployment": false,
+  "cases": [
+    {
+      "case": "policy-active",
+      "pass": true,
+      "upstream_output": "fds-cp1-managed (active)\n  disable: no\n  priority: -1\n  target: CONTINUE\n  ingress-zones: public\n  egress-zones: public\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" source ipset=\"fds-cp1-managed\" destination ipset=\"fds-cp1-managed\" accept"
+    },
+    {
+      "case": "policy-disabled",
+      "pass": true,
+      "upstream_output": "fds-cp1-managed (disabled)\n  disable: yes\n  priority: -1\n  target: CONTINUE\n  ingress-zones: public\n  egress-zones: public\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" source ipset=\"fds-cp1-managed\" destination ipset=\"fds-cp1-managed\" accept"
+    },
+    {
+      "case": "set-empty",
+      "pass": true,
+      "upstream_output": "fds-cp1-managed\n  type: hash:net,iface\n  options: family=inet\n  entries: "
+    },
+    {
+      "case": "set-populated",
+      "pass": true,
+      "upstream_output": "fds-cp1-managed\n  type: hash:net,iface\n  options: family=inet\n  entries: 10.244.246.80/32,cali0123456789a"
+    },
+    {
+      "case": "public-active-default",
+      "pass": true,
+      "upstream_output": "public (default, active)\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: ens160\n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: "
+    }
+  ],
+  "daemon_tested": false,
+  "functions_executed": [
+    "print_ipset_info",
+    "print_policy_info",
+    "print_zone_info",
+    "print_zone_policy_info"
+  ],
+  "kernel_tested": false,
+  "settings_are_test_doubles": true,
+  "source": "https://github.com/firewalld/firewalld/blob/v2.4.3/src/firewall/command.py",
+  "status": "PINNED_UPSTREAM_FORMATTER_PROBE_PASS",
+  "systemd_tested": false,
+  "upstream_git_blob": "8d84f4222fc2e27cb2184fe56c0452fd450a9e2a",
+  "upstream_sha256": "62f74246de2419030e2ca1fab43f1caf46814cad8abff6895a94173528edd8ec"
+}
