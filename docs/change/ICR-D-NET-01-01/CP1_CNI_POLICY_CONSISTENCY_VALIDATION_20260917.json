@@ -1,0 +1,44 @@
+{
+  "schema": "fds.cp1-cni-policy-consistency-validation.v1",
+  "validated_at": "2026-09-16T16:55:48.218479+00:00",
+  "parent_commit": "ac30186588a9977dbfcf84e85d015b527aaac3ae",
+  "status": "STATIC_MOCK_PASS",
+  "unittest": {
+    "total": 124,
+    "new": 15,
+    "existing": 109,
+    "passed": 124
+  },
+  "source_sha256": {
+    "scripts/prepare-cp1-cni-policy.py": "c6a940dcf849821fe738a7e5e9e631c2a17e5f000ae18691635d657a0409a665",
+    "tests/test_cp1_cni_policy.py": "1214e8623bda1eda65bd80bb8edf83ef45262442a4e793f10ce287602e2c1fba",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_PUBLIC_POLICY_CANDIDATE_20260917.md": "bd20b05b214fcb4929b5453239142ed92e0fd55fad71d3035f84cce7f9231a3f",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_POLICY_CONSISTENCY_20260917.md": "3ebe805bea367f86a78395f997b1560d2fce54d51efdfd915960d424c47d6e19",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_POLICY_CONSISTENCY_TEST_20260917.txt": "5faa463e203b6b7602f1c0e5f9b19a2b61cf6ba76f4830fef2def41635b03971"
+  },
+  "unchanged_sha256": {
+    "scripts/check-cp1-cni-handoff.py": "8fbc4d03fd76fecd27bd6f82a3672f4d0220ed1db8c331c61d9310c98d7db1d3",
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc",
+    "tests/probe_cp1_cni_upstream.py": "462ffa777eff95e0bf553eb4b7e36fc7aaac22c79f43e3b0ff4993d02beeea6c"
+  },
+  "upstream_output_source": {
+    "ref": "v2.4.3",
+    "path": "src/firewall/command.py",
+    "git_blob": "8d84f4222fc2e27cb2184fe56c0452fd450a9e2a",
+    "method": "FirewallCommand.print_zone_policy_info",
+    "verification": "SOURCE_INSPECTION_ONLY"
+  },
+  "runtime_executed": false,
+  "new_ci_result": false,
+  "operational_approval": false,
+  "apply_recovery_implemented": false,
+  "production_consumer_connected": false,
+  "limitations": [
+    "Two observations are not atomic and cannot exclude transient ABA changes.",
+    "Native normalization is a structural consistency check, not a packet-semantics validator.",
+    "Static exact-veth scope does not support new Pods or guarantee Join-period continuity.",
+    "Prior single-sample captures are retained as historical evidence; missing observations are never fabricated."
+  ]
+}

@@ -14,6 +14,8 @@
 고정 목록을 Join 기간의 지속 정책으로 승격하지 않는다.
 
 이번에 완료한 부분은 읽기 전용 현장 수집기, 비실행 XML 후보 생성기, upstream 함수 검증과 회귀시험이다.
+후속 자체 점검에서 zone/ipset/native의 단일 관측 누락을 보완했다. 현재 전후 관측 검사와 한계는 아래 및
+`CP1_CNI_POLICY_CONSISTENCY_20260917.md`를 따른다. 최초 109개 검증 기록은 당시 커밋의 기록으로 보존한다.
 **실제 적용/회수기, kernel 검증, 새로운 변경 영수증 생산자, 후속 controller 연결은 미구현**이다.
 이 후보의 승인이나 현장 성공 결과는 없다. 기존 #11 승인·기존 영수증을 이 후보의 승인으로 사용하지 않는다.
 
@@ -54,7 +56,7 @@ public 정의를 바꾸지 않아도 activation reload가 기존 Runtime 6개를
 
 `scripts/prepare-cp1-cni-policy.py`는 두 모드만 제공한다.
 
-- `collect`: 고정된 기존 CP1 helper의 root/호스트/ens160 식별 검사를 사용한다. 방화벽/protection 전후 상태, 전체 zone/ipset 정의, Pod, IPAM/affinity, veth/route, workload network policy, native 규칙을 한 파일로 수집한다. 개별 조회가 실패해도 가능한 후속 조회와 오류를 보존한다. 전체 command budget은 240초다.
+- `collect`: 고정된 기존 CP1 helper의 root/호스트/ens160 식별 검사를 사용한다. 방화벽/protection, 전체 zone/ipset 목록과 정의, Pod, IPAM/affinity, veth/route, workload network policy, native 규칙, boot/version/firewalld 설정을 전후 한 쌍으로 수집한다. 개별 조회가 실패해도 가능한 후속 조회와 오류를 보존한다. 전체 command budget은 240초다.
 - `plan`: 외부 SHA256이 일치하는 수집물과 원 영수증을 읽는다. 원본 생산자의 실제 코드로 원 영수증을 검증하고, 이전 after와 현재 firewall의 전체 일치를 요구한다. 소유 IPAM block, confirmed affinity, Ready Pod, /32 host route, 실제 veth·ifindex·peer index, 목록의 전후 동일성을 검사한다. 기존 이름 충돌·누락·잘린 출력·경고 결과는 차단한다.
 
 생성 결과는 `DRAFT_NOT_EXECUTABLE`이고 XML은 JSON 안의 검토용 문자열이다. `/etc/firewalld`에 쓰거나 daemon을 reload하지 않는다.
@@ -64,6 +66,15 @@ public 정의를 바꾸지 않아도 activation reload가 기존 Runtime 6개를
 과거 수집물로도 후보 비교를 할 수 있도록 계획 생성에 15분 재수집 조건을 붙이지 않았다. 대신 관측 종료 시각·경과 시간을 출력하며 `fresh_for_activation=false`를 유지한다.
 실제 적용 직전 fresh 확인은 후속 실행기의 책임이다. 초안 리뷰를 기다리는 동안 유효기간이 지나 다시 VM 왕복을 하는 절차를 만들지 않는다.
 현재 사용자에게 이 수집기의 실행이나 새 VM 반입을 요청하지 않는다.
+
+전후 zone/ipset 정의·native 구조가 다르면 계획 생성을 중단한다. native 비교에서는 명시적 packet/byte counter 통계만 제외하며,
+원문 양쪽 해시는 보존한다. handle·순서·verdict·set entry·timeout·quota는 제외하지 않는다.
+두 표본이 같아도 중간에 바뀌었다가 돌아온 상태(ABA)를 배제하거나 원자적 snapshot을 입증하지 못한다.
+다른 zone의 명시적/prefix 인터페이스 배정이 대상 veth를 포함하면 중단한다. source 기반 zone은 전부 별도 분류 분석 대상으로 중단하며,
+비충돌이라고 추측해 통과시키지 않는다. 이것은 실제 native 우선순위·전체 경로 검증을 대체하지 않는다.
+
+이전 단일 표본 수집물을 새 검사의 성공 입력으로 변환하거나 누락된 두 번째 표본을 복제하지 않는다.
+이전 자료는 이전 버전의 후보 비교 자료로 남기고, 새 방식의 수집은 운영 메커니즘 확정 후 실제 필요한 창에 한 번 수행한다.
 
 ## 적용·회수 연결 시의 확정할 작업
 
@@ -96,6 +107,7 @@ probe는 파일 해시를 먼저 검사하고 upstream 메서드 AST를 그대�
 테스트 더블은 policy/zone/ipset 모델, rich rule 객체 구성, 단순 packet matcher이다. 실제 XML parser, D-Bus, rule transaction, kernel은 실행하지 않았다.
 개발 환경에는 `CAP_NET_ADMIN`과 nft/firewalld 실행 환경이 없으므로 이 결과를 kernel runtime 시험으로 바꾸어 표현하지 않는다.
 
-검증 수치는 신규 25개 + 기존 84개 = **109/109 STATIC/MOCK**, 별도로 upstream 함수의 18개 매치 사례다.
+최초 검증 수치는 신규 25개 + 기존 84개 = **109/109 STATIC/MOCK**, 별도로 upstream 함수의 18개 매치 사례다.
+현재 수집 일관성 보완은 추가 15개를 포함한 **124/124 STATIC/MOCK**이다. upstream probe 코드는 바뀌지 않았고 이번에 재실행하지 않았다.
 후자의 개수를 통합 Runtime/인수 시험 수에 더하지 않는다. 결과 원본과 정확한 해시는 동봉한 JSON/TXT를 따른다.
 실서버 변경·새 VM 시험·새 리뷰 요청·병합·CP1 인수·CP2/3/Join·AC 완료는 수행하지 않았다.

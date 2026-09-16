@@ -136,21 +136,21 @@ def collect(node, current=None):
             'calico_networkpolicies': ['get', 'networkpolicies.crd.projectcalico.org', '-A', '-o', 'json'],
         }.items():
             query[name] = backend.kubectl(args)
-        for plane in ('runtime', 'permanent'):
-            prefix = ['firewall-cmd'] + (['--permanent'] if plane == 'permanent' else [])
-            for kind in ('zones', 'ipsets'):
-                result = run(plane + '/' + kind, prefix + ['--get-' + kind])
-                try:
-                    names = successful(result).split()
-                    need(len(names) == len(set(names)) and len(names) <= 128 and
-                         all(re.fullmatch(r'[A-Za-z0-9_-]+', n) for n in names), 'unsafe object inventory')
-                    for name in sorted(names):
-                        run(plane + '/' + kind + '/' + name, prefix + ['--info-' + kind[:-1] + '=' + name])
-                except (ValueError, KeyError) as error:
-                    report['errors'].append(plane + '/' + kind + ': ' + str(error))
+        def inventory(suffix=''):
+            for plane in ('runtime', 'permanent'):
+                prefix = ['firewall-cmd'] + (['--permanent'] if plane == 'permanent' else [])
+                for kind in ('zones', 'ipsets'):
+                    key = plane + '/' + kind + suffix
+                    result = run(key, prefix + ['--get-' + kind])
+                    try:
+                        names = inventory_names(successful(result))
+                        for name in names:
+                            run(key + '/' + name, prefix + ['--info-' + kind[:-1] + '=' + name])
+                    except (ValueError, KeyError) as error:
+                        report['errors'].append(key + ': ' + str(error))
+        inventory()
         # Full firewall/protection and membership sampling on both sides. The
         # capture is still not atomic; the executor must check again in-window.
-        state('after')
         run('links_after', ['ip', '-j', '-d', 'link', 'show'])
         run('routes_after', ['ip', '-j', '-4', 'route', 'show', 'table', 'all'])
         query['pods_after'] = backend.kubectl(['get', 'pods', '-A', '-o', 'json'])
@@ -158,12 +158,109 @@ def collect(node, current=None):
         query['affinities_after'] = backend.kubectl(['get', 'blockaffinities.crd.projectcalico.org', '-o', 'json'])
         query['networkpolicies_after'] = backend.kubectl(['get', 'networkpolicies.networking.k8s.io', '-A', '-o', 'json'])
         query['calico_networkpolicies_after'] = backend.kubectl(['get', 'networkpolicies.crd.projectcalico.org', '-A', '-o', 'json'])
+        inventory('_after')
+        run('native_after', ['nft', '-j', 'list', 'ruleset'])
+        run('version_after', ['firewall-cmd', '--version'])
+        run('firewalld_config_after', ['cat', '/etc/firewalld/firewalld.conf'])
+        run('boot_after', ['cat', '/proc/sys/kernel/random/boot_id'])
+        state('after')
     finally:
         backend.cache.cleanup()
         node.COMMAND_STATE['deadline'] = None
     report['ended_at'] = current().isoformat()
     report['status'] = 'CAPTURED_REVIEW_REQUIRED'
     return report
+
+
+def inventory_names(raw):
+    names = raw.split()
+    need(len(names) == len(set(names)) and len(names) <= 128 and
+         all(re.fullmatch(r'[A-Za-z0-9_-]+', n) for n in names), 'unsafe object inventory')
+    return sorted(names)
+
+
+def inventory_snapshot(queries, suffix=''):
+    result = {}
+    for plane in ('runtime', 'permanent'):
+        result[plane] = {}
+        for kind in ('zones', 'ipsets'):
+            key = plane + '/' + kind + suffix
+            need(key in queries, 'paired inventory absent: ' + key)
+            names = inventory_names(queries[key])
+            need(all(key + '/' + name in queries for name in names), 'inventory definition missing')
+            need({k for k in queries if k.startswith(key + '/')} == {key + '/' + n for n in names},
+                 'unlisted inventory definition')
+            result[plane][kind] = {name: queries[key + '/' + name] for name in names}
+        need('public' in result[plane]['zones'], 'public zone absent')
+    return result
+
+
+def native_structure(native):
+    """Compare two observations without treating packet counter increments as drift.
+
+    Only explicit rule counter statistics and named-counter statistics are zeroed.
+    Handles, rule/list order, matches, verdicts, set elements/timeouts, quotas and
+    all other fields stay in the comparison. This is not a semantic nft verifier.
+    """
+    result = copy.deepcopy(native)
+    need(isinstance(result, dict) and isinstance(result.get('nftables'), list) and result['nftables'],
+         'native rules absent')
+    def counters(value):
+        if isinstance(value, dict):
+            if set(value) == {'counter'} and isinstance(value['counter'], dict):
+                stats = value['counter']
+                if set(stats) == {'packets', 'bytes'}:
+                    need(all(type(n) is int and n >= 0 for n in stats.values()), 'invalid counter statistics')
+                    stats.update(packets=0, bytes=0)
+            for child in value.values():
+                counters(child)
+        elif isinstance(value, list):
+            for child in value:
+                counters(child)
+    for item in result['nftables']:
+        need(isinstance(item, dict) and len(item) == 1, 'ambiguous native object')
+        if 'rule' in item:
+            need(isinstance(item['rule'], dict) and isinstance(item['rule'].get('expr'), list),
+                 'native rule expressions absent')
+            counters(item['rule']['expr'])
+        if 'counter' in item:
+            counter = item['counter']
+            need(isinstance(counter, dict) and {'name', 'family', 'table', 'packets', 'bytes'} <= set(counter),
+                 'named counter incomplete')
+            need(all(type(counter[k]) is int and counter[k] >= 0 for k in ('packets', 'bytes')),
+                 'invalid counter statistics')
+            counter.update(packets=0, bytes=0)
+    return result
+
+
+def validate_public_classification(inventory, peers):
+    """Conservative eligibility screen; no claim to reproduce zone dispatch.
+
+    Source-based non-public classification needs a separate reviewed analysis.
+    An exact or prefix interface assignment of any candidate veth also blocks.
+    """
+    names = {p['interface'] for p in peers}
+    for plane in ('runtime', 'permanent'):
+        for name, raw in inventory[plane]['zones'].items():
+            lines = raw.splitlines()
+            need(lines and lines[0].split() and lines[0].split()[0] == name,
+                 'zone header differs from inventory name')
+            fields = {}
+            for line in lines[1:]:
+                # --info-zone's top-level classification fields only.
+                if line.startswith('  ') and not line.startswith('    ') and ':' in line:
+                    key, value = line.strip().split(':', 1)
+                    need(key not in fields, 'duplicate zone field')
+                    fields[key] = value.strip()
+            need({'interfaces', 'sources'} <= set(fields), 'zone classification fields absent')
+            need(not fields['sources'], 'source-based zone requires separate classification review')
+            if name != 'public':
+                for interface in fields['interfaces'].split():
+                    need(not any(c in interface for c in '*?[]') and '+' not in interface[:-1],
+                         'unsupported zone interface pattern')
+                    matches = (any(n.startswith(interface[:-1]) for n in names) if interface.endswith('+')
+                               else interface in names)
+                    need(not matches, 'candidate veth assigned to non-public zone')
 
 
 def memberships(pods, blocks, affinities, links, routes):
@@ -249,6 +346,8 @@ def prepare(capture, original, original_input_sha256, capture_input_sha256, curr
     for result in capture['queries'].values():
         successful(result)
     q = {k: successful(v) for k, v in capture['queries'].items()}
+    for key in ('version', 'boot', 'firewalld_config'):
+        need(key + '_after' in q and q[key] == q[key + '_after'], key + ' changed/missing during capture')
     need(q['version'] == '2.4.3', 'unverified firewalld version')
     need(re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', q['boot']), 'boot identity absent')
     settings = {}
@@ -267,17 +366,16 @@ def prepare(capture, original, original_input_sha256, capture_input_sha256, curr
     need(fingerprint(before['stable']['firewall']) == fingerprint(accepted['after']), 'original accepted after differs')
     fw = before['stable']['firewall']
     need(fw['hostname'] == HOST and fw['default_zone'] == fw['active_zone'] == 'public', 'zone/host differs')
+    inventory = inventory_snapshot(q)
     for plane in ('runtime', 'permanent'):
-        names = q[plane + '/zones'].split()
-        need('public' in names, 'public zone absent')
-        for kind in ('zones', 'ipsets'):
-            for name in q[plane + '/' + kind].split():
-                need(plane + '/' + kind + '/' + name in q, 'inventory definition missing')
-        need(IPSET not in q[plane + '/ipsets'].split(), 'ipset name collision')
+        need(IPSET not in inventory[plane]['ipsets'], 'ipset name collision')
         need(POLICY not in fw['active_policies']['configurations'][plane], 'policy name collision')
+    need(fingerprint(inventory) == fingerprint(inventory_snapshot(q, '_after')),
+         'zone/ipset inventory changed during capture')
     first = memberships(parse(q['pods']), parse(q['blocks']), parse(q['affinities']), parse(q['links']), parse(q['routes']))
     last = memberships(parse(q['pods_after']), parse(q['blocks_after']), parse(q['affinities_after']), parse(q['links_after']), parse(q['routes_after']))
     need(first == last, 'Pod/route/interface membership changed during capture')
+    validate_public_classification(inventory, first)
     def policy_specs(raw):
         return sorted([{'namespace': v['metadata'].get('namespace', ''), 'name': v['metadata']['name'],
                         'uid': v['metadata']['uid'], 'spec': v['spec']} for v in parse(raw)['items']],
@@ -286,7 +384,11 @@ def prepare(capture, original, original_input_sha256, capture_input_sha256, curr
         need(fingerprint(policy_specs(q[key])) == fingerprint(policy_specs(q[key + '_after'])),
              'workload network policy changed during capture')
     native = parse(q['native'])
-    need(isinstance(native.get('nftables'), list) and native['nftables'], 'native rules absent')
+    need('native_after' in q, 'paired native observation absent')
+    native_after = parse(q['native_after'])
+    native_stable = native_structure(native)
+    need(fingerprint(native_stable) == fingerprint(native_structure(native_after)),
+         'native structure changed during capture')
     generated = documents(first)
     return {'schema': 'fds.cp1-cni-policy-proposal.v1', 'status': 'DRAFT_NOT_EXECUTABLE',
             'mechanism': 'PUBLIC_POLICY_EXACT_VETH_IPSET', 'scope': {'host': HOST, 'block': str(BLOCK),
@@ -300,6 +402,11 @@ def prepare(capture, original, original_input_sha256, capture_input_sha256, curr
             'boot_id': q['boot'], 'memberships': first, 'memberships_sha256': fingerprint(first),
             'documents': generated, 'document_sha256': {k: digest(v.encode()) for k, v in generated.items()},
             'native_before_sha256': fingerprint(native),
+            'native_after_sha256': fingerprint(native_after),
+            'native_structure_sha256': fingerprint(native_stable),
+            'inventory_sha256': fingerprint(inventory),
+            'consistency': {'paired_observations': True, 'atomic_snapshot': False,
+                            'native_semantics_verified': False, 'transient_aba_changes_excluded': False},
             'preservation': {'zone_bindings_changed': False, 'public_definition_changed': False,
                              'host_policy_added': False, 'external_accept_added': False,
                              'runtime_preservation_proven': False},

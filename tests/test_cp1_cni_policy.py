@@ -42,9 +42,17 @@ def fixture():
            'networkpolicies': {'items': []}, 'calico_networkpolicies': {'items': []},
            'native': {'nftables': [{'table': {'family': 'inet', 'name': 'firewalld'}}]},
            'runtime/zones': 'public', 'permanent/zones': 'public',
-           'runtime/zones/public': 'public\n target: default',
-           'permanent/zones/public': 'public\n target: default', 'runtime/ipsets': '', 'permanent/ipsets': ''}
-    for key in ('pods', 'blocks', 'links', 'routes', 'affinities', 'networkpolicies', 'calico_networkpolicies'):
+           'runtime/zones/public': 'public\n  target: default\n  interfaces: ens160\n  sources:',
+           'permanent/zones/public': 'public\n  target: default\n  interfaces:\n  sources:',
+           'runtime/ipsets': '', 'permanent/ipsets': ''}
+    for plane in ('runtime', 'permanent'):
+        for kind in ('zones', 'ipsets'):
+            key = plane + '/' + kind
+            raw[key + '_after'] = raw[key]
+            for name in raw[key].split():
+                raw[key + '_after/' + name] = raw[key + '/' + name]
+    for key in ('pods', 'blocks', 'links', 'routes', 'affinities', 'networkpolicies', 'calico_networkpolicies',
+                'version', 'boot', 'firewalld_config', 'native'):
         raw[key + '_after'] = copy.deepcopy(raw[key])
     queries = {k: {'rc': 0, 'stdout': v if isinstance(v, str) else json.dumps(v), 'stderr': ''}
                for k, v in raw.items()}
@@ -175,10 +183,12 @@ class PolicyProposalTests(unittest.TestCase):
 
     def test_unsupported_version_rejected(self):
         self.data['capture']['queries']['version']['stdout'] = '2.3.0'
+        self.data['capture']['queries']['version_after']['stdout'] = '2.3.0'
         self.reject('unverified firewalld')
 
     def test_iptables_backend_rejected(self):
         self.data['capture']['queries']['firewalld_config']['stdout'] = 'FirewallBackend=iptables'
+        self.data['capture']['queries']['firewalld_config_after']['stdout'] = 'FirewallBackend=iptables'
         self.reject('nftables backend')
 
     def test_original_receipt_is_not_rewritten_or_cni_stripped(self):
@@ -252,6 +262,176 @@ class PolicyProposalTests(unittest.TestCase):
     def test_inventory_missing_definition_rejected(self):
         self.data['capture']['queries']['runtime/zones']['stdout'] += ' other'
         self.reject('inventory definition missing')
+
+    def test_collection_repeats_inventory_native_and_identity_in_one_capture(self):
+        calls = []
+        class Backend:
+            def __init__(self, _):
+                self.cache = type('Cache', (), {'cleanup': lambda _: None})()
+            def identity(self):
+                pass
+            def cp1_state(self):
+                return self_test.data['capture']['state']['before']
+            def kubectl(self, args):
+                return command(['kubectl'] + args)
+        def command(argv):
+            calls.append(argv)
+            result = 'public' if '--get-zones' in argv else ('existing' if '--get-ipsets' in argv else '{}')
+            return {'rc': 0, 'stdout': result, 'stderr': ''}
+        class Node:
+            COMMAND_STATE = {}
+            BaseBackend = Backend
+        self_test = self
+        Node.command = staticmethod(command)
+        report = p.collect(Node, lambda: NOW)
+        for key in ('runtime/zones', 'permanent/zones', 'runtime/ipsets', 'permanent/ipsets',
+                    'native', 'version', 'boot', 'firewalld_config'):
+            self.assertIn(key, report['queries'])
+            self.assertIn(key + '_after', report['queries'])
+        for plane in ('runtime', 'permanent'):
+            self.assertIn(plane + '/ipsets_after/existing', report['queries'])
+            self.assertIn(plane + '/zones_after/public', report['queries'])
+        self.assertEqual(calls.count(['nft', '-j', 'list', 'ruleset']), 2)
+
+    def test_second_sample_failure_preserved_and_plan_rejected(self):
+        self.data['capture']['queries']['native_after'].update(rc=124, stderr='COMMAND_TIMEOUT')
+        self.reject('incomplete/uncertain')
+
+    def test_legacy_single_sample_does_not_satisfy_new_consistency_check(self):
+        del self.data['capture']['queries']['runtime/ipsets_after']
+        self.reject('paired inventory absent')
+
+    def test_boot_version_and_config_change_rejected(self):
+        for key in ('boot', 'version', 'firewalld_config'):
+            with self.subTest(key=key):
+                self.data = fixture()
+                self.data['capture']['queries'][key + '_after']['stdout'] += ' changed'
+                self.reject('changed/missing during capture')
+
+    def test_zone_definition_and_ipset_membership_drift_rejected(self):
+        self.data['capture']['queries']['runtime/zones_after/public']['stdout'] += '\n  services: ssh https'
+        self.reject('zone/ipset inventory changed')
+        self.data = fixture()
+        q = self.data['capture']['queries']
+        for suffix in ('', '_after'):
+            q['runtime/ipsets' + suffix]['stdout'] = 'foreign'
+            q['runtime/ipsets' + suffix + '/foreign'] = {'rc': 0, 'stderr': '',
+                'stdout': 'foreign\n  entries: 192.0.2.' + ('1' if not suffix else '2')}
+        self.reject('zone/ipset inventory changed')
+
+    def test_inventory_addition_removal_duplicate_unlisted_definition_rejected(self):
+        for case in ('addition', 'removal', 'duplicate', 'unlisted'):
+            with self.subTest(case=case):
+                self.data = fixture()
+                q = self.data['capture']['queries']
+                if case == 'addition':
+                    q['runtime/zones_after']['stdout'] += ' other'
+                    q['runtime/zones_after/other'] = {'rc': 0, 'stderr': '', 'stdout': 'other'}
+                elif case == 'removal':
+                    q['runtime/zones_after']['stdout'] = ''
+                    del q['runtime/zones_after/public']
+                elif case == 'duplicate':
+                    q['runtime/zones']['stdout'] += ' public'
+                else:
+                    q['runtime/zones/hidden'] = {'rc': 0, 'stderr': '', 'stdout': 'hidden'}
+                self.reject('inventory changed|public zone absent|unsafe object inventory|unlisted inventory')
+
+    def other_zone(self, interfaces='', sources=''):
+        q = self.data['capture']['queries']
+        for suffix in ('', '_after'):
+            q['runtime/zones' + suffix]['stdout'] += ' other'
+            q['runtime/zones' + suffix + '/other'] = {'rc': 0, 'stderr': '',
+                'stdout': 'other\n  target: default\n  interfaces: ' + interfaces + '\n  sources: ' + sources}
+
+    def test_exact_prefix_and_all_interface_zone_assignment_rejected(self):
+        for pattern in ('cali0123456789a', 'cali+', '+', 'cali0123456789+'):
+            with self.subTest(pattern=pattern):
+                self.data = fixture()
+                self.other_zone(interfaces=pattern)
+                self.reject('veth assigned to non-public')
+
+    def test_source_based_classification_requires_explicit_analysis(self):
+        for source in ('10.244.246.64/26', 'ipset:trusted', '192.0.2.0/24'):
+            with self.subTest(source=source):
+                self.data = fixture()
+                self.other_zone(sources=source)
+                self.reject('source-based zone')
+
+    def test_unrelated_explicit_interface_does_not_claim_candidate(self):
+        self.other_zone(interfaces='eth9')
+        result = p.prepare(**self.data)
+        self.assertEqual(result['status'], 'DRAFT_NOT_EXECUTABLE')
+        self.assertFalse(result['consistency']['native_semantics_verified'])
+
+    def test_zone_classification_missing_duplicated_and_wrong_header_rejected(self):
+        for raw in ('public\n  sources:', 'other\n  interfaces:\n  sources:',
+                    'public\n  interfaces:\n  interfaces: cali+\n  sources:'):
+            with self.subTest(raw=raw):
+                self.data = fixture()
+                for suffix in ('', '_after'):
+                    self.data['capture']['queries']['runtime/zones' + suffix + '/public']['stdout'] = raw
+                self.reject('fields absent|header differs|duplicate zone field')
+
+    def native(self):
+        return {'nftables': [
+            {'table': {'family': 'inet', 'name': 'firewalld', 'handle': 1}},
+            {'rule': {'family': 'inet', 'table': 'firewalld', 'chain': 'filter_FORWARD', 'handle': 3,
+                      'expr': [{'counter': {'packets': 1, 'bytes': 80}}, {'accept': None}]}},
+            {'counter': {'family': 'inet', 'table': 'firewalld', 'name': 'named', 'handle': 4,
+                         'packets': 10, 'bytes': 800}}]}
+
+    def install_native(self, first, last):
+        for key, value in (('native', first), ('native_after', last)):
+            self.data['capture']['queries'][key]['stdout'] = json.dumps(value)
+
+    def test_counter_changes_allowed_but_original_raw_hashes_preserved(self):
+        first = self.native(); last = copy.deepcopy(first)
+        last['nftables'][1]['rule']['expr'][0]['counter'].update(packets=2, bytes=160)
+        last['nftables'][2]['counter'].update(packets=11, bytes=880)
+        self.install_native(first, last)
+        saved = copy.deepcopy(self.data)
+        result = p.prepare(**self.data)
+        self.assertNotEqual(result['native_before_sha256'], result['native_after_sha256'])
+        self.assertEqual(self.data, saved)
+        self.assertFalse(result['consistency']['atomic_snapshot'])
+        self.assertFalse(result['consistency']['transient_aba_changes_excluded'])
+
+    def test_native_verdict_handle_and_rule_order_change_rejected(self):
+        for case in ('verdict', 'handle', 'order'):
+            with self.subTest(case=case):
+                self.data = fixture()
+                first = self.native(); last = copy.deepcopy(first)
+                if case == 'verdict':
+                    last['nftables'][1]['rule']['expr'][-1] = {'drop': None}
+                elif case == 'handle':
+                    last['nftables'][1]['rule']['handle'] = 99
+                else:
+                    last['nftables'].reverse()
+                self.install_native(first, last)
+                self.reject('native structure changed')
+
+    def test_native_set_elements_timeouts_and_quota_changes_not_hidden(self):
+        for key, before, after in [('elem', ['192.0.2.1'], ['192.0.2.2']), ('timeout', 30, 60), ('used', 4, 8)]:
+            with self.subTest(key=key):
+                self.data = fixture()
+                first = self.native()
+                first['nftables'].append({'set': {'family': 'inet', 'table': 'firewalld', 'name': 'foreign', key: before}})
+                last = copy.deepcopy(first); last['nftables'][-1]['set'][key] = after
+                self.install_native(first, last)
+                self.reject('native structure changed')
+
+    def test_invalid_counter_statistics_rejected(self):
+        for value in (True, -1, '10'):
+            with self.subTest(value=value):
+                self.data = fixture()
+                first = self.native()
+                first['nftables'][1]['rule']['expr'][0]['counter']['packets'] = value
+                self.install_native(first, first)
+                self.reject('invalid counter statistics')
+
+    def test_missing_native_pair_rejected(self):
+        del self.data['capture']['queries']['native_after']
+        self.reject('paired native observation absent')
 
     def test_json_duplicates_and_nonfinite_rejected(self):
         for raw in ('{"a":1,"a":2}', '{"a":NaN}'):
