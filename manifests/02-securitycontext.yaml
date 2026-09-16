@@ -14,6 +14,18 @@
 # Deployment에 적용할 SecurityContext/RBAC/Probe 관련 patch 참고자료다. SA/PVC/
 # ConfigMap 등 참조 리소스는 실제 APP/MON 소스 기준으로 별도 연결이 필요하며,
 # UID/GID/image digest는 BLOCKED_INPUT(사전확인 §3 완료 전까지 미확정)이다.
+#
+# 독립 리뷰 반영 (supreme33-kr, pullrequestreview-5222381683):
+#   - transaction-api/fds-engine의 별도 metrics 포트(9091/9090) 가정이 실제 fds-msa
+#     코드(app/main.py, Dockerfile)와 불일치 — /metrics는 메인 포트에서 서빙됨.
+#     manifest를 실제 단일 포트 구조로 교정 (별도 metrics containerPort/Service 제거).
+#   - UID/GID/fsGroup은 실제 코드·이미지 기준 확인값으로 교체:
+#     transaction-api/fds-engine=10001(Dockerfile `useradd -r -u 10001 fdsuser`),
+#     prometheus/alertmanager=65534(공식 이미지 기본값), grafana=472(공식 이미지 기본값).
+#   - kube-state-metrics UID/GID는 이번 리뷰에서 확인되지 않아 BLOCKED_INPUT으로 유지.
+#   - Prometheus retention.size는 Lead 결정(#10 issuecomment-5697547621) PVC 20Gi 기준
+#     80%인 16GB로 확정. PVC/PV/StorageClass 오브젝트 자체는 P1-K8S-01 Storage 작업
+#     범위이며 이 PR에서 신설하지 않는다(claimName 참조만 유지).
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -36,8 +48,8 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
+        runAsUser: 10001
+        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       imagePullSecrets:
@@ -52,8 +64,7 @@ spec:
             capabilities:
               drop: ["ALL"]
           ports:
-            - containerPort: 8000
-            - containerPort: 9091
+            - containerPort: 8000  # /metrics도 이 포트에서 서빙 (별도 9091 리스너 없음, 실제 코드 확인)
           resources:
             requests:
               cpu: "250m"
@@ -94,9 +105,6 @@ spec:
     - name: http
       port: 80
       targetPort: 8000
-    - name: metrics
-      port: 9091
-      targetPort: 9091
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -119,8 +127,8 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
+        runAsUser: 10001
+        runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       imagePullSecrets:
@@ -135,8 +143,7 @@ spec:
             capabilities:
               drop: ["ALL"]
           ports:
-            - containerPort: 8001
-            - containerPort: 9090
+            - containerPort: 8001  # /metrics도 이 포트에서 서빙 (별도 9090 리스너 없음, 실제 코드 확인)
           resources:
             requests:
               cpu: "250m"
@@ -174,9 +181,6 @@ spec:
     - name: grpc
       port: 8001
       targetPort: 8001
-    - name: metrics
-      port: 9090
-      targetPort: 9090
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -198,9 +202,9 @@ spec:
       serviceAccountName: prometheus-sa
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
-        fsGroup: <확인된-GID>
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -208,7 +212,7 @@ spec:
           image: prom/prometheus:<실제-버전>
           args:
             - --storage.tsdb.retention.time=15d
-            - --storage.tsdb.retention.size=<PVC용량의-80%>
+            - --storage.tsdb.retention.size=16GB  # PVC 20Gi(Lead 결정 #10)의 80%
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
@@ -256,9 +260,9 @@ spec:
       serviceAccountName: alertmanager-sa
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
-        fsGroup: <확인된-GID>
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -311,8 +315,9 @@ spec:
       serviceAccountName: grafana-sa
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
         seccompProfile:
           type: RuntimeDefault
       containers:

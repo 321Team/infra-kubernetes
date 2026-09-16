@@ -23,6 +23,12 @@
 #     Service(kubernetes.default.svc)의 ClusterIP 뒤 실제 Endpoint는 CP Node IP:6443이다.
 #   - prometheus의 kubelet(10250) 목적지를 <Worker-Node-CIDR> 추정값 대신 baseline
 #     확정 Worker 개별 IP(10.1.93.105/107/108) 3개로 명시 (넓은 CIDR 대체 금지 원칙).
+#
+# 독립 리뷰 반영 (supreme33-kr, pullrequestreview-5222381683):
+#   - transaction-api/fds-engine의 metrics 포트를 실제 코드와 일치하는 메인 포트
+#     (8000/8001)로 교정. 별도 9091/9090 리스너는 존재하지 않음.
+#   - Grafana Ingress 정책이 없어 default-deny-all 적용 시 edge01조차 대시보드(3000)에
+#     접근 불가했던 문제 보완 — grafana-allow에 edge01 ingress 규칙 추가.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -76,7 +82,7 @@ spec:
             matchLabels:
               app: prometheus
       ports:
-        - { protocol: TCP, port: 9091 }
+        - { protocol: TCP, port: 8000 }  # /metrics도 메인 포트에서 서빙 (실제 코드 확인)
   egress:
     - to:
         - podSelector:
@@ -126,7 +132,7 @@ spec:
             matchLabels:
               app: prometheus
       ports:
-        - { protocol: TCP, port: 9090 }
+        - { protocol: TCP, port: 8001 }  # /metrics도 메인 포트에서 서빙 (실제 코드 확인)
   egress:
     - to:
         - namespaceSelector:
@@ -248,7 +254,7 @@ spec:
             matchLabels:
               app: transaction-api
       ports:
-        - { protocol: TCP, port: 9091 }
+        - { protocol: TCP, port: 8000 }  # /metrics도 메인 포트에서 서빙 (실제 코드 확인)
     - to:
         - namespaceSelector:
             matchLabels:
@@ -257,7 +263,7 @@ spec:
             matchLabels:
               app: fds-engine
       ports:
-        - { protocol: TCP, port: 9090 }
+        - { protocol: TCP, port: 8001 }  # /metrics도 메인 포트에서 서빙 (실제 코드 확인)
     - to:
         - namespaceSelector:
             matchLabels:
@@ -344,7 +350,13 @@ spec:
   podSelector:
     matchLabels:
       app: grafana
-  policyTypes: ["Egress"]
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.1.93.50/32   # edge01 — transaction-api-allow와 동일 관리 접근 소스
+      ports:
+        - { protocol: TCP, port: 3000 }
   egress:
     - to:
         - podSelector:
