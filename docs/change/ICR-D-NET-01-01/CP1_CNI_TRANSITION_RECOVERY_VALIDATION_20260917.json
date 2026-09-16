@@ -1,0 +1,52 @@
+{
+  "schema": "fds.cp1-cni-transition-recovery-validation.v1",
+  "validated_at": "2026-09-16T22:10:53.482365+00:00",
+  "parent_commit": "457ca8ea834b0f8f09c0619e5ca9ee0a51552af4",
+  "status": "OPERATIONAL_INTEGRATION_INCOMPLETE",
+  "tests": {
+    "run": 377,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "previous": 318,
+    "new_unique": 59,
+    "command": "python3 -m unittest discover -s tests -p 'test_*.py' -v",
+    "log_sha256": "fc93047eb2c9f7e799932afec29bd0a37105cc8654b1c5cb82dedcd61d79e624"
+  },
+  "test_counts": {
+    "transition": 25,
+    "transition_observer": 5,
+    "transition_io": 9,
+    "recovery": 8,
+    "unit_cleanup": 12
+  },
+  "source_sha256": {
+    "scripts/cp1_cni_transition.py": "3056c0cd8def6b81ce9278d6acf5b7cc743f820be8385e94956f47885902c03d",
+    "scripts/cp1_cni_transition_observer.py": "214793a5fa787a136a31fbebdf6f08f29115e6cbe14e4c2d80cfeb8c37dab04c",
+    "scripts/cp1_cni_transition_io.py": "ac3504a0fc96e7c4b1aaf125d6a96b8d5d160c09866482403c4795e205347363",
+    "scripts/cp1_cni_recovery.py": "20bdae644d93503398a882d05f8ab5b6a51e8aa92c84ee4481e993a0c58a2990",
+    "scripts/cp1_cni_unit_cleanup.py": "10e3e15cfb3791931a2715883f3e42c46add04700dbd8d176aeb35a6656f68e5",
+    "tests/test_cp1_cni_transition.py": "ceeb29e6ec059c999ed40476eb7e4e6b951c28802a7c16e2b1dd7124c5ab8b10",
+    "tests/test_cp1_cni_transition_observer.py": "73a9707dad42de68ff86c50abfee51fec2765809372c0563f9abffbaa4fd4b35",
+    "tests/test_cp1_cni_transition_io.py": "de5e15d7b076011dc71ce7e05606433296d81d8e6cd927a36064fd741c3f064d",
+    "tests/test_cp1_cni_recovery.py": "9f1089f4541e7a9823b538f21679cf2996eaebca0cd156fa8eee2bd363154f6f",
+    "tests/test_cp1_cni_unit_cleanup.py": "1f2bdd80cb061eb7b0cfffbf78765d66836302797db0308edd0a966519f0ac08",
+    "scripts/cp1_cni_observer.py": "3fbcf78d96516df429aaab24ad6f99c47e9972fa8d1e40b92828f5feaff33f54",
+    "scripts/collect-cp1-cni-membership.py": "a17b5ad3585380e482d43de3a501f10117f3d2e27eaaf138aaa15a4b5d5588f1"
+  },
+  "original_pins": {
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "check-cp1-cni-handoff.py": "8fbc4d03fd76fecd27bd6f82a3672f4d0220ed1db8c331c61d9310c98d7db1d3",
+    "cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc"
+  },
+  "runtime_executed": false,
+  "actual_systemd_executed": false,
+  "actual_firewall_changed": false,
+  "new_review_requested": false,
+  "operational_entrypoint_implemented": false,
+  "production_consumer_connected": false,
+  "external_finalizer_transport_implemented": false,
+  "authorizes_apply": false,
+  "authorizes_join": false
+}

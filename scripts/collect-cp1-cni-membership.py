@@ -50,8 +50,12 @@ def pid_start(raw):
     return value
 
 
-def collect(node):
-    node.COMMAND_STATE.update(count=0, timeouts=0, budget_exhausted=False, deadline=time.monotonic() + 30)
+def collect(node, *, deadline=None):
+    started = time.monotonic()
+    if deadline is not None:
+        need(core.number(deadline) > started, 'peer collection deadline exhausted')
+    node.COMMAND_STATE.update(count=0, timeouts=0, budget_exhausted=False,
+                              deadline=min(started + 30, deadline) if deadline is not None else started + 30)
     backend = node.BaseBackend('k8s-control01')
     report = {'schema': 'fds.cp1-cni-membership-raw.v1', 'mode': 'READ_ONLY', 'complete': False,
               'queries': {}, 'errors': [], 'raw': {}, 'authorizes_apply': False}

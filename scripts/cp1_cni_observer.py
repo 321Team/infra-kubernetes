@@ -370,7 +370,7 @@ def compatibility_command(node, argv, timeout):
     return module.command(node, argv, timeout)
 
 
-def collect(node, protection_reader, *, compatibility=False, delta_api=False):
+def collect(node, protection_reader, *, compatibility=False, delta_api=False, deadline=None):
     """Read local state twice with a 25-second total helper command budget.
 
     protection_reader must use the same bounded helper, returning the full
@@ -378,7 +378,9 @@ def collect(node, protection_reader, *, compatibility=False, delta_api=False):
     No caller-supplied owned/fixed/guard flags are queried here.
     """
     started = time.monotonic()
-    node.COMMAND_STATE.update(count=0, timeouts=0, budget_exhausted=False, deadline=started + 25)
+    end = min(started + 25, number(deadline)) if deadline is not None else started + 25
+    need(end > started, 'whole observation deadline exhausted')
+    node.COMMAND_STATE.update(count=0, timeouts=0, budget_exhausted=False, deadline=end)
     backend = node.BaseBackend('k8s-control01')
     record = {'schema': 'fds.cp1-cni-state-capture.v1', 'complete': False, 'errors': [], 'queries': {},
               'wall': time.time(), 'boottime': time.clock_gettime(time.CLOCK_BOOTTIME)}
@@ -422,12 +424,15 @@ def collect(node, protection_reader, *, compatibility=False, delta_api=False):
                     read(plane + '/ipsets/' + name + suffix, prefix + ['--info-ipset=' + name])
                 if plane == 'permanent':
                     for kind in ('policy', 'ipset'):
-                        read(plane + '/' + kind + '-description' + suffix, prefix + ['--' + kind + '=' + NAME, '--get-description'])
+                        present = (NAME in names if kind == 'ipset' else
+                                   NAME in objects(success(record['queries'][plane + '/policies' + suffix])))
+                        if present:
+                            read(plane + '/' + kind + '-description' + suffix, prefix + ['--' + kind + '=' + NAME, '--get-description'])
             read('native' + suffix, ['nft', '-j', 'list', 'ruleset'])
             if compatibility:
                 for key, argv in (('iptables_save', ['iptables-save', '-c']),
                                   ('ip6tables_save', ['ip6tables-save', '-c']), ('ipsets', ['ipset', 'save'])):
-                    remaining = started + 25 - time.monotonic()
+                    remaining = end - time.monotonic()
                     need(remaining > 0, 'whole observation budget exhausted')
                     value = compatibility_command(node, argv, min(5, remaining))
                     record['queries'][key + suffix] = value
@@ -436,7 +441,7 @@ def collect(node, protection_reader, *, compatibility=False, delta_api=False):
                           ('selinux', ['getenforce']), ('configuration', ['cat', '/etc/firewalld/firewalld.conf'])):
             read(key + '_after', argv)
         need(read('boot_after', ['cat', '/proc/sys/kernel/random/boot_id']) == record['boot_id'], 'boot changed')
-        need(time.monotonic() - started < 25, 'whole observation budget exhausted')
+        need(time.monotonic() < end, 'whole observation budget exhausted')
         record['complete'] = True
     except (ValueError, OSError, KeyError, TypeError) as error:
         record['errors'].append(str(error))
