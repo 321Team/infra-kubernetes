@@ -11,6 +11,7 @@ import tempfile
 import tarfile
 from types import SimpleNamespace
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
@@ -235,6 +236,29 @@ class OwnedLabels(unittest.TestCase):
              patch.object(tool, 'prepare_daemon_files', side_effect=ValueError('bad label')):
             with self.assertRaises(ValueError): lab.build()
         lab.create_namespace.assert_not_called()
+
+
+class BusAdmissionPolicy(unittest.TestCase):
+    def setUp(self):
+        self.config = ET.fromstring(tool.private_bus_config(tool.job_path('a' * 16)))
+
+    def test_connection_admission_is_never_per_user_or_group(self):
+        for policy in self.config.findall('policy'):
+            for rule in policy:
+                if 'user' in rule.attrib or 'group' in rule.attrib:
+                    self.assertIn(policy.get('context'), ('default', 'mandatory'))
+                    self.assertNotIn('user', policy.attrib)
+                    self.assertNotIn('group', policy.attrib)
+
+    def test_only_root_admitted_and_private_auth_address_preserved(self):
+        admissions = [(r.tag, r.attrib) for p in self.config.findall('policy')
+                      for r in p if 'user' in r.attrib or 'group' in r.attrib]
+        self.assertEqual(admissions, [('deny', {'user': '*'}), ('allow', {'user': 'root'})])
+        self.assertEqual([a.text for a in self.config.findall('auth')], ['EXTERNAL'])
+        self.assertEqual([a.text for a in self.config.findall('listen')],
+                         [tool.private_env(tool.job_path('a' * 16))['DBUS_SYSTEM_BUS_ADDRESS']])
+        self.assertFalse(self.config.findall('include') + self.config.findall('includedir'))
+        self.assertFalse(self.config.findall('allow_anonymous'))
 
 
 class Readiness(unittest.TestCase):

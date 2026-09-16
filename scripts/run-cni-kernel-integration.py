@@ -284,6 +284,17 @@ def label_owned_path(job, relative):
     return dict(path=relative, context=context, device=st.st_dev, inode=st.st_ino)
 
 
+def private_bus_config(job):
+    # Connection admission is bus-global. Keep the root exception after the
+    # default deny, outside the per-user message/ownership policy.
+    return ('<busconfig><type>system</type><listen>'
+            + private_env(job)['DBUS_SYSTEM_BUS_ADDRESS']
+            + '</listen><auth>EXTERNAL</auth>'
+            '<policy context="default"><deny user="*"/><allow user="root"/></policy>'
+            '<policy user="root"><allow own="*"/><allow send_destination="*"/>'
+            '<allow receive_sender="*"/></policy></busconfig>\n')
+
+
 def prepare_daemon_files(job):
     policy = SELinuxPolicy(); observed = policy.check()
     # These paths belong to this new job. No reuse/recursive relabel of old jobs.
@@ -294,8 +305,7 @@ def prepare_daemon_files(job):
     node.atomic(config / 'firewalld.conf', b'DefaultZone=public\nFirewallBackend=nftables\nFlushAllOnReload=yes\nCleanupOnExit=yes\n', exclusive=True)
     node.atomic(config / 'zones/public.xml', b'<zone><interface name="ens160"/><service name="ssh"/></zone>\n', exclusive=True)
     node.atomic(job / 'log/firewalld.log', b'', exclusive=True)
-    bus = '<busconfig><type>system</type><listen>' + private_env(job)['DBUS_SYSTEM_BUS_ADDRESS'] + '</listen><auth>EXTERNAL</auth><policy context="default"><deny user="*"/></policy><policy user="root"><allow user="root"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>\n'
-    node.atomic(job / 'bus.conf', bus.encode(), exclusive=True)
+    node.atomic(job / 'bus.conf', private_bus_config(job).encode(), exclusive=True)
     labels = [label_owned_path(job, relative) for relative in LABELS]
     # Verify traversal after creation, including the job's actual inherited label.
     for role in policy.domains: policy.require(role, file_context(job), 'dir', 'search')

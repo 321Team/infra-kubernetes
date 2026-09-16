@@ -1,4 +1,13 @@
-## 2026-09-16 KU5482 inspect 후속
+## 2026-09-16 15:22 normal 후속 — D-Bus 설정 문법 수정
+
+HEAD `5f9dd61`의 job `3271fd1489888551`은 D-Bus 설정의 per-user admission 규칙 오류로 실패했다.
+정리·복구 예약 해제·namespace 부재·전후 host fingerprint 일치는 확인됐고 통신 6개는 미측정이다.
+[R3 검토 기록](../change/ICR-D-NET-01-01/CNI_DBUS_R3_REVIEW_20260916.md)에 연결 admission을 default 정책으로 옮긴 수정과 검증 범위를 기록했다.
+STATIC/MOCK 211 PASS. 로컬 실제 dbus-daemon 검사는 1 PASS / 2 SKIP(AF_UNIX 생성 EPERM)이며 대상 VM Runtime 성공을 뜻하지 않는다.
+새 bundle SHA256: `e3930449699c963b367109f87191122f47e9e20b306a60f0dbd091a9144794c6`.
+새 소스 독립 리뷰·새 inspect·추가 normal 실행 결정 후 진행한다. 기존 job과 이미 수행된 실행 결정은 재사용하지 않는다.
+
+## 이전 기록 — 2026-09-16 KU5482 inspect 후속
 
 정책 검사 보완본은 [R2 검토 기록](../change/ICR-D-NET-01-01/CNI_POLICY_R2_REVIEW_20260916.md)을 따른다.
 append 로그의 일반 write 요구 제거, D-Bus peer/self 소켓 구분, 개별 거부/API 오류 전수 기록을 반영했다.
