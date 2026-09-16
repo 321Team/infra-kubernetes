@@ -70,6 +70,13 @@ class ModelIO:
                      'native_entries': [], 'daemon_entries': []}
         self.calls, self.crash, self.split = [], None, False
         self.result = copy.deepcopy(OK)
+        self.member_rows = [member()]
+
+    def check_members(self, expected):
+        current = observed(self, self.member_rows)
+        m.need(m.same(m.observation(current, self.lease, self.clock()), m.observation(expected, self.lease, self.clock())),
+               'eligible identity changed before/after mutation')
+        return current
 
     def clock(self):
         return copy.deepcopy(self.now)
@@ -81,10 +88,11 @@ class ModelIO:
     def snapshot(self):
         return copy.deepcopy(self.live)
 
-    def change(self, action, item, *, deadline=None):
+    def change(self, action, item, *, deadline=None, expected_observation=None):
         # This assertion verifies the write-ahead contract at the IO boundary.
         pending = self.journal.saved['pending']
         assert pending and pending['action'] == action and pending['entry'] == item
+        if action == 'add': self.check_members(expected_observation)
         self.calls.append((action, item))
         crash, self.crash = self.crash, None
         if crash == 'before':
@@ -114,6 +122,7 @@ def setup():
 
 
 def observed(io, rows=None):
+    io.member_rows = m.members([member()] if rows is None else rows)
     return {'schema': 'fds.cp1-cni-membership-observation.v1', 'complete': True,
             'boot_id': BOOT, 'host': m.HOST, 'block': str(m.BLOCK), 'block_owner': m.HOST,
             'affinity_confirmed': True, 'wall': io.now['wall'], 'boottime': io.now['boottime'],
@@ -394,12 +403,13 @@ class AdapterTests(unittest.TestCase):
         _, self.io, _ = setup()
         return FirewalldMembershipIO(self.io.lease, self.io.snapshot, runner, lambda: BOOT,
                                     lambda: self.io.now['wall'], lambda: self.io.now['boottime'],
-                                    recovery_observer=self.io.snapshot, withdrawal_observer=self.io.snapshot)
+                                    recovery_observer=self.io.snapshot, withdrawal_observer=self.io.snapshot,
+                                    membership_observer=lambda: observed(self.io, self.io.member_rows))
 
     def test_exact_argv_and_timeout_bounded_by_fresh_observation(self):
         calls = []
         adapter = self.make(lambda argv, **kw: calls.append((argv, kw)) or OK)
-        adapter.change('add', m.entry(member()), deadline={'wall': 1002, 'boottime': 112})
+        adapter.change('add', m.entry(member()), deadline={'wall': 1002, 'boottime': 112}, expected_observation=observed(self.io))
         self.assertEqual(calls, [(['firewall-cmd', '--ipset=fds-cp1-managed',
                                   '--add-entry=10.244.246.80/32,cali00000000000'], {'timeout': 2})])
 
@@ -410,8 +420,8 @@ class AdapterTests(unittest.TestCase):
             self.io.advance(31)
             return self.io.snapshot()
         adapter.observer = slow
-        with self.assertRaisesRegex(ValueError, 'deadline exhausted'):
-            adapter.change('add', m.entry(member()), deadline={'wall': 1030, 'boottime': 140})
+        with self.assertRaisesRegex(ValueError, 'deadline exhausted|stale/future'):
+            adapter.change('add', m.entry(member()), deadline={'wall': 1030, 'boottime': 140}, expected_observation=observed(self.io))
         self.assertEqual(calls, [])
 
     def test_disable_timeout_is_resolved_only_by_independent_observation(self):

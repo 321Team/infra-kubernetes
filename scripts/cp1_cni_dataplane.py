@@ -19,7 +19,7 @@ BUILTINS = {'filter': {'INPUT', 'FORWARD', 'OUTPUT'},
             'mangle': {'PREROUTING', 'INPUT', 'FORWARD', 'OUTPUT', 'POSTROUTING'},
             'raw': {'PREROUTING', 'OUTPUT'}, 'security': {'INPUT', 'FORWARD', 'OUTPUT'}}
 MATCHES = {'comment', 'conntrack', 'set', 'addrtype', 'multiport', 'tcp', 'udp', 'statistic', 'rpfilter'}
-TARGETS = {'MARK', 'DNAT', 'MASQUERADE', 'CT'}
+TARGETS = {'MARK', 'DNAT', 'MASQUERADE', 'CT', 'REJECT'}
 CAPTURE_KEYS = set('boot kernel packages containerd_version native_json native_text iptables_version iptables_save '
     'ip6tables_save ipsets links routes runtime_zones runtime_policies permanent_zones permanent_policies '
     'pods namespaces serviceaccounts services endpointslices networkpolicies calico_networkpolicies '

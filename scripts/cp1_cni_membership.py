@@ -245,13 +245,15 @@ def observation_from_capture(capture, lease, actual, clock):
 
 
 def initial_state(lease, actual, clock):
-    """Consume an activation adapter's empty, enabled and guarded owned set.
+    """Consume an activation adapter's empty, enabled owned set.
 
     Installation is a distinct prerequisite. This input is not an activation
     receipt and does not validate the original receipt or packet semantics.
     """
     remaining(lease, clock, RESERVE)
-    need(snapshot(actual, lease) == [] and actual['policy_enabled'] is True, 'empty active owned set required')
+    # An empty set grants no pair. Bootstrap can precede timer enablement;
+    # reconcile/additions still require an independently verified live guard.
+    need(snapshot(actual, lease, require_guard=False) == [] and actual['policy_enabled'] is True, 'empty active owned set required')
     return {'schema': 'fds.cp1-cni-membership-state.v1', 'lease': copy.deepcopy(lease),
             'phase': 'INITIALIZED', 'expected_entries': [], 'members': [], 'pending': None,
             'operations': [], 'generations': [], 'latest_observation': None,
@@ -272,6 +274,24 @@ def validate_state(state):
         need(state.get(key) is False, 'membership state cannot grant ' + key)
 
 
+def seed_observation(state, observed, actual, clock):
+    """Seed a completed collection before starting the independent watchdog.
+
+    No startup grace and no deadline renewal: unseeded state remains RECOVER.
+    The activation adapter must persist this result before arming the timer.
+    """
+    validate_state(state)
+    need(state['phase'] == 'INITIALIZED' and not state['operations'] and not state['generations'] and
+         state['pending'] is None and not state['expected_entries'] and not state['members'] and
+         state['latest_observation'] is None, 'bootstrap state already used')
+    observation(observed, state['lease'], clock)
+    need(snapshot(actual, state['lease'], require_guard=False) == [] and actual['policy_enabled'] is True, 'bootstrap grant not empty')
+    result = copy.deepcopy(state)
+    result['latest_observation'] = copy.deepcopy(observed)
+    result['last_clock'] = copy.deepcopy(clock)
+    return result
+
+
 def guard_action(state, clock, service_alive=True):
     """Pure decision for an independent guard; does not run a systemd service."""
     validate_state(state)
@@ -282,8 +302,7 @@ def guard_action(state, clock, service_alive=True):
         need(service_alive is True, 'manager stopped')
         last = state['latest_observation']
         need(last is not None, 'no completed observation')
-        for key in ('wall', 'boottime'):
-            need(0 <= number(clock[key]) - number(last[key]) < STALE, 'observation stale')
+        observation(last, state['lease'], clock)
     except (ValueError, TypeError, KeyError):
         return 'RECOVER'
     return 'WATCH'
@@ -343,6 +362,7 @@ class Manager:
             # the beginning of a potentially long reconciliation.
             observation(desired, self.lease, current)
             need(len(self.state['operations']) < MAX_OPERATIONS, 'operation bound exhausted')
+            self.state['observations'][fingerprint(desired)] = copy.deepcopy(desired)
         before = self.state['expected_entries'][:]
         need((action == 'remove' and item in before) or (action == 'add' and item not in before),
              'operation presence differs')
@@ -355,7 +375,7 @@ class Manager:
         deadline = {'wall': min(desired['wall'] + STALE, self.lease['wall_end'] - RESERVE),
                     'boottime': min(desired['boottime'] + STALE, self.lease['boot_end'] - RESERVE)
                     } if desired is not None else None
-        result = self.io.change(action, item, deadline=deadline)
+        result = self.io.change(action, item, deadline=deadline, expected_observation=desired)
         need(isinstance(result, dict) and set(result) == {'rc', 'stdout', 'stderr', 'truncated'},
              'operation result incomplete')
         need(type(result['rc']) is int and result['rc'] == 0 and result['truncated'] is False and
@@ -363,11 +383,21 @@ class Manager:
         post, found = self.actual(guard=desired is not None)
         need(post['policy_enabled'] is (desired is not None) and found == after,
              'post-operation state differs')
+        fresh = None
+        if desired is not None:
+            fresh = self.io.check_members(desired)
+            need(same(observation(fresh, self.lease, self.clock()), desired['members']),
+                 'eligible identity changed after operation')
+            pending['identity_after'] = copy.deepcopy(fresh)
+            pending['verified_clock'] = copy.deepcopy(self.clock())
         self.state['operations'].append(dict(pending, outcome='COMMAND_AND_STATE_VERIFIED',
                                              result=copy.deepcopy(result), verified_entries=found))
         self.state['expected_entries'], self.state['pending'] = after, None
-        self.state['last_clock'] = current
+        self.state['last_clock'] = pending.get('verified_clock', current)
+        if fresh is not None:
+            self.state['latest_observation'] = copy.deepcopy(fresh)
         self.save()
+        return fresh
 
     def reconcile(self, observed):
         need(self.state['phase'] not in ('WITHDRAWING', 'MEMBERSHIP_WITHDRAWN_REVIEW_REQUIRED'),
@@ -391,17 +421,25 @@ class Manager:
                  'generation bound exhausted')
             self.state['phase'] = 'RECONCILING'
             self.state['observations'][fingerprint(observed)] = copy.deepcopy(observed)
+            self.state['latest_observation'] = copy.deepcopy(observed)
             self.save()
+            working = observed
             for item in sorted(set(self.state['expected_entries']) - new_by_entry.keys() | reused):
                 if item in self.state['expected_entries']:
-                    self.change('remove', item, observed)
+                    working = self.change('remove', item, working)
             for item in sorted(new_by_entry):
                 if item not in self.state['expected_entries']:
-                    self.change('add', item, observed)
+                    working = self.change('add', item, working)
             current = self.clock()
-            observation(observed, self.lease, current)
+            observation(working, self.lease, current)
             actual, found = self.actual()
             need(actual['policy_enabled'] and found == sorted(new_by_entry), 'final membership differs')
+            fresh = self.io.check_members(working)
+            current = self.clock()
+            need(same(observation(fresh, self.lease, current), desired), 'final eligible identity changed')
+            observation(working, self.lease, current)
+            observed = fresh
+            self.state['observations'][fingerprint(observed)] = copy.deepcopy(observed)
             previous = self.state['generations'][-1] if self.state['generations'] else None
             changed = previous is None or not same(previous['members'], desired) or len(self.state['operations']) != previous['operation_count']
             if changed:
@@ -520,6 +558,13 @@ def validate_generation_chain(state):
         need(observed is not None and fingerprint(observed) == operation['observation_sha256'],
              'operation observation absent/different')
         eligible = observation(observed, lease, operation['clock'])
+        if outcome == 'COMMAND_AND_STATE_VERIFIED':
+            verified_clock = operation.get('verified_clock')
+            need(isinstance(verified_clock,dict) and
+                 all(number(verified_clock[k]) >= operation['clock'][k] for k in ('wall','boottime')),
+                 'post-mutation identity clock absent/different')
+            need(same(observation(operation.get('identity_after',{}),lease,verified_clock),eligible),
+                 'post-mutation identity proof differs')
         if action == 'add':
             need(item in [entry(r) for r in eligible], 'addition not authorized by observation')
     generations = state['generations']

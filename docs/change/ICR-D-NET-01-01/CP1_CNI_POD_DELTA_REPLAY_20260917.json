@@ -1,0 +1,80 @@
+{
+  "schema": "fds.cp1-cni-pod-delta-replay.v1",
+  "capture_sha256": "1b6d58711ebf0eed46105bf45b1501efaf14a13b650f5758bd745f995e821db8",
+  "test_kind": "OFFLINE_STRUCTURE_ONLY_WITH_SYNTHETIC_SANDBOX_IDS",
+  "observed_rule_layout_matched": true,
+  "eligible_layout_rows": 3,
+  "projected_sha256": "fb9c91da87c9d17b5100b519d0c0d2f8d425c1ce0d259cfb682fe66968c2cb80",
+  "coverage_counterexamples": [
+    {
+      "name": "hidden_set_broadened_both_samples",
+      "result": "PASS",
+      "outcome": "DIFFERENT_FIXED_STATE"
+    },
+    {
+      "name": "hidden_set_changed_between_samples",
+      "result": "PASS",
+      "outcome": "REJECTED: dataplane changed during paired observation"
+    },
+    {
+      "name": "hidden_set_direction_changed",
+      "result": "PASS",
+      "outcome": "DIFFERENT_FIXED_STATE"
+    },
+    {
+      "name": "hidden_conntrack_scope_changed",
+      "result": "PASS",
+      "outcome": "DIFFERENT_FIXED_STATE"
+    },
+    {
+      "name": "hidden_dnat_destination_changed",
+      "result": "PASS",
+      "outcome": "DIFFERENT_FIXED_STATE"
+    },
+    {
+      "name": "missing_kernel_sets",
+      "result": "PASS",
+      "outcome": "REJECTED: capture query inventory differs"
+    },
+    {
+      "name": "warning_in_authoritative_save",
+      "result": "PASS",
+      "outcome": "REJECTED: incomplete compatibility query"
+    },
+    {
+      "name": "truncated_native",
+      "result": "PASS",
+      "outcome": "REJECTED: incomplete compatibility query"
+    },
+    {
+      "name": "boolean_exit_status",
+      "result": "PASS",
+      "outcome": "REJECTED: incomplete compatibility query"
+    },
+    {
+      "name": "arp_guard_address_changed",
+      "result": "PASS",
+      "outcome": "DIFFERENT_FIXED_STATE"
+    },
+    {
+      "name": "native_verdict_disagrees_with_save",
+      "result": "PASS",
+      "outcome": "REJECTED: native/saved terminal verdict differs"
+    },
+    {
+      "name": "api_context_raced",
+      "result": "PASS",
+      "outcome": "REJECTED: paired context changed: endpointslices"
+    },
+    {
+      "name": "native_counters_only",
+      "result": "PASS",
+      "outcome": "SAME_FIXED_STATE"
+    }
+  ],
+  "actual_cri_peer_capture_available": false,
+  "actual_pod_replacement_tested": false,
+  "zero_endpoint_native_encoding_tested_on_target": false,
+  "runtime_unit_installation_tested": false,
+  "authorizes_apply": false
+}

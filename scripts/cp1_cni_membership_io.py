@@ -7,7 +7,7 @@ guard are NOT implemented by this adapter.
 import time
 import subprocess
 
-from cp1_cni_membership import entries, need, snapshot, remaining, number, RESERVE
+from cp1_cni_membership import entries, need, snapshot, remaining, number, RESERVE, observation, same, entry
 
 IPSET = 'fds-cp1-managed'
 POLICY = 'fds-cp1-managed'
@@ -16,12 +16,13 @@ POLICY = 'fds-cp1-managed'
 class FirewalldMembershipIO:
     def __init__(self, lease, observer, runner, boot_reader, wall=time.time,
                  boottime=lambda: time.clock_gettime(time.CLOCK_BOOTTIME), *,
-                 recovery_observer=None, withdrawal_observer=None):
+                 recovery_observer=None, withdrawal_observer=None, membership_observer=None):
         self.lease, self.observer, self.runner, self.boot_reader = lease, observer, runner, boot_reader
         self.wall, self.boottime = wall, boottime
         self.recovery_observer = recovery_observer or getattr(observer, 'recovery', None)
         self.withdrawal_observer = withdrawal_observer or getattr(observer, 'withdrawal', None)
         self.withdrawing = False
+        self.membership_observer = membership_observer or getattr(observer, 'membership', None)
 
     def clock(self):
         return {'boot_id': self.boot_reader(), 'wall': self.wall(), 'boottime': self.boottime()}
@@ -32,7 +33,15 @@ class FirewalldMembershipIO:
             return self.withdrawal_observer()
         return self.observer()
 
-    def change(self, action, item, *, deadline=None):
+    def check_members(self, expected):
+        need(callable(self.membership_observer), 'fresh authenticated membership observer required')
+        current = self.membership_observer()
+        clock = self.clock()
+        need(same(observation(current, self.lease, clock), observation(expected, self.lease, clock)),
+             'eligible identity changed before/after mutation')
+        return current
+
+    def change(self, action, item, *, deadline=None, expected_observation=None):
         entries([item])
         need(action in ('add', 'remove'), 'unsupported membership action')
         before = self.snapshot()
@@ -40,6 +49,10 @@ class FirewalldMembershipIO:
         need((action == 'add' and item not in actual) or (action == 'remove' and item in actual),
              'membership action precondition changed')
         timeout = 5
+        if action == 'add':
+            need(expected_observation is not None, 'addition requires a peer-bound observation')
+            current = self.check_members(expected_observation)
+            need(item in [entry(r) for r in current['members']], 'entry absent from current eligible identity')
         if before['policy_enabled'] or action == 'add':
             need(before['policy_enabled'] is True and deadline is not None, 'active operation deadline absent')
             clock = self.clock()

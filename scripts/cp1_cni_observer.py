@@ -226,7 +226,7 @@ def policy_definition(value, disabled):
                                 'masquerade', 'rich rules'}, 'unknown owned policy field')
 
 
-def snapshot_from_records(record, activation, units, clock, *, withdrawal=False):
+def snapshot_from_records(record, activation, units, clock, *, withdrawal=False, membership_capture=None):
     """Derive the Manager snapshot from an actual whole-state capture.
 
     activation contains independently reviewed baseline projections. It must
@@ -236,6 +236,13 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False)
          'complete whole-state capture required')
     need(record.get('errors') == [], 'whole-state query errors remain')
     lease = activation['lease']
+    projection = activation.get('projection_schema')
+    need(projection in (None, 'fds.cp1-cni-pod-delta.v1'), 'unknown activation projection')
+    delta_rows = None
+    if projection:
+        from cp1_cni_delta import capture_members
+        need(membership_capture is not None, 'Pod delta requires a fresh local peer capture')
+        delta_rows = capture_members(membership_capture, lease['boot_id'], clock)
     # A disabled grant can be emptied after expiry/guard failure. Whole
     # fixed-state and same-boot proof remain mandatory for that operation.
     guard = ({'run_id': lease['run_id'], 'armed': False, 'deadline': None}
@@ -304,6 +311,16 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False)
                          if any(key + suffix in q for key in compatibility_keys) else None)
         native = native_view(parse_json(q['native' + suffix]), 'ACTIVE' if enabled_now else 'DISABLED',
                              compatibility=compatibility)
+        if projection:
+            from cp1_cni_delta import project, FIXED_API
+            need(compatibility is not None, 'Pod delta requires whole compatibility streams')
+            api = {key: parse_json(q['api/' + key + suffix]) for key in (*FIXED_API,'pods','endpointslices')}
+            fixed = native['fixed']
+            projected_delta = project({'native': {'nftables': fixed['nftables']},
+                                      'xtables': fixed['xtables'], 'kernel_ipsets': fixed['kernel_ipsets'],
+                                      'opaque_expressions': 0}, api, delta_rows)
+            native['fixed'] = {'nftables': projected_delta.pop('native')['nftables'], **projected_delta,
+                               'projection_schema': projection}
         need(native['entries'] == daemon_entries, 'observer native/daemon entries differ')
         current = {'inventory': plane_data, 'native': native['fixed'],
                    'host': parse_json(q['host' + suffix]), 'protection': parse_json(q['protection' + suffix]),
@@ -322,10 +339,14 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False)
     if withdrawal:
         need(enabled is False, 'whole-state withdrawal requires disabled policy')
     need(guard['run_id'] == lease['run_id'], 'guard belongs to another run')
-    return {'boot_id': record['boot_id'], 'run_id': lease['run_id'], 'owned': True,
+    result = {'boot_id': record['boot_id'], 'run_id': lease['run_id'], 'owned': True,
             'fixed_state_sha256': fingerprint(projected), 'policy_enabled': enabled,
             'native_entries': actual_entries, 'daemon_entries': actual_entries,
             'guard_armed': guard['armed'], 'guard_deadline': guard['deadline']}
+    if projection and not withdrawal:
+        from cp1_cni_membership import observation_from_capture
+        result['eligible_observation'] = observation_from_capture(membership_capture,lease,result,clock)
+    return result
 
 
 def compatibility_command(node, argv, timeout):
@@ -336,7 +357,7 @@ def compatibility_command(node, argv, timeout):
     return module.command(node, argv, timeout)
 
 
-def collect(node, protection_reader, *, compatibility=False):
+def collect(node, protection_reader, *, compatibility=False, delta_api=False):
     """Read local state twice with a 25-second total helper command budget.
 
     protection_reader must use the same bounded helper, returning the full
@@ -368,6 +389,14 @@ def collect(node, protection_reader, *, compatibility=False):
                      'management_connection': read('management_connection' + suffix,
                           ['nmcli', '-g', 'GENERAL.CON-UUID', 'device', 'show', 'ens160'])})
             internal('protection' + suffix, protection_reader(backend))
+            if delta_api:
+                spec = importlib.util.spec_from_file_location('delta_dataplane_queries', ROOT / 'scripts/collect-cp1-cni-dataplane.py')
+                module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                from cp1_cni_delta import FIXED_API
+                for key in (*FIXED_API,'pods','endpointslices'):
+                    value = backend.kubectl(module.API_READS[key] + ['-o','json'])
+                    record['queries']['api/'+key+suffix]=value
+                    success(value)
             for plane in ('runtime', 'permanent'):
                 prefix = ['firewall-cmd'] + (['--permanent'] if plane == 'permanent' else [])
                 for kind in ('zones', 'policies'):
@@ -443,6 +472,7 @@ class LocalObserver:
         self.node, self.activation = node, copy.deepcopy(activation)
         self.read_unit_file, self.read_unit_link, self.clock = read_unit_file, read_unit_link, clock
         self.evidence = None
+        self.last_verified = None
 
     def unit_command(self, argv, timeout):
         result = self.node.command(argv, timeout=timeout)
@@ -450,28 +480,65 @@ class LocalObserver:
                 'truncated': result.get('stdout_truncated', False) is not False or result.get('stderr_truncated', False) is not False}
 
     def __call__(self):
-        capture = collect(self.node, protection, compatibility=True)
+        self.last_verified = None
+        delta = self.activation.get('projection_schema') == 'fds.cp1-cni-pod-delta.v1'
+        capture = collect(self.node, protection, compatibility=True, delta_api=delta)
         # Preserve collected diagnostics even when a subsequent unit query
         # fails. A failed observation cannot reuse an earlier successful one.
         self.evidence = {'capture': capture}
         try:
+            peer_capture = None
+            if delta:
+                spec=importlib.util.spec_from_file_location('live_membership_collector',ROOT/'scripts/collect-cp1-cni-membership.py')
+                module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+                peer_capture=module.collect(self.node)
+                self.evidence['membership_capture']=peer_capture
             units = query_units(self.activation['lease'], self.unit_command, self.read_unit_file, self.read_unit_link)
             self.evidence['units'] = units
             clock = self.clock()
             self.evidence['clock'] = clock
-            return snapshot_from_records(capture, self.activation, units, clock)
+            actual = snapshot_from_records(capture, self.activation, units, clock, membership_capture=peer_capture)
+            self.last_verified = {'actual':copy.deepcopy(actual),'wall':capture['wall'],'boottime':capture['boottime']}
+            return actual
         except (ValueError, KeyError, TypeError, OSError) as error:
             self.evidence['verification_error'] = {'message': str(error), 'type': type(error).__name__,
                 'differences': getattr(error, 'differences', []), 'authorizes_apply': False}
             raise
 
+    def membership(self):
+        # A full observation has just run in the mutation pre/post boundary.
+        # Refresh CRI identity without repeating every firewall/API query.
+        # The resulting age includes the older full-state capture, so this
+        # cannot refresh the fixed-state/guard proof or extend its deadline.
+        from cp1_cni_membership import observation_from_capture, observation
+        need(self.activation.get('projection_schema')=='fds.cp1-cni-pod-delta.v1' and
+             self.last_verified is not None, 'fresh whole state must precede peer refresh')
+        spec=importlib.util.spec_from_file_location('mutation_membership_collector',ROOT/'scripts/collect-cp1-cni-membership.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        capture=module.collect(self.node)
+        self.evidence['mutation_peer_capture']=capture
+        current=self.clock()
+        value=observation_from_capture(capture,self.activation['lease'],self.last_verified['actual'],current)
+        for key in ('wall','boottime'):value[key]=min(value[key],self.last_verified[key])
+        observation(value,self.activation['lease'],current)
+        return value
+
     def recovery(self):
+        self.last_verified = None
         from cp1_cni_withdrawal import collect_owned, owned_snapshot
         capture = collect_owned(self.node)
         self.evidence = {'owned_withdrawal_capture': capture}
         return owned_snapshot(capture, self.activation, self.clock())
 
     def withdrawal(self):
-        capture = collect(self.node, protection, compatibility=True)
+        self.last_verified = None
+        delta = self.activation.get('projection_schema') == 'fds.cp1-cni-pod-delta.v1'
+        capture = collect(self.node, protection, compatibility=True, delta_api=delta)
         self.evidence = {'withdrawal_capture': capture}
-        return snapshot_from_records(capture, self.activation, None, self.clock(), withdrawal=True)
+        peer_capture=None
+        if delta:
+            spec=importlib.util.spec_from_file_location('withdrawal_membership_collector',ROOT/'scripts/collect-cp1-cni-membership.py')
+            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+            peer_capture=module.collect(self.node)
+            self.evidence['membership_capture']=peer_capture
+        return snapshot_from_records(capture, self.activation, None, self.clock(), withdrawal=True, membership_capture=peer_capture)

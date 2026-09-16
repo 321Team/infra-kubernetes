@@ -1,0 +1,43 @@
+{
+  "schema": "fds.cp1-cni-development-validation.v1",
+  "status": "POD_DELTA_OBSERVER_AND_SOURCE_STAGING_IMPLEMENTED_PRODUCER_INCOMPLETE",
+  "base_head": "9c4a0db9a291f8519faae8ff1c472de88f1c739c",
+  "unit_regression": {
+    "tests": 279,
+    "previous": 229,
+    "added": 50,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "offline_coverage_counterexamples": {
+    "tests": 13,
+    "passed": 13
+  },
+  "pinned_original_sources_unchanged": {
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "scripts/check-cp1-cni-handoff.py": "8fbc4d03fd76fecd27bd6f82a3672f4d0220ed1db8c331c61d9310c98d7db1d3",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc"
+  },
+  "root_source_staging_implemented": true,
+  "operational_activation_producer_implemented": false,
+  "unit_installation_implemented": false,
+  "full_recovery_implemented": false,
+  "production_consumer_connected": false,
+  "actual_cri_peer_verified": false,
+  "actual_pod_replacement_tested": false,
+  "zero_endpoint_native_encoding_tested_on_target": false,
+  "target_mutations": false,
+  "authorizes_cp1_acceptance": false,
+  "authorizes_cp2_change": false,
+  "authorizes_join": false,
+  "pr13_review_comments_observed": 0,
+  "new_review_request_sent": false,
+  "review_bundle_ready": false,
+  "outputs": {
+    "CP1_CNI_POD_DELTA_TEST_20260917.txt": "d8a73a182588e10af76ba75323149bc411c8230c80fc41bbe9f36d10f7bc72b8",
+    "CP1_CNI_POD_DELTA_20260917.md": "f203283f12dffb8e43eaaec6a8aadd974f974af634513acde0ea61734d301ab5",
+    "CP1_CNI_POD_DELTA_REPLAY_20260917.json": "7e0e493a06e6aa0a4bef31dee091cec89838086ef7e200c12f899bbc6b5bf229"
+  }
+}

@@ -60,8 +60,9 @@ def collect(node):
         def read(key, argv=None, kubectl=None):
             result = backend.kubectl(kubectl) if kubectl is not None else node.command(argv, timeout=5)
             report['queries'][key] = result
-            need(result.get('rc') == 0 and not result.get('stdout_truncated') and
-                 not result.get('stderr_truncated') and not result.get('stderr', '').strip(), 'incomplete query: ' + key)
+            need(type(result.get('rc')) is int and result['rc'] == 0 and result.get('stdout_truncated', False) is False and
+                 result.get('stderr_truncated', False) is False and isinstance(result.get('stderr'),str) and
+                 not result['stderr'].strip() and isinstance(result.get('stdout'),str), 'incomplete query: ' + key)
             return result['stdout'].strip()
         report['wall'] = time.time()
         report['boottime'] = time.clock_gettime(time.CLOCK_BOOTTIME)
@@ -78,6 +79,7 @@ def collect(node):
                       p.get('status', {}).get('phase') not in ('Succeeded', 'Failed') and p.get('status', {}).get('podIP')]
         need(len(candidates) <= 62, 'Pod bound exceeded')
         raw['sandbox_peers'] = []
+        bindings = []
         for pod in candidates:
             meta = pod['metadata']
             matches = [s for s in sandboxes if s.get('metadata', {}).get('uid') == meta['uid'] and
@@ -94,6 +96,7 @@ def collect(node):
             pid = info.get('pid')
             need(type(pid) is int and pid > 1, 'unsupported runtime: inspectp.info.pid absent')
             proc = '/proc/' + str(pid)
+            bindings.append((sandbox,pid,copy.deepcopy(status)))
             first = pid_start(read(sandbox + '/stat_before', ['cat', proc + '/stat']))
             netns_before = int(read(sandbox + '/netns_before', ['stat', '-L', '-c', '%i', proc + '/ns/net']))
             peer = parse(read(sandbox + '/peer', ['nsenter', '--target', str(pid), '--net', '--',
@@ -118,10 +121,33 @@ def collect(node):
         for key, argv in (('links', ['ip', '-j', '-d', 'link', 'show']),
                           ('routes', ['ip', '-j', '-4', 'route', 'show', 'table', 'all'])):
             later_raw[key] = parse(read(key + '_after', argv))
+        # Re-probe CRI and the actual network namespace after the API/host
+        # reads. Copying the first peer sample would miss sandbox/ifindex reuse.
+        for index,(sandbox,pid,status) in enumerate(bindings):
+            inspected=parse(read('sandbox/'+sandbox+'_after',['crictl','inspectp','--output','json',sandbox]))
+            current=inspected['status']
+            need(inspected['info'].get('pid') == pid and type(inspected['info'].get('pid')) is int and
+                 all(current.get(k)==status.get(k) for k in ('id','state','metadata')), 'sandbox changed after host/API reads')
+            proc='/proc/'+str(pid)
+            first=pid_start(read(sandbox+'/final_stat_before',['cat',proc+'/stat']))
+            ns_first=int(read(sandbox+'/final_netns_before',['stat','-L','-c','%i',proc+'/ns/net']))
+            peer=parse(read(sandbox+'/peer_after',['nsenter','--target',str(pid),'--net','--',
+                       node.binary('ip'),'-j','-d','address','show','dev','eth0']))
+            need(len(peer)==1 and peer[0].get('ifname')=='eth0' and peer[0].get('linkinfo',{}).get('info_kind')=='veth',
+                 'final sandbox peer absent')
+            last=pid_start(read(sandbox+'/final_stat_after',['cat',proc+'/stat']))
+            ns_last=int(read(sandbox+'/final_netns_after',['stat','-L','-c','%i',proc+'/ns/net']))
+            row=later_raw['sandbox_peers'][index]
+            row.update(host_ifindex=peer[0]['link_index'],ifindex=peer[0]['ifindex'],iflink=peer[0]['link_index'],
+                       ipv4=sorted(v['local'] for v in peer[0]['addr_info'] if v['family']=='inet'),
+                       pid_start_before=first,pid_start_after=last,netns_before=ns_first,netns_after=ns_last)
+            need(core.same(row,raw['sandbox_peers'][index]), 'sandbox peer identity changed between samples')
         report['raw_after'] = later_raw
         after_members = core.select_members(later_raw)
         need(core.same(before_members, after_members), 'eligible membership changed during peer capture')
         need(read('boot_after', ['cat', '/proc/sys/kernel/random/boot_id']) == report['boot_id'], 'boot changed')
+        need(0 <= time.time()-report['wall'] < 30 and
+             0 <= time.clock_gettime(time.CLOCK_BOOTTIME)-report['boottime'] < 30, 'membership capture budget exhausted')
         report['complete'] = True
         report['members'] = after_members
     except (ValueError, OSError, KeyError, TypeError, IndexError) as error:

@@ -136,9 +136,9 @@ class CoverageTests(unittest.TestCase):
              patch.object(o, 'query_units', return_value=guard), \
              patch.object(o, 'snapshot_from_records', return_value={}) as verify:
             observer()
-            collect.assert_called_with(node, o.protection, compatibility=True)
+            collect.assert_called_with(node, o.protection, compatibility=True, delta_api=False)
             observer.withdrawal()
-            collect.assert_called_with(node, o.protection, compatibility=True)
+            collect.assert_called_with(node, o.protection, compatibility=True, delta_api=False)
             self.assertTrue(verify.call_args.kwargs['withdrawal'])
 
 

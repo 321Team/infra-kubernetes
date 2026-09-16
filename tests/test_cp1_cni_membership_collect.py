@@ -71,6 +71,27 @@ def make_node(edit_after=None, edit_peer=None, edit_status=None, bad_query=None)
 
 
 class CollectorTests(unittest.TestCase):
+    def test_late_sandbox_pid_peer_and_netns_changes_are_not_copied_from_first_sample(self):
+        for target in ('pid','peer','netns'):
+            counts={}
+            def alter(argv,result):
+                key=tuple(argv);counts[key]=counts.get(key,0)+1
+                if target=='pid' and argv[:2]==['crictl','inspectp'] and counts[key]==2:
+                    value=json.loads(result['stdout']);value['info']['pid']=999;result['stdout']=json.dumps(value)
+                if target=='peer' and argv[0]=='nsenter' and counts[key]==2:
+                    value=json.loads(result['stdout']);value[0]['link_index']=999;result['stdout']=json.dumps(value)
+                if target=='netns' and argv[0]=='stat' and counts[key]==3:result['stdout']='1000'
+            node,_,_=make_node(bad_query=alter)
+            with self.subTest(target=target):
+                result=self.capture(node)
+                self.assertFalse(result['complete']);self.assertTrue(result['errors'])
+
+    def test_boolean_exit_code_and_nonboolean_truncation_flags_are_rejected(self):
+        for key,value in [('rc',False),('stdout_truncated',0),('stderr_truncated',None)]:
+            def alter(argv,result):result[key]=value
+            node,_,_=make_node(bad_query=alter)
+            with self.subTest(key=key):self.assertFalse(self.capture(node)['complete'])
+
     def capture(self, node):
         with patch.object(c.time, 'time', return_value=1000), patch.object(c.time, 'clock_gettime', return_value=110):
             return c.collect(node)

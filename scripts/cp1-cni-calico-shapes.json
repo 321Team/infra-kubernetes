@@ -1,0 +1,818 @@
+{
+  "fw": {
+    "native": [
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "conntrack",
+              "type": "match"
+            }
+          },
+          {
+            "accept": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "conntrack",
+              "type": "match"
+            }
+          },
+          {
+            "drop": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "MARK",
+              "type": "target"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "match": {
+              "left": {
+                "payload": {
+                  "field": "protocol",
+                  "protocol": "ip"
+                }
+              },
+              "op": "==",
+              "right": "udp"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "multiport",
+              "type": "match"
+            }
+          },
+          {
+            "drop": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "match": {
+              "left": {
+                "payload": {
+                  "field": "protocol",
+                  "protocol": "ip"
+                }
+              },
+              "op": "==",
+              "right": "ipv4"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "drop": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "jump": {
+              "target": "@NS_OUT@"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "match": {
+              "left": {
+                "&": [
+                  {
+                    "meta": {
+                      "key": "mark"
+                    }
+                  },
+                  65536
+                ]
+              },
+              "op": "==",
+              "right": 65536
+            }
+          },
+          {
+            "return": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "jump": {
+              "target": "@SA_OUT@"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "match": {
+              "left": {
+                "&": [
+                  {
+                    "meta": {
+                      "key": "mark"
+                    }
+                  },
+                  65536
+                ]
+              },
+              "op": "==",
+              "right": 65536
+            }
+          },
+          {
+            "return": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "drop": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      }
+    ],
+    "saved": [
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "conntrack",
+        "--ctstate",
+        "RELATED,ESTABLISHED",
+        "-j",
+        "ACCEPT"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "conntrack",
+        "--ctstate",
+        "INVALID",
+        "-j",
+        "DROP"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-j",
+        "MARK",
+        "--set-xmark",
+        "0x0/0x30000"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-p",
+        "udp",
+        "-m",
+        "comment",
+        "--comment",
+        "Drop VXLAN encapped packets originating in workloads",
+        "-m",
+        "multiport",
+        "--dports",
+        "4789",
+        "-j",
+        "DROP"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-p",
+        "4",
+        "-m",
+        "comment",
+        "--comment",
+        "Drop IPinIP encapped packets originating in workloads",
+        "-j",
+        "DROP"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-j",
+        "@NS_OUT@"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "Return if profile accepted",
+        "-m",
+        "mark",
+        "--mark",
+        "0x10000/0x10000",
+        "-j",
+        "RETURN"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-j",
+        "@SA_OUT@"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "Return if profile accepted",
+        "-m",
+        "mark",
+        "--mark",
+        "0x10000/0x10000",
+        "-j",
+        "RETURN"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "Drop if no profiles matched",
+        "-j",
+        "DROP"
+      ]
+    ]
+  },
+  "ns_in": {
+    "native": [
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "MARK",
+              "type": "target"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      }
+    ],
+    "saved": [
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "@PROFILE_COMMENT@",
+        "-j",
+        "MARK",
+        "--set-xmark",
+        "0x10000/0x10000"
+      ]
+    ]
+  },
+  "ns_out": {
+    "native": [
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "MARK",
+              "type": "target"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      }
+    ],
+    "saved": [
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "@PROFILE_COMMENT@",
+        "-j",
+        "MARK",
+        "--set-xmark",
+        "0x10000/0x10000"
+      ]
+    ]
+  },
+  "sa_in": {
+    "native": [
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      }
+    ],
+    "saved": [
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "@PROFILE_COMMENT@"
+      ]
+    ]
+  },
+  "sa_out": {
+    "native": [
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      }
+    ],
+    "saved": [
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "@PROFILE_COMMENT@"
+      ]
+    ]
+  },
+  "tw": {
+    "native": [
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "conntrack",
+              "type": "match"
+            }
+          },
+          {
+            "accept": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "conntrack",
+              "type": "match"
+            }
+          },
+          {
+            "drop": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "MARK",
+              "type": "target"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "jump": {
+              "target": "@NS_IN@"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "match": {
+              "left": {
+                "&": [
+                  {
+                    "meta": {
+                      "key": "mark"
+                    }
+                  },
+                  65536
+                ]
+              },
+              "op": "==",
+              "right": 65536
+            }
+          },
+          {
+            "return": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "jump": {
+              "target": "@SA_IN@"
+            }
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "match": {
+              "left": {
+                "&": [
+                  {
+                    "meta": {
+                      "key": "mark"
+                    }
+                  },
+                  65536
+                ]
+              },
+              "op": "==",
+              "right": 65536
+            }
+          },
+          {
+            "return": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      },
+      {
+        "chain": "@CHAIN@",
+        "expr": [
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "xt": {
+              "name": "comment",
+              "type": "match"
+            }
+          },
+          {
+            "drop": null
+          }
+        ],
+        "family": "ip",
+        "table": "filter"
+      }
+    ],
+    "saved": [
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "conntrack",
+        "--ctstate",
+        "RELATED,ESTABLISHED",
+        "-j",
+        "ACCEPT"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "conntrack",
+        "--ctstate",
+        "INVALID",
+        "-j",
+        "DROP"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-j",
+        "MARK",
+        "--set-xmark",
+        "0x0/0x30000"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-j",
+        "@NS_IN@"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "Return if profile accepted",
+        "-m",
+        "mark",
+        "--mark",
+        "0x10000/0x10000",
+        "-j",
+        "RETURN"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-j",
+        "@SA_IN@"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "Return if profile accepted",
+        "-m",
+        "mark",
+        "--mark",
+        "0x10000/0x10000",
+        "-j",
+        "RETURN"
+      ],
+      [
+        "-A",
+        "@CHAIN@",
+        "-m",
+        "comment",
+        "--comment",
+        "Drop if no profiles matched",
+        "-j",
+        "DROP"
+      ]
+    ]
+  }
+}
