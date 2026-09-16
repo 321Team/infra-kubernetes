@@ -15,14 +15,21 @@ POLICY = 'fds-cp1-managed'
 
 class FirewalldMembershipIO:
     def __init__(self, lease, observer, runner, boot_reader, wall=time.time,
-                 boottime=lambda: time.clock_gettime(time.CLOCK_BOOTTIME)):
+                 boottime=lambda: time.clock_gettime(time.CLOCK_BOOTTIME), *,
+                 recovery_observer=None, withdrawal_observer=None):
         self.lease, self.observer, self.runner, self.boot_reader = lease, observer, runner, boot_reader
         self.wall, self.boottime = wall, boottime
+        self.recovery_observer = recovery_observer or getattr(observer, 'recovery', None)
+        self.withdrawal_observer = withdrawal_observer or getattr(observer, 'withdrawal', None)
+        self.withdrawing = False
 
     def clock(self):
         return {'boot_id': self.boot_reader(), 'wall': self.wall(), 'boottime': self.boottime()}
 
     def snapshot(self):
+        if self.withdrawing:
+            need(callable(self.withdrawal_observer), 'whole-state withdrawal observer required')
+            return self.withdrawal_observer()
         return self.observer()
 
     def change(self, action, item, *, deadline=None):
@@ -43,10 +50,15 @@ class FirewalldMembershipIO:
         return self.runner(['firewall-cmd', '--ipset=' + IPSET, '--' + action + '-entry=' + item], timeout=timeout)
 
     def disable(self):
-        actual = self.snapshot()
+        # Withdrawal must remain possible after expiry, boot change, API
+        # outage or guard failure. This distinct observer proves only the
+        # owned grant; it must never substitute for grant/full-recovery proof.
+        need(callable(self.recovery_observer), 'owned recovery observer required')
+        actual = self.recovery_observer()
         need(actual.get('owned') is True and actual.get('run_id') == self.lease['run_id'],
              'cannot disable unproven/foreign policy')
         if actual.get('policy_enabled') is False:
+            self.withdrawing = True
             return
         need(actual.get('policy_enabled') is True, 'policy state unknown')
         try:
@@ -55,7 +67,8 @@ class FirewalldMembershipIO:
             result = {'exception': type(error).__name__, 'message': str(error)}
         # A timeout/nonzero result does not settle the outcome: independently
         # inspect the real rules. Completion still requires the rest of recovery.
-        after = self.snapshot()
+        after = self.recovery_observer()
         need(after.get('owned') is True and after.get('run_id') == self.lease['run_id'] and
              after.get('policy_enabled') is False, 'owned policy disable not observed')
+        self.withdrawing = True
         return result

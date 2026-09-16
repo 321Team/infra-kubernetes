@@ -61,7 +61,7 @@ def parse_json(raw):
 
 def success(result):
     need(type(result.get('rc')) is int and result['rc'] == 0 and
-         result.get('stdout_truncated') is False and result.get('stderr_truncated') is False and
+         result.get('stdout_truncated', False) is False and result.get('stderr_truncated', False) is False and
          not result.get('stderr', '').strip(), 'incomplete/uncertain state query')
     need(isinstance(result.get('stdout'), str), 'state query text absent')
     return result['stdout'].strip()
@@ -92,7 +92,7 @@ def objects(raw):
     return result
 
 
-def native_view(raw, mode):
+def native_view(raw, mode, *, withdrawal_only=False):
     """Retain all foreign objects/rule order; vary only the verified owned delta.
 
     Handles and counters are retained (counter values normalized). No generic
@@ -117,6 +117,11 @@ def native_view(raw, mode):
             for expr in value['expr']:
                 need(isinstance(expr, dict) and len(expr) == 1, 'invalid native expression')
                 normalize_counter(expr)
+                # xt statements omit extension payloads. An unchanged JSON
+                # representation cannot prove unchanged ipset contents or
+                # xtables match parameters. Do not grant using this digest.
+                need(withdrawal_only or 'xt' not in expr,
+                     'XT_COMPAT_COVERAGE_REQUIRED: nft JSON alone is incomplete')
         if kind == 'counter':
             need(all(type(value.get(k)) is int and value[k] >= 0 for k in ('packets', 'bytes')),
                  'invalid named counter')
@@ -213,7 +218,7 @@ def policy_definition(value, disabled):
                                 'masquerade', 'rich rules'}, 'unknown owned policy field')
 
 
-def snapshot_from_records(record, activation, units, clock):
+def snapshot_from_records(record, activation, units, clock, *, withdrawal=False):
     """Derive the Manager snapshot from an actual whole-state capture.
 
     activation contains independently reviewed baseline projections. It must
@@ -223,7 +228,10 @@ def snapshot_from_records(record, activation, units, clock):
          'complete whole-state capture required')
     need(record.get('errors') == [], 'whole-state query errors remain')
     lease = activation['lease']
-    guard = verified_guard(units, lease, clock)
+    # A disabled grant can be emptied after expiry/guard failure. Whole
+    # fixed-state and same-boot proof remain mandatory for that operation.
+    guard = ({'run_id': lease['run_id'], 'armed': False, 'deadline': None}
+             if withdrawal else verified_guard(units, lease, clock))
     boot(record['boot_id'])
     need(record['boot_id'] == lease['boot_id'], 'observer boot differs')
     for key in ('wall', 'boottime'):
@@ -299,6 +307,8 @@ def snapshot_from_records(record, activation, units, clock):
                  'state changed during paired observation')
         projected, actual_entries, enabled = current, daemon_entries, enabled_now
     need(fingerprint(projected) == lease['fixed_state_sha256'], 'activation fixed-state binding differs')
+    if withdrawal:
+        need(enabled is False, 'whole-state withdrawal requires disabled policy')
     need(guard['run_id'] == lease['run_id'], 'guard belongs to another run')
     return {'boot_id': record['boot_id'], 'run_id': lease['run_id'], 'owned': True,
             'fixed_state_sha256': fingerprint(projected), 'policy_enabled': enabled,
@@ -409,7 +419,7 @@ class LocalObserver:
     def unit_command(self, argv, timeout):
         result = self.node.command(argv, timeout=timeout)
         return {'rc': result['rc'], 'stdout': result['stdout'], 'stderr': result['stderr'],
-                'truncated': result.get('stdout_truncated') is not False or result.get('stderr_truncated') is not False}
+                'truncated': result.get('stdout_truncated', False) is not False or result.get('stderr_truncated', False) is not False}
 
     def __call__(self):
         capture = collect(self.node, protection)
@@ -426,3 +436,14 @@ class LocalObserver:
             self.evidence['verification_error'] = {'message': str(error), 'type': type(error).__name__,
                 'differences': getattr(error, 'differences', []), 'authorizes_apply': False}
             raise
+
+    def recovery(self):
+        from cp1_cni_withdrawal import collect_owned, owned_snapshot
+        capture = collect_owned(self.node)
+        self.evidence = {'owned_withdrawal_capture': capture}
+        return owned_snapshot(capture, self.activation, self.clock())
+
+    def withdrawal(self):
+        capture = collect(self.node, protection)
+        self.evidence = {'withdrawal_capture': capture}
+        return snapshot_from_records(capture, self.activation, None, self.clock(), withdrawal=True)

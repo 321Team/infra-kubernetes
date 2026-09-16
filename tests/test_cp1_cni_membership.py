@@ -393,7 +393,8 @@ class AdapterTests(unittest.TestCase):
     def make(self, runner):
         _, self.io, _ = setup()
         return FirewalldMembershipIO(self.io.lease, self.io.snapshot, runner, lambda: BOOT,
-                                    lambda: self.io.now['wall'], lambda: self.io.now['boottime'])
+                                    lambda: self.io.now['wall'], lambda: self.io.now['boottime'],
+                                    recovery_observer=self.io.snapshot, withdrawal_observer=self.io.snapshot)
 
     def test_exact_argv_and_timeout_bounded_by_fresh_observation(self):
         calls = []
