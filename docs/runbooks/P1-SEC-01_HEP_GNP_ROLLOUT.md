@@ -22,12 +22,29 @@
 
 ## 0단계 — 사전 조건
 
-- [ ] `manifests/calico/02~04, 06~08-*-hep.yaml`의 `<실제-NIC-이름>`을 각 노드의 실제 인터페이스명으로 교체했다.
+- [x] Worker 3대(`manifests/calico/02~04-*-hep.yaml`)의 `interfaceName`을 `ens160`으로 채웠다
+      (Lead 결정, supreme33-kr issuecomment-5697260887 — 정본 과거 기록·Worker 실측 모두
+      public zone 연결이 ens160으로 관측됨).
+- [ ] **적용 직전, 각 Worker 노드에서 아래 3개 read-only 명령 결과가 전부 일치함을 재확인했다.
+      하나라도 불일치하면 해당 노드는 STOP하고 실제 인터페이스명을 재확인한다(임의 추정 금지).**
   ```bash
-  # 각 노드에서 실행하여 실제 인터페이스명 확인
+  ip -4 addr show ens160                                                # 해당 Worker IP가 실제로 ens160에 있는지
+  ip route get 10.1.93.254                                              # 기본 게이트웨이 경로가 ens160을 타는지
+  nmcli -g GENERAL.DEVICE,GENERAL.CONNECTION device show ens160         # NetworkManager가 이 인터페이스를 관리 중인지
+  ```
+- [ ] CP 3대(`manifests/calico/06~08-*-hep.yaml`)의 `<실제-NIC-이름>`은 이번 결정 범위 밖이다
+      (supreme33-kr issuecomment-5697260887) — CP 단계 진행 전 별도로 확인·교체한다.
+  ```bash
+  # CP 각 노드에서 실행하여 실제 인터페이스명 확인 (아직 미확정)
   ip -o link show | awk -F': ' '{print $2}'
   ```
 - [ ] D-NET-01 / ICR-D-NET-01-01 고정 변경안과 IP·NIC 값이 일치함을 대조했다.
+- [ ] **OID-01 관리 접근 경로를 확인했다** (Lead 결정, supreme33-kr issuecomment-5697293093):
+      SSH 관리 Source는 `ansible01(10.250.10.10/32)` 단일 경로이며 `01-bootstrap-allow.yaml`도
+      이 Source로만 TCP/22를 허용하도록 분리돼 있다. Return Route는
+      `10.250.10.0/24 via 10.1.93.58`(mgmt-gw01)이며 내부 FDS Source NAT는 사용하지 않는다.
+      HEP 활성화 이후 관리 접근이 ansible01 경로가 아니라면(OOB Console만 남는 상황 포함)
+      Worker01 canary 적용 전에 그 사실을 명시하고 진행한다.
 - [ ] out-of-band 콘솔(물리 콘솔/IPMI 등, 네트워크 장애 시에도 접근 가능한 사전 승인 경로)이 확보돼 있다.
 - [ ] 현재 6대의 `firewalld` 상태(`active`/`inactive`)를 기록해 "이전에 승인된 보호 상태"의 기준점으로 삼는다.
 

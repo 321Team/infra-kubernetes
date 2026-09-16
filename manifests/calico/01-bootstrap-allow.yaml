@@ -1,3 +1,11 @@
+# SEC-06 4차 수정 (OID-01, supreme33-kr issuecomment-5697293093) — SSH(22) ingress를
+# OID-01 관리 Source(ansible01)로 한정.
+#
+# 3차 제출 결함:
+#   - TCP 22(SSH)가 K8s 노드 6대 상호간에 전부 열려있었고 ansible01(10.250.10.10)은
+#     source에 아예 없었음 — 정본 IF-07(ansible01 -> K8S 6대 TCP22 FROZEN 계약)과 불일치.
+#   - 22를 6443/10250과 같은 규칙에서 분리해 ansible01 단일 source로 한정.
+#
 # SEC-06 3차 수정 (PR #7 review 5222165841) — DNS egress 목적지 제한 추가.
 #
 # 2차 제출 결함:
@@ -28,6 +36,19 @@ spec:
     - action: Allow
       protocol: TCP
       source:
+        nets: ["10.250.10.10/32"]  # ansible01, OID-01 관리 Source (IF-07 FROZEN 계약)
+      destination:
+        ports: [22]  # SSH — 노드 간 SSH는 허용하지 않음
+        nets:
+          - "10.1.93.102/32"  # k8s-control01
+          - "10.1.93.103/32"  # k8s-control02
+          - "10.1.93.104/32"  # k8s-control03
+          - "10.1.93.105/32"  # k8s-worker01
+          - "10.1.93.107/32"  # k8s-worker02
+          - "10.1.93.108/32"  # k8s-worker03
+    - action: Allow
+      protocol: TCP
+      source:
         nets:
           - "10.1.93.102/32"  # k8s-control01
           - "10.1.93.103/32"  # k8s-control02
@@ -36,7 +57,7 @@ spec:
           - "10.1.93.107/32"  # k8s-worker02
           - "10.1.93.108/32"  # k8s-worker03
       destination:
-        ports: [22, 6443, 10250]  # SSH, API(CP만 실제 리스닝), kubelet
+        ports: [6443, 10250]  # API(CP만 실제 리스닝), kubelet
     - action: Allow
       protocol: TCP
       source:

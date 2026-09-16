@@ -1,6 +1,8 @@
 # SEC-06 2차 수정 — Worker 확대 3단계. Worker02(03-worker02-hep.yaml)가 회귀·재부팅·
 # 복구 PASS인 경우에만 이 파일을 적용한다.
-# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+# interfaceName=ens160 (Lead 결정, supreme33-kr issuecomment-5697260887). 적용 직전
+# 02-worker01-hep.yaml과 동일한 3개 read-only 명령으로 이 노드에서도 재확인 후 불일치 시
+# STOP (docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md 0단계 체크리스트 참조).
 apiVersion: crd.projectcalico.org/v1
 kind: HostEndpoint
 metadata:
@@ -10,6 +12,6 @@ metadata:
     rollout-stage: expanded
 spec:
   node: k8s-worker03
-  interfaceName: <실제-NIC-이름>
+  interfaceName: ens160
   expectedIPs:
     - "10.1.93.108"
