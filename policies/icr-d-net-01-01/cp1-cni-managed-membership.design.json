@@ -1,0 +1,107 @@
+{
+  "schema": "fds.cp1-cni-managed-membership-design.v1",
+  "status": "DESIGN_ONLY_NOT_EXECUTABLE",
+  "direction_selected_by_user": true,
+  "scope": {
+    "host": "k8s-control01",
+    "owned_block": "10.244.246.64/26",
+    "family": "ipv4",
+    "layer4": "ALL",
+    "ingress_zone": "public",
+    "egress_zone": "public",
+    "host_hooks_in_scope": false,
+    "entries": "verified Pod IPv4 /32 plus concrete host veth; both source+iif and destination+oif required",
+    "includes_new_pods": true,
+    "permits_cross_node_pod_traffic": false
+  },
+  "mechanism": {
+    "ipset_type": "hash:net,iface",
+    "policy_target": "CONTINUE",
+    "policy_priority": -1,
+    "runtime_membership": "remove obsolete entries, verify, add validated entries, verify",
+    "bulk_setEntries_allowed": false,
+    "permanent_membership": [],
+    "permanent_policy_disabled": true,
+    "existing_zone_bindings_changed": false,
+    "existing_policy_semantics_preserved": "REQUIRES_NATIVE_AND_RUNTIME_VERIFICATION"
+  },
+  "membership": {
+    "eligibility": [
+      "CP1 non-hostNetwork Pod",
+      "IPv4 allocated within confirmed CP1-owned block",
+      "Pod not terminal/deleting",
+      "Pod UID/IP/interface mapping established",
+      "unique main-table /32 direct route",
+      "concrete cali veth and peer identity verified"
+    ],
+    "readiness_required_for_membership": false,
+    "readiness_required_for_acceptance": true,
+    "new_pending_pods_without_ip": "not eligible; do not invalidate already verified members",
+    "ipam_block_ownership_change": "withdraw; never silently broaden to another block",
+    "unknown_or_reused_identity": "remove old grant before considering a new identity",
+    "full_observation_required_before_add": true,
+    "events_are_hints_not_authority": true,
+    "established_conntrack_revocation_guaranteed": false
+  },
+  "proposed_lifetime": {
+    "max_lease_seconds": 7200,
+    "renewal": "explicit bounded operator decision; no automatic extension",
+    "monotonic_and_wall_clock_deadline": true,
+    "boot_change": "recover only, never auto-reactivate",
+    "periodic_reconciliation_max_seconds": 15,
+    "observation_stale_after_seconds": 30,
+    "before_followup_reserve_seconds": 660,
+    "after_followup_reserve_seconds": 180,
+    "parameters_runtime_verified": false,
+    "availability_until_all_nodes_joined_guaranteed": false
+  },
+  "recovery": {
+    "independent_local_guard_required": true,
+    "mutation_intent_fsynced": true,
+    "failures": [
+      "observation stale",
+      "API/watch gap",
+      "kernel/daemon mismatch",
+      "service crash",
+      "IPAM ownership loss",
+      "unowned drift",
+      "deadline",
+      "boot change"
+    ],
+    "terminal_conditions": [
+      "owned policy inactive",
+      "owned Runtime/Permanent definitions removed",
+      "original Runtime six rules and full expected firewall restored",
+      "management path verified",
+      "work/guard/recovery units terminal",
+      "owned unit files removed",
+      "recovery schedule disarmed"
+    ],
+    "unrelated_drift": "do not overwrite or reload foreign changes; withdraw known owned grant where provable and retain review-required state",
+    "connection_tracking": "no host-wide flush; existing established flows may outlive rule withdrawal"
+  },
+  "handoff": {
+    "schema_change_required": true,
+    "original_receipt_immutable": true,
+    "links": [
+      "original receipt byte hash",
+      "approved policy/source/plan",
+      "activation receipt",
+      "generation chain",
+      "actual CP1 acceptance evidence",
+      "authenticated fresh CP1 observation"
+    ],
+    "during_member_update": "wait until reconciliation completes; recheck latest generation before and after target action",
+    "legacy_consumer_behavior": "continues rejecting new CNI state until a reviewed consumer is implemented",
+    "join_authorized_by_firewall_receipt": false,
+    "protection_transition": "6/6 Ready plus separately approved HEP/GNP cutover; readiness alone never disarms recovery"
+  },
+  "implementation": {
+    "runtime_adapter": false,
+    "recovery_service": false,
+    "producer": false,
+    "consumer": false,
+    "runtime_tests": false
+  },
+  "execution_authorized": false
+}
