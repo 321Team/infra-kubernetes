@@ -1,0 +1,294 @@
+{
+  "actual_cp1_connectivity_tested": false,
+  "default_public_dispatch": [
+    {
+      "add": {
+        "rule": {
+          "%%POLICY_SORT_KEY%%": [
+            32768,
+            2,
+            "public",
+            "",
+            "*",
+            32768,
+            2,
+            "public",
+            "",
+            "*",
+            0,
+            -1
+          ],
+          "chain": "filter_FORWARD_POLICIES",
+          "expr": [
+            {
+              "jump": {
+                "target": "filter_FWD_policy_fds-cp1-local-veth"
+              }
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        }
+      }
+    }
+  ],
+  "default_zone_plus_is_not_intra_zone_forward": true,
+  "dispatch_tables": [
+    [
+      "filter",
+      "FORWARD"
+    ],
+    [
+      "nat",
+      "POSTROUTING"
+    ]
+  ],
+  "full_daemon_tested": false,
+  "functions_executed": [
+    "_set_type_list",
+    "build_set_create_rules",
+    "_set_get_family",
+    "_set_match_fragment",
+    "_set_entry_fragment",
+    "build_set_add_rules",
+    "_rule_addr_fragment",
+    "_rich_rule_family_fragment",
+    "_rich_rule_destination_fragment",
+    "_rich_rule_source_fragment",
+    "_rich_rule_limit_fragment",
+    "_rich_rule_chain_suffix",
+    "_rich_rule_priority_fragment",
+    "_rich_rule_log",
+    "_rich_rule_audit",
+    "_rich_rule_action",
+    "build_policy_rich_source_destination_rules",
+    "build_policy_chain_rules",
+    "build_policy_ingress_egress_pair_rules",
+    "_policy_dispatch_sort_key",
+    "build_zone_forward_rules",
+    "policy_base_chain_name",
+    "_get_table_chains_for_policy_dispatch",
+    "_interface"
+  ],
+  "kernel_tested": false,
+  "new_rule": {
+    "chain": "filter_FWD_policy_fds-cp1-local-veth_allow",
+    "expr": [
+      {
+        "match": {
+          "left": {
+            "meta": {
+              "key": "nfproto"
+            }
+          },
+          "op": "==",
+          "right": "ipv4"
+        }
+      },
+      {
+        "match": {
+          "left": {
+            "concat": [
+              {
+                "payload": {
+                  "field": "daddr",
+                  "protocol": "ip"
+                }
+              },
+              {
+                "meta": {
+                  "key": "oifname"
+                }
+              }
+            ]
+          },
+          "op": "==",
+          "right": "@fds-cp1-local-veth"
+        }
+      },
+      {
+        "match": {
+          "left": {
+            "concat": [
+              {
+                "payload": {
+                  "field": "saddr",
+                  "protocol": "ip"
+                }
+              },
+              {
+                "meta": {
+                  "key": "iifname"
+                }
+              }
+            ]
+          },
+          "op": "==",
+          "right": "@fds-cp1-local-veth"
+        }
+      },
+      {},
+      {
+        "accept": null
+      }
+    ],
+    "family": "inet",
+    "table": "firewalld"
+  },
+  "operational_approval": false,
+  "packet_matrix": [
+    {
+      "expected": true,
+      "name": "local_tcp_8080",
+      "new_rule_matches": true
+    },
+    {
+      "expected": true,
+      "name": "local_tcp_8081_not_a_negative",
+      "new_rule_matches": true
+    },
+    {
+      "expected": true,
+      "name": "local_udp",
+      "new_rule_matches": true
+    },
+    {
+      "expected": true,
+      "name": "local_icmp",
+      "new_rule_matches": true
+    },
+    {
+      "expected": true,
+      "name": "reverse",
+      "new_rule_matches": true
+    },
+    {
+      "expected": false,
+      "name": "physical_spoofed_source",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "physical_spoofed_destination",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "tunnel_in",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "tunnel_out",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "nonpeer_in",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "nonpeer_out",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "new_veth",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "external_dns",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "external_api",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "external_harbor",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "host_input",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "host_output",
+      "new_rule_matches": false
+    },
+    {
+      "expected": false,
+      "name": "ipv6",
+      "new_rule_matches": false
+    }
+  ],
+  "real_xml_parser_tested": false,
+  "scope": "PINNED_UPSTREAM_FUNCTIONS_WITH_MODEL_OBJECTS_AND_LOCAL_MATCH_EVALUATOR",
+  "set_create": [
+    {
+      "add": {
+        "set": {
+          "family": "inet",
+          "flags": [
+            "interval"
+          ],
+          "name": "fds-cp1-local-veth",
+          "table": "firewalld",
+          "type": [
+            "ipv4_addr",
+            "ifname"
+          ]
+        }
+      }
+    }
+  ],
+  "set_entries": [
+    {
+      "add": {
+        "element": {
+          "elem": [
+            {
+              "concat": [
+                {
+                  "prefix": {
+                    "addr": "10.244.246.64",
+                    "len": 26
+                  }
+                },
+                "cali0123456789a"
+              ]
+            },
+            {
+              "concat": [
+                {
+                  "prefix": {
+                    "addr": "10.244.246.64",
+                    "len": 26
+                  }
+                },
+                "cali0123456789b"
+              ]
+            }
+          ],
+          "family": "inet",
+          "name": "fds-cp1-local-veth",
+          "table": "firewalld"
+        }
+      }
+    }
+  ],
+  "set_plus_is_not_zone_prefix_conversion": true,
+  "source_sha256": {
+    "fw_policy.py": "67394a8707f2bc9fb9a828c88a047cdc221e1ad12a3e46534e7b6808733786ab",
+    "fw_zone.py": "0e96f43b963fb50627ea5de37d7a32ed335194074f61f21ff7886936ee5aad8a",
+    "nftables.py": "42ad0f052ffc119d1263c3b66d299360bfc78f7d0de7011f3fbe83a0f2b4c232"
+  },
+  "status": "UPSTREAM_FUNCTION_PROBE_PASS",
+  "upstream_ref": "v2.4.3"
+}

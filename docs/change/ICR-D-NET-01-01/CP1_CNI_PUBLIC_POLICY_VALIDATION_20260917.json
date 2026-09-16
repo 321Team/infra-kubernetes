@@ -1,0 +1,47 @@
+{
+  "schema": "fds.cp1-cni-public-policy-validation.v1",
+  "validated_at": "2026-09-16T16:21:10.313393+00:00",
+  "base_commit": "60ebef21c3a18245e155eef466c5ad555efcb463",
+  "status": "STATIC_MOCK_AND_UPSTREAM_FUNCTION_PROBE_PASS",
+  "unittest": {
+    "new": 25,
+    "existing": 84,
+    "total": 109,
+    "passed": 109
+  },
+  "upstream_probe": {
+    "ref": "v2.4.3",
+    "cases": 18,
+    "scope": "PINNED_UPSTREAM_FUNCTIONS_WITH_MODEL_OBJECTS_AND_LOCAL_MATCH_EVALUATOR",
+    "git_blobs": {
+      "nftables.py": "685f3e25eb50ff4012a3abfd708a640ce44afbf8",
+      "fw_policy.py": "5e5d2358fd6010c217c071b175f86164d0d4db03",
+      "fw_zone.py": "cf0e5c3d64c1b03e4313f32f0c1375a960807a2c"
+    }
+  },
+  "full_daemon_tested": false,
+  "real_xml_parser_tested": false,
+  "kernel_tested": false,
+  "actual_cp1_tested": false,
+  "apply_recovery_implemented": false,
+  "production_consumer_connected": false,
+  "source_sha256": {
+    "scripts/prepare-cp1-cni-policy.py": "acb016160c7b5e2184f963950e6bdd0a50c2762d879305040a45f96590d714f2",
+    "tests/test_cp1_cni_policy.py": "7077545b79e816564c705d6fa5312b2a7e32f11f94581fe5c687961e1650fb24",
+    "tests/probe_cp1_cni_upstream.py": "462ffa777eff95e0bf553eb4b7e36fc7aaac22c79f43e3b0ff4993d02beeea6c",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_PUBLIC_POLICY_CANDIDATE_20260917.md": "c85b1cefab45d38df6f1056cc98bad9a68a9717360814ab0e4f2ac2c979c63b5",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_PUBLIC_POLICY_UPSTREAM_20260917.json": "ac6a3d9739802c07e0600af1f821d0a9d0b06908e42d2a3a37546e4a575025fa",
+    "docs/change/ICR-D-NET-01-01/CP1_CNI_PUBLIC_POLICY_TEST_20260917.txt": "def0a887da7628e684fcf7206c65c6c776cb30b099e6619c5abf538ffc5712ce"
+  },
+  "original_runtime_source_sha256": {
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc"
+  },
+  "limitations": [
+    "Frozen exact membership is a distinct candidate, not dynamic cali+ coverage.",
+    "Upstream rule generation is not whole-path connectivity or Calico policy validation.",
+    "New proposal is incompatible with old offline zone contract.",
+    "No operational approval or new live execution."
+  ]
+}
