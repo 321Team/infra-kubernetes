@@ -207,10 +207,12 @@ class Boundaries(unittest.TestCase):
             name=tool.unit_name(job,'bus')+'.service';(root/name).write_text(docs[name])
             lab=SimpleNamespace(job=job,result={'cleanup_complete':True,'disarm_intent':True})
             with patch.object(tool,'UNITS',root),patch.object(tool.node,'safe_read',side_effect=lambda p:p.read_bytes()), \
-                 patch.object(tool.node,'save_json'),patch.object(tool,'system') as system:
+                 patch.object(tool.node,'save_json'),patch.object(tool,'system') as system, \
+                 patch.object(tool,'verify_recovery_disabled'):
                 tool.disarm(lab,docs)
-            self.assertFalse((root/name).exists());self.assertTrue(lab.result['recovery_disarmed'])
-            self.assertEqual(system.call_args_list[-1].args[0],['daemon-reload'])
+            self.assertTrue((root/name).exists()); self.assertTrue(lab.result['recovery_disarmed'])
+            self.assertTrue(lab.result['unit_cleanup_pending'])
+            self.assertFalse(any(c.args[0] == ['daemon-reload'] for c in system.call_args_list))
 
     def test_unknown_namespace_create_outcome_cannot_be_deleted(self):
         job=tool.job_path('a'*16);lab=SimpleNamespace(job=job,result={'phase':'STAGED'},j={},boot_changed=False,ns=tool.ns_names(job))

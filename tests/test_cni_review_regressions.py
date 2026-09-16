@@ -330,14 +330,15 @@ class StagedRecoveryRegressions(unittest.TestCase):
         with patch.object(staged,'ROOT',self.root), patch.object(staged,'UNITS',self.units), \
              patch.object(staged.node,'safe_dir'), patch.object(staged.node,'safe_read',side_effect=lambda p:p.read_bytes()), \
              patch.object(staged.node,'lock',return_value=nullcontext()), \
-             patch.object(staged,'system',return_value='not-found'), \
+             patch.object(staged,'system',return_value='not-found'), patch.object(staged,'verify_recovery_disabled'), \
              patch.object(staged,'call',side_effect=AssertionError('No external command allowed in offline test')):
             staged.execute(self.job,recovery=True)
         result=json.loads((self.job/'RESULT.json').read_text())
         self.assertTrue(result['cleanup_complete']); self.assertTrue(result['recovery_disarmed'])
         self.assertEqual(result['status'],'COMPONENT_FAILED_REVIEW_REQUIRED')
         self.assertEqual(result['component_error'],'MOCK_PRIOR_FAILURE')
-        self.assertEqual(list(self.units.iterdir()),[])
+        self.assertEqual({p.name for p in self.units.iterdir()},set(self.docs))
+        self.assertTrue(result['unit_cleanup_pending'])
 
 
 class ProbeRegressions(unittest.TestCase):
@@ -375,7 +376,7 @@ class FlowRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             job = Path(directory)
             lab = kernel.Lab.__new__(kernel.Lab); lab.job=job; lab.ns={'r':'MOCK_ROUTER'}
-            lab.result={'component_flows':{}}
+            lab.result={'component_flows':{}}; lab.guard=Mock()
             source={'name':'c' if case=='outside_connected' else 'a', 'ip':'10.244.246.80','interface':'MOCK_VETH'}
             dest={'name':'b','ip':'10.244.246.81'}
             port = 8081 if case in ('negative_connected','negative_http_reset','valid_negative') else 8080
@@ -388,19 +389,29 @@ class FlowRegressions(unittest.TestCase):
                 if args[0].endswith('conntrack'): return ''
                 if '_probe' in args:
                     return json.dumps(dict(tcp_connected=True,connected=True,status=200,body=job.name+'/b') if '127.0.0.1' in args else actual)
+                if case=='trace_cleanup_error' and 'delete' in args: raise ValueError('MOCK_TRACE_DELETE_ERROR')
                 return ''
-            lab.net=net; lab.cmd=lambda *a,**kw:'MOCK_INGRESS_PACKET'
+            lab.net=net
+            def cmd(*args,**kwargs):
+                if case=='readback_error': raise ValueError('MOCK_READBACK_ERROR')
+                return '' if case=='missing_capture' else 'MOCK_INGRESS_PACKET'
+            lab.cmd=cmd
             class Process:
                 pid=424242
                 def __init__(self,argv,**kwargs):
-                    if 'tcpdump' in Path(argv[4]).name:
+                    self.capture = 'tcpdump' in Path(argv[4]).name
+                    self.err = kwargs['stderr']
+                    if self.capture:
                         Path(argv[argv.index('-w')+1]).write_bytes(b'MOCK_PCAP')
                         kwargs['stderr'].write(b'listening on MOCK\n'); kwargs['stderr'].flush()
                     else: kwargs['stdout'].write(b'' if case=='missing_trace' else b'MOCK_NFT_TRACE\n')
-                def poll(self): return None
-                def wait(self,**kwargs): return 0
+                def poll(self): return 1 if self.capture and case=='startup_exit' else None
+                def wait(self,**kwargs):
+                    if self.capture:
+                        self.err.write(b'1 packet captured\n1 packet received by filter\n0 packets dropped by kernel\n'); self.err.flush()
+                    return 1 if self.capture and case in ('startup_exit','capture_exit_error') else 0
             with patch.object(kernel.subprocess,'Popen',side_effect=Process), patch.object(kernel.os,'killpg'), \
-                 patch.object(kernel.time,'sleep'), patch.object(kernel.node,'safe_read',side_effect=lambda p:p.read_bytes()), \
+                 patch.object(kernel.time,'sleep'), patch.object(kernel,'wait_for_observation',return_value='BYTES_AVAILABLE'), patch.object(kernel.node,'safe_read',side_effect=lambda p:p.read_bytes()), \
                  patch.object(kernel.node,'save_json',side_effect=lambda p,d:p.write_text(json.dumps(d))):
                 if failure:
                     with self.assertRaisesRegex(ValueError,'Component flow failed'): lab.flow(source,dest,port)
@@ -410,12 +421,21 @@ class FlowRegressions(unittest.TestCase):
             self.assertEqual(bool(record['expectation_errors']), failure)
             self.assertEqual(record['component_attribution'], 'REQUIRES_TRACE_REVIEW')
             self.assertTrue(list(job.glob('*.pcap'))); self.assertTrue(list(job.glob('*.trace')))
+            self.assertTrue(list(job.glob('*.tcpdump.log'))); self.assertTrue(list(job.glob('*.nft.log')))
+            detail=json.loads(next(job.glob('*.observation.json')).read_text())
+            self.assertEqual(detail['tcpdump_statistics']['captured'],1)
+            if case=='missing_capture':
+                self.assertEqual(record['communication_status'],'MATCH')
+                self.assertEqual(record['evidence_errors'],['PACKET_CAPTURE_MISSING'])
+            if case=='startup_exit': self.assertEqual(record['communication_status'],'NOT_TESTED')
+            if case=='capture_exit_error': self.assertEqual(detail['processes']['tcpdump']['exit_code'],1)
 
     def test_matching_positive_still_requires_review(self): self.flow('valid_positive', False)
     def test_matching_negative_still_requires_attribution_review(self): self.flow('valid_negative', False)
 
 
-for _case in ('positive_denied','negative_connected','outside_connected','wrong_body','http_500','negative_http_reset','missing_trace'):
+for _case in ('positive_denied','negative_connected','outside_connected','wrong_body','http_500','negative_http_reset','missing_trace',
+              'missing_capture','startup_exit','capture_exit_error','readback_error','trace_cleanup_error'):
     def test(self, case=_case): self.flow(case)
     setattr(FlowRegressions, 'test_' + _case + '_records_failure_before_raising', test)
 

@@ -1,4 +1,27 @@
-## 2026-09-16 16:51 normal 후속 — zone forwarding 생성 계약 수정
+## 2026-09-16 R5 — 캡처 증적과 종료 처리 일괄 보완
+
+c679의 job `3c11f64a9e41c9f0`에서 첫 HTTP 200과 같은 tuple의 nft accept가 관측됐으나 PCAP은 헤더뿐이었다.
+공통 원복·시험 자원 정리는 완료됐고, 수동 recover 1회 뒤 예약 해제를 확인했다. 나머지 5개 흐름은 NOT_TESTED다.
+[R5 검토 기록](../change/ICR-D-NET-01-01/CNI_CAPTURE_R5_REVIEW_20260916.md)에 근거·수정 범위·검증·남은 확인을 묶었다.
+로컬 회귀 246/246 PASS이며 대상 VM의 새 tcpdump/systemd 경로는 아직 실행하지 않았다.
+새 kernel bundle: `3184ef3ebdaea8f1ca12843055510cacdfd212e65db41ce1829df5cb1723b619`.
+
+- `communication_status`와 `evidence_status`를 구분한다. PCAP/trace 누락은 통신 관측과 별도로 실패다.
+- inspect는 tcpdump `--immediate-mode` 지원을 확인한다. 고정 0.2초 대신 최대 3초 기록 대기 후 같은 tuple을 readback한다.
+- 흐름별 tcpdump/nft 로그·종료코드·강제 종료·캡처 통계를 반출한다.
+- `recovery_disarmed=true`는 timer/boot 예약 해제를 뜻한다. R5에서는 unit 파일 삭제 완료와 구분한다.
+- 자원 정리와 예약 해제 뒤 실행 중인 unit 정의는 보존한다. 기존 `collect JOB_ID`가 보관 소스에서
+  모든 소유 unit의 종료/대기 작업 부재를 확인한 뒤 삭제·reload한다. 별도 명령이나 helper 서비스는 추가하지 않는다.
+- collect 후 `unit_cleanup_complete=true`, `unit_cleanup_pending=false`를 확인한다.
+  실패 archive도 생성될 수 있으므로 `EXPORT_STATE.json`과 `COMPONENT_SUMMARY.json`을 함께 검토한다.
+  오류가 남으면 같은 JOB_ID에서 처리하며 새 start는 차단된다. collect는 활성 서비스를 강제로 중지하지 않는다.
+- 단순 상태 조회와 초기 PLAN_ONLY는 변경 작업을 하지 않는다. R5 collect에는 종료된 소유 unit 파일 정리가 포함된다.
+  구버전 job에 이 동작을 소급 적용하지 않는다.
+
+기존 격리·최소 독립 복구와 CP1/CP2 인수 경계는 유지한다. Worker 진행은 이 진단의 선행 조건이 아니다.
+이번 변경에 추가 VM 실행 승인은 포함되지 않는다. 코드·검증·절차를 한 묶음으로 검토하며 반복 반입/시험을 먼저 요구하지 않는다.
+
+## 이전 기록 — 2026-09-16 16:51 normal 후속 — zone forwarding 생성 계약 수정
 
 HEAD d015e54의 job d6c7e1e672c418ca는 Permanent zone 생성 후 forward 예상 no / 실제 yes 차이로 실패했다.
 공통 트랜잭션 원복은 실패했으며, 전용 자원 정리·복구 예약 해제와 수집한 host 전후 일치는 별도로 확인했다. 통신은 미측정이다.
@@ -52,7 +75,7 @@ SELINUX_LAYOUT.json, 최초 실패 journal, 수집 시점 journal 및 별도 수
 
 collect의 텍스트 반출본에서 UUID 형태 문자열은 SHA256 표기로 바꾼다. 원본 job/실행 입력은 VM에 보존하며 EXPORT_REDACTION.json에 원본·반출본 해시와 치환 수를 남긴다. pcap 등 바이너리에 UUID 형태 문자열이 있으면 자동 반출을 중단한다. 이는 UUID 평문 반출 방지이며 모든 식별정보의 익명화를 보장하지 않는다. **반출된 REQUEST/decision은 실행 입력으로 재사용하지 않는다.** inspect·template 원본은 VM 내부 바인딩에 필요하므로 전송 시 별도 사본을 비식별 처리하고 원본은 로컬에 보관한다.
 
-보완 소스는 독립 리뷰와 새 inspect/실행 입력 대조가 필요하다. 164f8d5의 APPROVED를 새 digest 승인으로 재사용하지 않는다. TimeoutStopSec/self-cleanup 경합은 별도 잔여이며 kill/deadline/cleanup-retry/reboot 실행을 이번 절차가 허용하지 않는다.
+보완 소스는 독립 리뷰와 새 inspect/실행 입력 대조가 필요하다. 164f8d5의 APPROVED를 새 digest 승인으로 재사용하지 않는다. R5는 실행 중인 unit 삭제를 collect로 옮겼으며 대상 VM 종료 동작은 검증 대기다. kill/deadline/cleanup-retry/reboot 실행을 이번 절차가 허용하지 않는다.
 
 전체 격리 통합시험 qualification을 완성하는 도구는 아니다. 운영 node adapter의 API/SSH/Calico Pod 검증과 생산 recovery service 경로는 이 wrapper로 실행되지 않는다. `RUNTIME_ISOLATED` qualification을 만들거나 기존 생산 계약을 우회하지 않는다. 실제 VM NIC·터널·기존 Pod 경로와 운영 복구 검증은 후속 범위다. `PRODUCTION_MATRIX.json`의 흐름 7개·복구 6개는 NOT_TESTED로 유지하고, 이번 실제 관측은 `component_flows`와 별도 scope로 기록한다.
 

@@ -479,10 +479,14 @@ def prerequisites():
     help_text = call(['/usr/sbin/firewalld', '--help'])['stdout']
     need(all(option in help_text for option in ('--system-config', '--default-config', '--nopid', '--nofork', '--log-file')),
          'Private firewalld instance options unavailable')
+    capture_help = call(['/usr/sbin/tcpdump', '--help'])
+    need('--immediate-mode' in capture_help['stdout'] + capture_help['stderr'],
+         'tcpdump immediate capture unavailable')
     return dict(packages=versions, product_uuid=Path('/sys/class/dmi/id/product_uuid').read_text().strip(),
                 machine_id_sha256=hashlib.sha256(Path('/etc/machine-id').read_bytes()).hexdigest(),
                 sources_sha256=hashes(), checked_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
                 selinux=SELinuxPolicy().check(),
+                tcpdump_version=call(['/usr/sbin/tcpdump', '--version'])['stdout'].strip(),
                 policy_packages=call(['/usr/bin/rpm', '-q', 'selinux-policy', 'selinux-policy-targeted',
                                      'libselinux', 'systemd', 'dbus-daemon'])['stdout'].splitlines())
 
@@ -554,6 +558,60 @@ def recovery_unit_check(job, result):
                           result.get('mutation_attempted') is False)
 
 
+def stop_observer(process):
+    """Reap only a process group we just spawned; retain its exit outcome."""
+    result = dict(pid=process.pid, forced_kill=False)
+    try:
+        if process.poll() is None:
+            try: os.killpg(process.pid, signal.SIGINT)
+            except ProcessLookupError: pass
+        try:
+            result['exit_code'] = process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            result['forced_kill'] = True
+            try: os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+            result['exit_code'] = process.wait(timeout=2)
+    except Exception as error:
+        result['error'] = str(error)
+    return result
+
+
+def wait_for_observation(capture, trace, processes, guard):
+    # File growth is a wake-up condition, not packet validation. The exact BPF
+    # tuple is read back by tcpdump after both observers have been reaped.
+    deadline = time.monotonic() + 3
+    while True:
+        guard()
+        need(all(p.poll() is None for p in processes), 'Packet observation process exited')
+        if capture.exists() and capture.stat().st_size > 24 and trace.stat().st_size > 0:
+            return 'BYTES_AVAILABLE'
+        if time.monotonic() >= deadline:
+            return 'DEADLINE_REACHED'
+        time.sleep(0.05)
+
+
+def flow_outcome(observed, expected_connected, expected_body, arrived, traced, collection_errors):
+    communication_errors = []
+    communication_status = 'NOT_TESTED'
+    if observed.get('tcp_connected') in (True, False):
+        communication_status = 'MATCH'
+        if observed['tcp_connected'] is not expected_connected:
+            communication_errors.append('TCP_CONNECT_EXPECTATION_MISMATCH')
+        if expected_connected and (observed.get('status') != 200 or observed.get('body') != expected_body):
+            communication_errors.append('HTTP_RESPONSE_EXPECTATION_MISMATCH')
+        if communication_errors: communication_status = 'MISMATCH'
+    evidence_errors = list(collection_errors)
+    if not arrived: evidence_errors.append('PACKET_CAPTURE_MISSING')
+    if not traced: evidence_errors.append('NFT_TRACE_MISSING')
+    errors = communication_errors + evidence_errors
+    if communication_status == 'NOT_TESTED': errors.append('COMMUNICATION_NOT_TESTED')
+    return dict(communication_status=communication_status, communication_errors=communication_errors,
+                evidence_status='INCOMPLETE' if evidence_errors else 'PRESENT_REVIEW_REQUIRED',
+                evidence_errors=evidence_errors, expectation_errors=errors, expected_result_matches=not errors,
+                verdict='COMPONENT_FAILED_REVIEW_REQUIRED' if errors else 'OBSERVED_REVIEW_REQUIRED')
+
+
 def start(decision_path, scenario):
     observed = prerequisites()
     decision = json.loads(decision_path.read_text())
@@ -563,7 +621,9 @@ def start(decision_path, scenario):
         active = ROOT / 'ACTIVE.json'
         if active.exists():
             previous = job_path(read_json(active)['job_id'])
-            need(read_json(previous / 'RESULT.json').get('recovery_disarmed') is True, 'Prior component job needs recovery')
+            previous_result = read_json(previous / 'RESULT.json')
+            need(previous_result.get('recovery_disarmed') is True, 'Prior component job needs recovery')
+            need(not previous_result.get('unit_cleanup_pending'), 'Collect prior job to finalize owned unit files')
         job = job_path(secrets.token_hex(8)); job.mkdir(mode=0o700)
         for name in SOURCES:
             raw = (HERE / name).read_bytes()
@@ -574,7 +634,8 @@ def start(decision_path, scenario):
                        boot_start=time.clock_gettime(time.CLOCK_BOOTTIME))
         node.save_json(job / 'REQUEST.json', request, exclusive=True)
         node.save_json(job / 'RESULT.json', dict(FLAGS, phase='STAGED', job_id=job.name,
-                       cleanup_complete=False, recovery_disarmed=False, component_flows={}, recovery_attempts=0), exclusive=True)
+                       cleanup_complete=False, recovery_disarmed=False, component_flows={}, recovery_attempts=0,
+                       unit_cleanup_pending=True, unit_cleanup_complete=False), exclusive=True)
         node.save_json(job / 'RESOURCES.json', dict(namespaces={}, pending_namespace=None), exclusive=True)
         docs = documents(job, scenario); node.save_json(job / 'UNITS.json', docs, exclusive=True)
         node.save_json(active, {'job_id': job.name})
@@ -754,55 +815,73 @@ class Lab:
                       'iifname', source['interface'], 'ip', 'saddr', source['ip'], 'ip', 'daddr', destination['ip'],
                       'tcp', 'sport', str(source_port), 'tcp', 'dport', str(port), 'meta', 'nftrace', 'set', '1'])
         capture, trace = self.job / (label + '.pcap'), self.job / (label + '.trace')
-        processes = []
-        with open(trace, 'xb') as trace_out, tempfile.TemporaryFile() as cap_err, tempfile.TemporaryFile() as trace_err:
+        processes = {}
+        observed, collection_errors = {}, []
+        observation = dict(wait_status='NOT_STARTED', processes={})
+        expression = 'src host %s and dst host %s and tcp src port %s and tcp dst port %s' % (source['ip'], destination['ip'], source_port, port)
+        with open(trace, 'xb') as trace_out, open(self.job / (label + '.tcpdump.log'), 'x+b') as cap_err, \
+             open(self.job / (label + '.nft.log'), 'x+b') as trace_err:
             try:
-                processes.append(subprocess.Popen(['/usr/sbin/ip', 'netns', 'exec', self.ns['r'], '/usr/sbin/nft', 'monitor', 'trace'],
-                    stdout=trace_out, stderr=trace_err, env=ENV, start_new_session=True))
-                expression = 'src host %s and dst host %s and tcp src port %s and tcp dst port %s' % (source['ip'], destination['ip'], source_port, port)
-                processes.append(subprocess.Popen(['/usr/sbin/ip', 'netns', 'exec', self.ns['r'], '/usr/sbin/tcpdump',
-                    '-Z', 'root', '-nn', '-i', source['interface'], '-U', '-s', '128', '-w', str(capture), expression],
-                    stdout=subprocess.DEVNULL, stderr=cap_err, env=ENV, start_new_session=True))
+                processes['nft'] = subprocess.Popen(['/usr/sbin/ip', 'netns', 'exec', self.ns['r'], '/usr/sbin/nft', 'monitor', 'trace'],
+                    stdout=trace_out, stderr=trace_err, env=ENV, start_new_session=True)
+                processes['tcpdump'] = subprocess.Popen(['/usr/sbin/ip', 'netns', 'exec', self.ns['r'], '/usr/sbin/tcpdump',
+                    '-Z', 'root', '--immediate-mode', '-nn', '-i', source['interface'], '-U', '-s', '128', '-w', str(capture), expression],
+                    stdout=subprocess.DEVNULL, stderr=cap_err, env=ENV, start_new_session=True)
                 ready = time.monotonic() + 3
                 while True:
-                    need(all(p.poll() is None for p in processes), 'Packet observation process exited')
-                    cap_err.seek(0)
-                    if b'listening on' in cap_err.read(8000):
-                        break
+                    self.guard()
+                    need(all(p.poll() is None for p in processes.values()), 'Packet observation process exited')
+                    # pread does not move the child's shared stderr file offset.
+                    if b'listening on' in os.pread(cap_err.fileno(), 8000, 0): break
                     need(time.monotonic() < ready, 'Capture readiness timeout'); time.sleep(0.05)
                 observed = json.loads(self.net(source['name'], ['/usr/bin/python3', '-I', '-B', str(self.job / SOURCES[0]),
                                       '_probe', self.job.name, source['name'], destination['ip'], str(port), str(source_port)]))
-                time.sleep(0.2)
+                observation['wait_status'] = wait_for_observation(capture, trace, list(processes.values()), self.guard)
+            except Exception as error:
+                observation['collection_error'] = str(error)
+                collection_errors.append('OBSERVATION_ERROR')
             finally:
-                for p in processes:
-                    if p.poll() is None:
-                        os.killpg(p.pid, signal.SIGINT)
-                        try: p.wait(timeout=2)
-                        except subprocess.TimeoutExpired: os.killpg(p.pid, signal.SIGKILL); p.wait()
-            trace_out.flush(); os.fsync(trace_out.fileno())
-        self.net('r', ['/usr/sbin/nft', 'delete', 'table', 'inet', 'fds_ki_trace'])
-        arrived = self.cmd(['/usr/sbin/tcpdump', '-nn', '-r', str(capture), '-c', '1', expression])
+                # An error stopping one observer must not skip the other.
+                for role, process in processes.items():
+                    stopped = stop_observer(process); observation['processes'][role] = stopped
+                    if stopped.get('forced_kill') or stopped.get('error') or stopped.get('exit_code') not in (0, -signal.SIGINT):
+                        collection_errors.append(role.upper() + '_EXIT_ERROR')
+                for stream in (trace_out, cap_err, trace_err): stream.flush(); os.fsync(stream.fileno())
+                stderr = os.pread(cap_err.fileno(), 16000, 0).decode(errors='replace')
+                observation['tcpdump_statistics'] = {
+                    key: int(match[1]) if (match := re.search(pattern, stderr, re.M)) else None
+                    for key, pattern in (
+                        ('captured', r'^(\d+) packets? captured$'),
+                        ('received_by_filter', r'^(\d+) packets? received by filter$'),
+                        ('dropped_by_kernel', r'^(\d+) packets? dropped by kernel$'))}
+                node.save_json(self.job / (label + '.observation.json'), observation)
+        try:
+            self.net('r', ['/usr/sbin/nft', 'delete', 'table', 'inet', 'fds_ki_trace'])
+        except Exception as error:
+            observation['trace_cleanup_error'] = str(error)
+            collection_errors.append('TRACE_CLEANUP_ERROR')
+            node.save_json(self.job / (label + '.observation.json'), observation)
+        arrived = ''
+        try:
+            if capture.exists():
+                arrived = self.cmd(['/usr/sbin/tcpdump', '-nn', '-r', str(capture), '-c', '1', expression])
+        except Exception as error:
+            observation['readback_error'] = str(error)
+            collection_errors.append('PACKET_READBACK_ERROR')
+            node.save_json(self.job / (label + '.observation.json'), observation)
         trace_raw = node.safe_read(trace)
         observed.update(scope='KERNEL_COMPONENT_ONLY', source_ip=source['ip'], destination_ip=destination['ip'],
                         source_port=source_port, destination_port=port, fresh_direct_flow=True,
                         listener_confirmed=True, ingress_arrival_observed=bool(arrived),
                         expected_body=self.job.name + '/' + destination['name'],
                         expected_connected=port == 8080 and source['name'] != 'c' and destination['name'] != 'c',
-                        packet_capture_sha256=hashlib.sha256(node.safe_read(capture)).hexdigest(),
+                        packet_capture_sha256=hashlib.sha256(node.safe_read(capture)).hexdigest() if capture.exists() else None,
                         nft_trace_sha256=hashlib.sha256(trace_raw).hexdigest(), nft_trace_nonempty=bool(trace_raw),
                         component_attribution='REQUIRES_TRACE_REVIEW')
-        errors = []
-        if observed.get('tcp_connected') is not observed['expected_connected']:
-            errors.append('TCP_CONNECT_EXPECTATION_MISMATCH')
-        if observed['expected_connected'] and (observed.get('status') != 200 or
-                                              observed.get('body') != observed['expected_body']):
-            errors.append('HTTP_RESPONSE_EXPECTATION_MISMATCH')
-        if not arrived or not trace_raw:
-            errors.append('PACKET_TRACE_EVIDENCE_MISSING')
-        observed.update(expectation_errors=errors, expected_result_matches=not errors,
-                        verdict='COMPONENT_FAILED_REVIEW_REQUIRED' if errors else 'OBSERVED_REVIEW_REQUIRED')
+        observed.update(flow_outcome(observed, observed['expected_connected'], observed['expected_body'],
+                                     bool(arrived), bool(trace_raw), collection_errors))
         self.result['component_flows'][label] = observed; node.save_json(self.job / 'RESULT.json', self.result)
-        need(not errors, 'Component flow failed: ' + label + ': ' + ', '.join(errors))
+        need(not observed['expectation_errors'], 'Component flow failed: ' + label + ': ' + ', '.join(observed['expectation_errors']))
 
 
 def cleanup(lab):
@@ -856,12 +935,58 @@ def disarm(lab, docs):
         system(['disable', '--now', unit_name(lab.job, 'recover') + '.timer'])
     if (UNITS / (unit_name(lab.job, 'recover') + '.service')).exists():
         system(['disable', unit_name(lab.job, 'recover') + '.service'])
+    verify_recovery_disabled(lab.job)
+    # Keep the running work/recovery definition intact until its process exits.
+    # collect finalizes these disabled files outside both service cgroups.
+    lab.result.update(recovery_disarmed=True, unit_cleanup_pending=True, unit_cleanup_complete=False)
+    node.save_json(lab.job / 'RESULT.json', lab.result)
+
+
+def verify_recovery_disabled(job):
+    for suffix in ('.timer', '.service'):
+        name = unit_name(job, 'recover') + suffix
+        need(system(['is-enabled', name], accepted=(0, 1, 3, 4)) in ('disabled', 'not-found'),
+             'Recovery trigger remains enabled: ' + name)
+    need(system(['show', unit_name(job, 'recover') + '.timer', '-p', 'ActiveState', '--value'])
+         in ('inactive', 'failed'), 'Recovery timer remains active')
+
+
+def finalize_units(job, result):
+    """Only the verified staged collector removes disabled, terminal job units."""
+    verify_staged_sources(job, executing=True)
+    need(result.get('cleanup_complete') is True and result.get('recovery_disarmed') is True,
+         'Unit finalization requires cleanup and disarm')
+    docs = recovery_unit_check(job, result)
+    try:
+        verify_recovery_disabled(job)
+    except Exception:
+        result['recovery_disarmed'] = False
+        node.save_json(job / 'RESULT.json', result)
+        raise
+    states = {}
+    # The transaction lock can be released just before work exits. Allow only
+    # this short exit gap; never stop an active service from collect.
+    deadline = time.monotonic() + 5
+    while True:
+        for name in docs:
+            raw = system(['show', name, '-p', 'ActiveState', '-p', 'MainPID', '-p', 'Job',
+                          '-p', 'Result', '-p', 'ExecMainCode', '-p', 'ExecMainStatus'])
+            states[name] = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
+        if all(s.get('ActiveState') in ('inactive', 'failed') and s.get('MainPID', '0') == '0'
+               and s.get('Job', '') in ('', '0') for s in states.values()):
+            break
+        need(time.monotonic() < deadline, 'Owned unit still running or queued; finalization pending')
+        time.sleep(0.1)
+    node.save_json(job / 'UNIT_EXIT_STATE.json', states)
+    # Check the entire manifest again before any removal, including symlinks.
+    recovery_unit_check(job, result)
     for name in docs:
-        if (UNITS / name).exists():
-            need(node.safe_read(UNITS / name).decode() == docs[name], 'Unit changed before removal')
-            (UNITS / name).unlink()
+        path = UNITS / name
+        if path.exists(): path.unlink()
     system(['daemon-reload'])
-    lab.result['recovery_disarmed'] = True; node.save_json(lab.job / 'RESULT.json', lab.result)
+    result.update(unit_cleanup_pending=False, unit_cleanup_complete=True)
+    result.pop('unit_cleanup_error', None)
+    node.save_json(job / 'RESULT.json', result)
 
 
 def execute(job, recovery=False):
@@ -928,8 +1053,23 @@ def execute(job, recovery=False):
 
 def collect(job):
     node.safe_dir(job)
+    pending = read_json(job / 'RESULT.json').get('unit_cleanup_pending') is True
+    if pending and HERE != job:
+        # A newer checkout may export an older job, but must not finalize it
+        # with new code. Old jobs without this flag retain read-only collection.
+        verify_staged_sources(job)
+        os.execve('/usr/bin/python3', ['/usr/bin/python3', '-I', '-B',
+                  str(job / SOURCES[0]), 'collect', job.name], ENV)
+        return
     with node.lock(job / 'transaction.lock', nonblock=True):
         result = read_json(job / 'RESULT.json')
+        if result.get('unit_cleanup_pending') is True:
+            try:
+                finalize_units(job, result)
+            except Exception as error:
+                # Preserve the diagnostic export even if finalization is blocked.
+                result['unit_cleanup_error'] = str(error)
+                node.save_json(job / 'RESULT.json', result)
         node.safe_dir(ROOT / 'exports', create=True)
         output = Path(tempfile.mkdtemp(prefix='FDS_CNI_Kernel_Component_', dir=ROOT / 'exports'))
         evidence = output / 'evidence'; evidence.mkdir(mode=0o700)
@@ -944,7 +1084,18 @@ def collect(job):
         raw, journal_state = daemon_journal(job)
         node.atomic(evidence / 'COMPONENT_JOURNAL.log', raw, exclusive=True)
         node.save_json(evidence / 'JOURNAL_COLLECTION.json', journal_state, exclusive=True)
-        node.save_json(evidence / 'EXPORT_STATE.json', dict(recovery_pending=not result.get('recovery_disarmed'), snapshot_at=time.time()))
+        node.save_json(evidence / 'EXPORT_STATE.json', dict(recovery_pending=not result.get('recovery_disarmed'),
+                       unit_cleanup_pending=result.get('unit_cleanup_pending', False), snapshot_at=time.time()))
+        labels = ('a-b-8080', 'b-a-8080', 'a-b-8081', 'b-a-8081', 'c-a-8080', 'a-c-8080')
+        flows = result.get('component_flows', {})
+        node.save_json(evidence / 'COMPONENT_SUMMARY.json', dict(
+            scope='KERNEL_COMPONENT_ONLY', status=result.get('status', 'IN_PROGRESS'),
+            flows={label: dict(communication=flows[label].get('communication_status', 'LEGACY_REVIEW_REQUIRED'),
+                               evidence=flows[label].get('evidence_status', 'LEGACY_REVIEW_REQUIRED'))
+                   if label in flows else dict(communication='NOT_TESTED', evidence='NOT_TESTED') for label in labels},
+            recovery={key: result.get(key) for key in ('shared_transaction_restored', 'cleanup_complete',
+                'fixture_namespaces_absent', 'host_configuration_unchanged', 'recovery_disarmed', 'unit_cleanup_complete')},
+            acceptance_criteria_credit=False))
         matrix = dict(schema='fds.cni-kernel-component-matrix.v1', scope='NOT_PRODUCTION_QUALIFICATION',
                       cases={n: 'NOT_TESTED' for n in core.QUALIFICATION_CASES},
                       recovery={n: 'NOT_TESTED' for n in ('disconnect','killed_after_mutation','deadline','reboot','cleanup_retry','nm_ifcfg_unchanged')},
