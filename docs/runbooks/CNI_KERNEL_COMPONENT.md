@@ -1,3 +1,11 @@
+## 2026-09-16 후속 우선순위 조정
+
+사용자 지시에 따라 [정본·후보 기반 단순화 및 운영 보완 준비](../change/ICR-D-NET-01-01/CNI_SCOPE_SIMPLIFICATION_20260916.md)를 적용한다. PR #11의 추가 범용 기능·daemon 확장·VM 패키지/시험은 보류하고, 완료된 R5 증적과 R6 수정본을 보존한다. 아래 실행기를 실제 사용하는 경우 기존 qualification·독립 회수 검사는 유지한다. 별도 운영 보완안은 해당 변경의 범위·Positive/Negative/Regression·복구·영수증 호환성을 함께 확정하며 PR #11 전체 완성을 모든 대안의 공통 선행조건으로 두지 않는다.
+
+Worker 준비·코드 검토는 병행한다. [최신 Lead 입력](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5697547621)에 따라 실제 HEP/GNP 적용은 6/6 Ready 이후 별도 승인/실행창으로 유지한다. 기존 자료의 5/5 통신 시험이나 격리 normal 성공을 CP1 인수·CP2 변경 승인으로 전환하지 않는다.
+
+---
+
 ## 2026-09-16 R6 — 가속 회수 시간과 장애 지점 기록
 
 R5 `b930b07`의 normal job `3c42bc094b1c1ad7`은 6개 흐름의 packet/trace 대조와 최종 unit 정리까지 확인했다. [Runtime 검토](https://github.com/321Team/infra-kubernetes/pull/11#issuecomment-5697557472). 이 결과는 해당 소스에 한정한다.

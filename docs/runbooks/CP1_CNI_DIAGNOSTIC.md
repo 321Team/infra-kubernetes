@@ -1,3 +1,11 @@
+## 2026-09-16 후속 우선순위 조정
+
+사용자 지시에 따라 [정본·후보 기반 단순화 및 운영 보완 준비](../change/ICR-D-NET-01-01/CNI_SCOPE_SIMPLIFICATION_20260916.md)를 적용한다. PR #11의 추가 범용 기능·daemon 확장·VM 패키지/시험은 보류하고, 완료된 R5 증적과 R6 수정본을 보존한다. 아래 실행기를 실제 사용하는 경우 기존 qualification·독립 회수 검사는 유지한다. 별도 운영 보완안은 해당 변경의 범위·Positive/Negative/Regression·복구·영수증 호환성을 함께 확정하며 PR #11 전체 완성을 모든 대안의 공통 선행조건으로 두지 않는다.
+
+Worker 준비·코드 검토는 병행한다. [최신 Lead 입력](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5697547621)에 따라 실제 HEP/GNP 적용은 6/6 Ready 이후 별도 승인/실행창으로 유지한다. 기존 자료의 5/5 통신 시험이나 격리 normal 성공을 CP1 인수·CP2 변경 승인으로 전환하지 않는다.
+
+---
+
 ## 2026-09-16 R6 — 운영 recovery 종료 후 unit 정리
 
 R5의 실제 normal은 kernel wrapper 범위이며 운영 실행기 qualification을 대체하지 않는다. R6는 운영 disarm에서 실행 중인 recovery unit을 삭제하지 않도록 보완한다. 변경된 운영 소스는 새 exact-source qualification과 실행 결정이 필요하다.
@@ -21,7 +29,7 @@ R5의 실제 normal은 kernel wrapper 범위이며 운영 실행기 qualificatio
 
 기존 proposal JSON의 `implementation_started=false`, `formal_pr_approved_review=false` 등은 설계 제출 당시 기록으로 보존한다. 구현·시험 현황은 이 실행기 문서와 해당 PR을 기준으로 한다.
 
-- CP1 한 대, 동일 노드의 시험 Pod 2개만 사용한다. Worker HEP/GNP와 병행하며 선행조건으로 두지 않는다.
+- CP1 한 대, 동일 노드의 시험 Pod 2개만 사용한다. Worker 준비·코드 검토와 병행하며 선행조건으로 두지 않는다. 실제 HEP/GNP 적용은 최신 Lead 입력에 따라 6/6 Ready 이후 별도 승인으로 진행한다.
 - 권고를 반영해 `/26`은 **CP1 IPAM 소유 확인 범위**로만 사용한다. 실제 ACCEPT는 실행 중 확인된 A `/32`→B `/32`, B `/32`→A `/32`의 TCP8080 두 규칙이다.
 - `fds-cni-trial` zone의 정확한 host veth 2개만 Runtime으로 바인딩한다. zone은 `target=default`, `forward=no`; source, 서비스, 포트, NAT, Permanent binding은 비운다.
 - 진단 결과로 K8S/SEC/ICR AC, CP1 최종 인수 또는 CP2 변경을 승인하지 않는다. 성공해도 policy·zone·binding을 회수한다. 기존 CP1 영수증과 후속 consumer는 변경하지 않는다.

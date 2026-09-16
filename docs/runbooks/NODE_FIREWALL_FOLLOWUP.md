@@ -1,3 +1,11 @@
+## 2026-09-16 후속 준비 및 인수 경계
+
+[정본·후보 기반 단순화](../change/ICR-D-NET-01-01/CNI_SCOPE_SIMPLIFICATION_20260916.md)에 따라 CP1 운영 보완 준비와 PR #11 도구 qualification 후속을 분리한다. 이 절차의 실제 CP1 Runtime 인수·영수증·새 inspect/변경 창·복구 조건은 유지한다. 새 CNI 규칙을 추가한 상태는 원 receipt.after와 다를 수 있으며, 인수 JSON만 승인으로 바꿔서는 cp1_state_gate를 통과할 수 없다. 승인된 새 변경 상태의 증적/소비자 계약을 먼저 확정한다.
+
+CP2/CP3 추가 범위는 CP /32→TCP2379–2380·10250이다. LB .109→CP TCP6443(IF-12)은 기존 규칙 보존이며 신규 추가 대상이 아니다. CP2 결과 검토 후 CP3로 진행하고 Join/reset은 별도 판단한다. Worker 준비·코드 검토는 병행하되 HEP/GNP 실제 적용은 [Lead 결정](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5697547621)에 따라 6/6 Ready 후 별도 승인/실행창에서 진행한다.
+
+---
+
 # Worker·CP2·CP3 방화벽 Runtime 후속 절차 v2
 
 2026-09-10 / **코드 보완·독립 리뷰용, PR #4 실서버 미실행**. baseline #14 이권욱 주관, #10 이하영 Kubernetes 판단, #19 보호 인계와 연계한다.
