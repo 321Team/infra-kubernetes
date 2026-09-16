@@ -1,3 +1,9 @@
+# SEC-06 3차 수정 (PR #7 review 5222165841) — DNS egress 목적지 제한 추가.
+#
+# 2차 제출 결함:
+#   - DNS(53) egress에 destination nets 제한이 없어 정본 DNS `.52/.53`보다 넓게 열림.
+#   - dns01(10.1.93.52)/dns02(10.1.93.53) 두 목적지로만 TCP/UDP 53을 제한.
+#
 # SEC-06 2차 수정 (issuecomment-5644891728) — Bootstrap 규칙 자체 모순 제거.
 #
 # 1차 제출 결함:
@@ -81,9 +87,11 @@ spec:
       protocol: UDP
       destination:
         ports: [53]  # DNS — Host 자체 조회 (Bootstrap DNS, D-NET-01 확정)
+        nets: ["10.1.93.52/32", "10.1.93.53/32"]  # dns01/dns02만 허용 (SEC-06 3차 수정)
     - action: Allow
       protocol: TCP
       destination:
         ports: [53]
+        nets: ["10.1.93.52/32", "10.1.93.53/32"]  # dns01/dns02만 허용 (SEC-06 3차 수정)
   # NTP(#14 미확정) egress는 이 Bootstrap 규칙에 포함하지 않는다 — 목적지/운영 주체가
   # 아직 확정되지 않았으므로(baseline "미결 사양") 별도 승인 후 추가한다.
