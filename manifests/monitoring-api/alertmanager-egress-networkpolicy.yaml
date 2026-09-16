@@ -1,0 +1,57 @@
+# CR-P1-MON-01-02 (fds-project-baseline#75) — Alertmanager egress NetworkPolicy.
+#
+# STATUS: DRAFT. Do not apply to any cluster yet. Every value marked TBD below
+# is unverified because:
+#   - the Kubernetes cluster itself is not bootstrapped past P1-K8S-01 Gate 0
+#     (see this repo's README); no Alertmanager Pod exists to observe.
+#   - the application manifests repo referenced for Alertmanager's real
+#     Deployment/labels ("fds-msa") does not exist in the 321Team org yet.
+#   - the proxy endpoint's fixed IP/port is a planned value from
+#     fds-project-baseline#74 (CR-P1-MON-01-01); that CR's PR
+#     (321Team/infra-ansible#12) is under REQUEST_CHANGES and the real
+#     Alertmanager egress source has not been measured, so Squid apply is
+#     on HOLD.
+# Do not merge/apply until fds-project-baseline#74 hands off a confirmed
+# proxy IP:port and a real Alertmanager Deployment exists to verify
+# podSelector/labels against.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-egress-proxy-and-dns
+  namespace: monitoring-api
+spec:
+  podSelector:
+    matchLabels:
+      # TBD: "app: alertmanager" is an assumption from fds-project-baseline#75
+      # ("원본의 app: alertmanager 가정"). Replace with the real label(s) once
+      # the actual Alertmanager Deployment/StatefulSet manifest exists.
+      app: alertmanager
+  policyTypes:
+    - Egress
+  egress:
+    # 1) Alertmanager -> egress-proxy01, CONNECT/443 only (Discord webhook
+    #    relay). Port matches cr_mon_proxy_port in
+    #    infra-ansible/roles/egress_proxy/defaults/main.yml.
+    - to:
+        - ipBlock:
+            # TBD: 10.1.93.56/32 is the PLANNED egress-proxy01 address per
+            # fds-project-baseline#78 (DEC-P1-EGRESS-01), not yet an
+            # operationally confirmed handoff from #74.
+            cidr: 10.1.93.56/32
+      ports:
+        - protocol: TCP
+          port: 3128
+    # 2) DNS resolution via kube-dns only, both protocols.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              # TBD: confirm the cluster's actual CoreDNS/kube-dns Pod labels
+              # once the cluster exists; k8s-app: kube-dns is the common
+              # kubeadm default, not yet verified for this cluster.
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
