@@ -33,15 +33,21 @@ firewalld의 reload는 Runtime을 Permanent 기준으로 갱신한다. 따라서
 
 이 파일 정리 모듈 자체는 service를 정지하거나 recovery를 해제하지 않으며, injected callback은 신뢰된 root/controller 코드여야 한다. callback mock 시험을 실제 cgroup 수집·외부 최종 정리 transport의 구현 완료로 세지 않는다.
 
+## 최초 변경 전 준비 단계 guard
+
+membership이 아직 없는 초기 설치도 감시해야 한다. `supervise_preparation`은 이미 로드·활성화된 독립 recovery unit/timer를 확인하고, 정확한 10단계 계획과 command/intent prefix, 살아 있는 작업 프로세스를 대조한다. 30초 이상 진행이 없거나 command 결과가 불확실하거나 boot/worker/guard가 바뀌면 같은 소유 recovery unit을 요청한다.
+
+준비 단계의 최대 150초는 불변 lease 시작에 묶인다. 마지막 진행 기록이 새로워도 이 기한을 연장하지 않는다. membership 인계 뒤에는 실제 membership journal의 일반 guard로 전환해야 하며, 준비 단계 guard를 계속 호출하면 회수를 요청한다. `ControlGroup`도 unit 조회에 포함한다. **이 판정기 구현은 unit enablement/entrypoint 연결의 완료가 아니다.**
+
 ## 검증과 다음 통합
 
-정확한 시험 수·원본 출력·source 해시는 동봉한 TEST/VALIDATION 파일을 따른다. 시험 종류는 다음과 같다.
+**384/384 PASS, 실패·오류·skip 0.** 직전 게시 318개 대비 고유 시험 66개를 추가했다. 원본 출력·source 해시는 동봉한 TEST/VALIDATION 파일을 따른다. 시험 종류는 다음과 같다.
 
 - 전이 10단계 및 회수 각 단계의 명령 전후 강제 중단·재부팅·불확실한 반환값·deadline·외부 drift.
 - 실제 첨부 자료에서 유래한 native/save 형식으로 전체 전이 상태의 고정 비교, 원 6개 표현 반례, paired capture/API/peer 실패.
 - 독립 stop→cgroup→lock→복원 순서, 자식 잔존, 종료 후 재시작 race, 관리 source/route/boot/nonce/신선도 불일치.
 - root 임시 파일시스템의 unit 정리 중단 복구. systemctl, 외부 SSH, live cgroup과 CRI는 mock이며 운영 서버 변경은 없다.
 
-원본 4개 파일은 바이트 동일하게 유지한다. 운영 통합의 남은 핵심은 원 영수증과 before/expected-after를 결합하는 producer, **첫 방화벽 변경 전부터 동작하는 준비 단계 guard 및 운영 entrypoint**, 실제 외부 finalizer/management transport, 후속 controller 전후 gate다. 기존 빈 집합 bootstrap만으로 초기 변경의 recovery 준비가 입증되는 것은 아니다. 이 연결을 생략한 운영 명령이나 새 실행 승인을 배포하지 않는다.
+원본 4개 파일은 바이트 동일하게 유지한다. 운영 통합의 남은 핵심은 원 영수증과 before/expected-after를 결합하는 producer, **준비 단계 guard를 첫 변경 전에 설치·활성화하고 membership guard로 인계하는 운영 entrypoint**, 실제 외부 finalizer/management transport, 후속 controller 전후 gate다. 기존 빈 집합 bootstrap만으로 초기 변경의 recovery 준비가 입증되는 것은 아니다. 이 연결을 생략한 운영 명령이나 새 실행 승인을 배포하지 않는다.
 
 새 중간 리뷰·VM 재수집 요청은 만들지 않는다. CP1 인수·CP2/3 변경·Join 보류를 유지하며 통합 구현과 실패 시험을 한 묶음으로 검토할 계획이다.

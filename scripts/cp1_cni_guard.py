@@ -10,7 +10,7 @@ import re
 import time
 import shlex
 
-from cp1_cni_membership import need, remaining, guard_action, RESERVE, fingerprint, validate_lease
+from cp1_cni_membership import need, remaining, guard_action, RESERVE, fingerprint, validate_lease, number
 
 ROOT = Path('/var/lib/fds/icr-d-net-01-01/cni-managed')
 UNITS = Path('/etc/systemd/system')
@@ -49,7 +49,7 @@ def documents(lease):
 PROPERTIES = ('Id', 'LoadState', 'ActiveState', 'SubState', 'MainPID', 'Job', 'FragmentPath', 'DropInPaths',
               'UnitFileState', 'ExecStart', 'OnFailure', 'KillMode', 'TimeoutStopUSec', 'RuntimeMaxUSec',
               'NextElapseUSecMonotonic', 'Unit', 'TimersMonotonic', 'AccuracyUSec', 'RandomizedDelayUSec',
-              'TimeoutStartUSec', 'Type', 'Restart', 'UMask')
+              'TimeoutStartUSec', 'Type', 'Restart', 'UMask', 'ControlGroup')
 
 
 def parse_properties(raw):
@@ -177,6 +177,72 @@ def verified_guard(observed, lease, clock):
             'unit_observation_sha256': fingerprint(observed)}
 
 
+def dispatch_recovery(lease,unit,clock,command,persist_request):
+    """Persist sticky intent, then dispatch only the verified exact unit."""
+    storage_error = None
+    try:
+        persist_request({'run_id': lease['run_id'], 'action': 'RECOVER', 'clock': clock})
+    except OSError as error:
+        storage_error = error
+    result = command(['systemctl', '--no-block', 'start', unit['recover']], timeout=5)
+    need(type(result['rc']) is int and result['rc'] == 0 and result.get('truncated') is False and not result.get('stderr', '').strip(),
+         'recovery dispatch uncertain; retry same owned recovery unit')
+    need(storage_error is None, 'owned recovery dispatched; stop-request persistence failed')
+
+
+def supervise_preparation(state,clock,observed,command,persist_request):
+    """Watch initial definition/reload steps BEFORE any membership exists.
+
+    No unguarded bootstrap exception: exact recovery units must already be
+    armed. The 150s preparation cap is anchored to the immutable lease start;
+    retries, heartbeats and a new guard invocation cannot renew it. A pending
+    command receives no extra grace beyond 30s since its durable intent.
+    Caller reads the root transition journal and switches to supervise() only
+    after the separately fsynced membership handoff and state exist.
+    """
+    from cp1_cni_transition import SCHEMA, steps, validate_snapshot, clean_result
+    lease=validate_lease(state['lease']);unit=validate_owned(observed,lease)
+    action='WATCH'
+    try:
+        need(state.get('schema')==SCHEMA and state.get('phase') in ('PREPARING','EMPTY_ACTIVE') and
+             state.get('membership_handed_off') is False,'preparation journal phase differs')
+        plan=steps(state['baseline'],lease['run_id'])
+        need(state.get('plan_sha256')==fingerprint(plan), 'preparation plan differs')
+        validate_snapshot(state['expected'])
+        need(state.get('full_recovery_complete') is False and state.get('authorizes_apply') is False and
+             state.get('authorizes_join') is False,'preparation authority differs')
+        live=observed['properties'][unit['work']]
+        need(live.get('ActiveState')=='active' and live.get('MainPID','0').isdigit() and int(live['MainPID'])>0,
+             'preparation work is not alive')
+        verified_guard(observed,lease,clock)
+        last={'wall':lease['wall_start'],'boottime':lease['boot_start']}
+        operations=state['operations'];need(isinstance(operations,list) and len(operations)<=10,'preparation history unbounded')
+        for index,record in enumerate(operations):
+            need(all(fingerprint(record[k])==fingerprint(plan[index][k]) for k in ('label','argv','before','after')) and
+                 record.get('cleanup') is False and record.get('outcome')=='COMMAND_AND_STATE_VERIFIED' and
+                 clean_result(record.get('result')),'preparation command prefix differs')
+        expected=operations[-1]['after'] if operations else state['baseline']
+        need(fingerprint(state['expected'])==fingerprint(expected),'preparation expected prefix differs')
+        pending=state.get('pending')
+        if pending is not None:
+            need(len(operations)<len(plan) and pending.get('cleanup') is False and
+                 all(fingerprint(pending[k])==fingerprint(plan[len(operations)][k]) for k in ('label','argv','before','after')),
+                 'preparation pending prefix differs')
+        if state['phase']=='EMPTY_ACTIVE':need(len(operations)==len(plan) and pending is None,'empty activation prefix incomplete')
+        records=operations+([state['pending']] if state.get('pending') is not None else [])
+        for record in records:
+            for key in ('wall','boottime'):
+                need(number(record['clock'][key])>=last[key],'preparation clock regressed')
+            last=record['clock']
+        for key,start in (('wall','wall_start'),('boottime','boot_start')):
+            now=number(clock[key]);need(0 <= now-lease[start] < 150,'preparation absolute deadline expired')
+            need(0 <= now-last[key] < 30,'preparation progress stale/future')
+    except (ValueError,KeyError,TypeError):
+        action='RECOVER'
+    if action=='RECOVER':dispatch_recovery(lease,unit,clock,command,persist_request)
+    return {'action':action,'run_id':lease['run_id'],'full_recovery_complete':False}
+
+
 def supervise(state, clock, observed, command, persist_request):
     """One independent invocation. No manager journal lock is required to read
     its atomically replaced snapshot. Stop/recover only exact owned units.
@@ -197,13 +263,5 @@ def supervise(state, clock, observed, command, persist_request):
     if action == 'RECOVER':
         # A distinct fsynced stop request survives manager exit and prevents
         # restart from treating this as a new activation or lease extension.
-        storage_error = None
-        try:
-            persist_request({'run_id': lease['run_id'], 'action': 'RECOVER', 'clock': clock})
-        except OSError as error:
-            storage_error = error
-        result = command(['systemctl', '--no-block', 'start', unit['recover']], timeout=5)
-        need(type(result['rc']) is int and result['rc'] == 0 and result.get('truncated') is False and not result.get('stderr', '').strip(),
-             'recovery dispatch uncertain; retry same owned recovery unit')
-        need(storage_error is None, 'owned recovery dispatched; stop-request persistence failed')
+        dispatch_recovery(lease,unit,clock,command,persist_request)
     return {'action': action, 'run_id': lease['run_id'], 'full_recovery_complete': False}

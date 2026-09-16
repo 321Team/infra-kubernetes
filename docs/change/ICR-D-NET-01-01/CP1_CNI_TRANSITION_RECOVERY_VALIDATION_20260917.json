@@ -1,24 +1,25 @@
 {
   "schema": "fds.cp1-cni-transition-recovery-validation.v1",
-  "validated_at": "2026-09-16T22:10:53.482365+00:00",
-  "parent_commit": "457ca8ea834b0f8f09c0619e5ca9ee0a51552af4",
+  "validated_at": "2026-09-16T22:15:57.150513+00:00",
+  "parent_commit": "112ebfb5a9b8afd3324f27b5103a552ebc803dd5",
   "status": "OPERATIONAL_INTEGRATION_INCOMPLETE",
   "tests": {
-    "run": 377,
+    "run": 384,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
     "previous": 318,
-    "new_unique": 59,
+    "new_unique": 66,
     "command": "python3 -m unittest discover -s tests -p 'test_*.py' -v",
-    "log_sha256": "fc93047eb2c9f7e799932afec29bd0a37105cc8654b1c5cb82dedcd61d79e624"
+    "log_sha256": "d7736623b0dec2dc9e4ec36472c3f43ab5f4cc27411c3dd49404f92728b0a330"
   },
   "test_counts": {
     "transition": 25,
     "transition_observer": 5,
     "transition_io": 9,
     "recovery": 8,
-    "unit_cleanup": 12
+    "unit_cleanup": 12,
+    "preparation_guard": 7
   },
   "source_sha256": {
     "scripts/cp1_cni_transition.py": "3056c0cd8def6b81ce9278d6acf5b7cc743f820be8385e94956f47885902c03d",
@@ -32,7 +33,9 @@
     "tests/test_cp1_cni_recovery.py": "9f1089f4541e7a9823b538f21679cf2996eaebca0cd156fa8eee2bd363154f6f",
     "tests/test_cp1_cni_unit_cleanup.py": "1f2bdd80cb061eb7b0cfffbf78765d66836302797db0308edd0a966519f0ac08",
     "scripts/cp1_cni_observer.py": "3fbcf78d96516df429aaab24ad6f99c47e9972fa8d1e40b92828f5feaff33f54",
-    "scripts/collect-cp1-cni-membership.py": "a17b5ad3585380e482d43de3a501f10117f3d2e27eaaf138aaa15a4b5d5588f1"
+    "scripts/collect-cp1-cni-membership.py": "a17b5ad3585380e482d43de3a501f10117f3d2e27eaaf138aaa15a4b5d5588f1",
+    "scripts/cp1_cni_guard.py": "7d54677d92d153b89fb7864def083d0ee465915e3e164f0427934ec23a27bca3",
+    "tests/test_cp1_cni_preparation_guard.py": "84a3f5bf8720fe26006376e206a4e379febe9ab61715cda912603928dc56cb4a"
   },
   "original_pins": {
     "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
@@ -48,5 +51,6 @@
   "production_consumer_connected": false,
   "external_finalizer_transport_implemented": false,
   "authorizes_apply": false,
-  "authorizes_join": false
+  "authorizes_join": false,
+  "preparation_guard_decision_implemented": true
 }

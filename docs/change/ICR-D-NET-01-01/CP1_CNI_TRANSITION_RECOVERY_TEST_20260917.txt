@@ -208,6 +208,13 @@ test_unsupported_version_rejected (test_cp1_cni_policy.PolicyProposalTests.test_
 test_wildcard_xml_generation_rejected (test_cp1_cni_policy.PolicyProposalTests.test_wildcard_xml_generation_rejected) ... ok
 test_zone_classification_missing_duplicated_and_wrong_header_rejected (test_cp1_cni_policy.PolicyProposalTests.test_zone_classification_missing_duplicated_and_wrong_header_rejected) ... ok
 test_zone_definition_and_ipset_membership_drift_rejected (test_cp1_cni_policy.PolicyProposalTests.test_zone_definition_and_ipset_membership_drift_rejected) ... ok
+test_empty_activation_requires_full_verified_plan_and_only_then_handoff (test_cp1_cni_preparation_guard.PreparationGuardTests.test_empty_activation_requires_full_verified_plan_and_only_then_handoff) ... ok
+test_every_exact_pending_before_or_after_prefix_is_bounded_watch (test_cp1_cni_preparation_guard.PreparationGuardTests.test_every_exact_pending_before_or_after_prefix_is_bounded_watch) ... ok
+test_foreign_loaded_unit_never_dispatches_any_unit (test_cp1_cni_preparation_guard.PreparationGuardTests.test_foreign_loaded_unit_never_dispatches_any_unit) ... ok
+test_fresh_progress_cannot_extend_absolute_preparation_window (test_cp1_cni_preparation_guard.PreparationGuardTests.test_fresh_progress_cannot_extend_absolute_preparation_window) ... ok
+test_guard_is_required_before_first_firewall_mutation (test_cp1_cni_preparation_guard.PreparationGuardTests.test_guard_is_required_before_first_firewall_mutation) ... ok
+test_stale_pending_stopped_worker_and_boot_change_dispatch_recovery (test_cp1_cni_preparation_guard.PreparationGuardTests.test_stale_pending_stopped_worker_and_boot_change_dispatch_recovery) ... ok
+test_unknown_expected_pending_result_and_clock_cannot_keep_guard_watching (test_cp1_cni_preparation_guard.PreparationGuardTests.test_unknown_expected_pending_result_and_clock_cannot_keep_guard_watching) ... ok
 test_cgroup_read_error_cannot_be_interpreted_as_absent (test_cp1_cni_recovery.RecoveryTests.test_cgroup_read_error_cannot_be_interpreted_as_absent) ... ok
 test_finalizer_rejects_own_recovery_still_running_any_unit_link_or_group (test_cp1_cni_recovery.RecoveryTests.test_finalizer_rejects_own_recovery_still_running_any_unit_link_or_group) ... ok
 test_firewall_drift_or_missing_management_cannot_be_full_recovery (test_cp1_cni_recovery.RecoveryTests.test_firewall_drift_or_missing_management_cannot_be_full_recovery) ... ok
@@ -377,6 +384,6 @@ test_success_receipt_cannot_hide_an_incomplete_prefix (test_node_firewall_v2_con
 test_v1_receipt_is_retrievable_but_not_a_v2_rollback_input (test_node_firewall_v2_contract.RuntimeSafety.test_v1_receipt_is_retrievable_but_not_a_v2_rollback_input) ... ok
 
 ----------------------------------------------------------------------
-Ran 377 tests in 26.549s
+Ran 384 tests in 27.797s
 
 OK
