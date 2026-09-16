@@ -126,7 +126,7 @@ class Boundaries(unittest.TestCase):
         role,argv=lab.net.call_args.args
         self.assertEqual(role,'r');self.assertEqual(argv[:4],['/usr/bin/unshare','--mount','--propagation','private'])
         self.assertIn('_firewall',argv)
-        self.assertEqual(lab.net.call_args.kwargs['env']['DBUS_SYSTEM_BUS_ADDRESS'],'unix:path='+str(lab.job/'bus.sock'))
+        self.assertEqual(lab.net.call_args.kwargs['env']['DBUS_SYSTEM_BUS_ADDRESS'],'unix:path='+str(lab.job/'dbus/bus.sock'))
 
     def test_private_daemon_uses_owned_namespace_and_config(self):
         job=tool.job_path('a'*16);docs=tool.documents(job,'normal');fw=docs[tool.unit_name(job,'firewall')+'.service']

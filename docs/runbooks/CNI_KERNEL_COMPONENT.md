@@ -1,6 +1,32 @@
 # CNI 커널 컴포넌트 시험 — cp1-cni-lab
 
-이 절차는 PR #11의 공통 `cni_diag_core.Transaction`과 parser를 **실제 Linux 커널·firewalld**에 연결해 검증하기 위한 새 실행 경로다. 네트워크 네임스페이스에 별도 firewalld, 전용 D-Bus, 합성 통신 대상을 만든다. 모의 adapter를 사용하지 않는다. 현재 제출 단계에서 실제 VM 실행은 미수행이다.
+이 절차는 PR #11의 공통 `cni_diag_core.Transaction`과 parser를 **실제 Linux 커널·firewalld**에 연결해 검증하기 위한 실행 경로다. 네트워크 네임스페이스에 별도 firewalld, 전용 D-Bus, 합성 통신 대상을 만든다. 실행기는 모의 adapter를 사용하지 않는다. 2026-09-16 기존 HEAD 164f8d5의 normal 1회는 daemon 초기화 실패로 종료됐고, 이번 보완 소스의 실제 VM 실행은 미수행이다.
+
+## 2026-09-16 초기화 보완
+
+기존 JOB_ID e97d5bbe64efd9cb의 audit 2283은 system_dbusd_t → var_lib_t:file open 거부, 2286은 firewalld_t → var_lib_t:dir write 거부를 기록했다. 별도로 /run/firewalld의 Errno 30이 journal에 남았다. 통신 6개는 미측정이며 기존 1회 실행 결정은 해당 실패 결과까지 수행됐다.
+
+보완 소스는 다음 경계를 적용한다.
+
+| 자원 | 새 작업 내부 위치 | SELinux 타입 / 쓰기 범위 |
+|---|---|---|
+| bus 설정 | bus.conf | dbusd_etc_t, daemon 읽기 전용 |
+| bus socket | dbus/bus.sock | system_dbusd_var_run_t, bus 전용 디렉터리 |
+| firewalld 설정 | firewalld/ | firewalld_etc_rw_t, 해당 하위 트리 |
+| firewalld 로그 | log/firewalld.log | var_log_t 부모에 firewalld_var_log_t 파일 사전 생성, 파일만 쓰기 허용 |
+| firewalld runtime | run/ | firewalld_var_run_t, 서비스 mount namespace 안에서 /run/firewalld로 BindPaths |
+
+inspect는 libselinux로 **VM에 로드된 정책**의 daemon transition 및 필요한 access vector를 읽어 확인한다. 전역/해당 도메인의 Permissive나 필요한 접근 거부는 준비 실패다. 새 Python SELinux 패키지·allow 모듈·semanage 설정 설치는 하지 않는다. 타입 정의의 upstream 존재만으로 대상 VM의 허용을 가정하지 않는다.
+
+실행 시 새 job의 명시된 객체만 생성·라벨링하고 readback한다. 기존 작업·소스·증적·호스트 경로를 재라벨링하지 않는다. 라벨 확인은 network namespace 생성보다 먼저다. config 디렉터리도 적절한 타입을 부여해 이후 daemon이 생성하는 파일이 일반 var_lib_t를 상속하지 않도록 한다. 작업 중 외부 restorecon/정책 변경이 발생한 환경은 본 시험의 고정 조건으로 취급할 수 없다.
+
+D-Bus service 상태, root 소유 socket 종류·타입, **명시적 private address**의 GetConnectionUnixProcessID 응답과 MainPID를 대조한 뒤 firewalld를 시작한다. daemon이 종료되면 probe 반복을 중단한다. 초기화 완료 시 /proc/MainPID/root/run/firewalld의 device/inode가 job/run과 같고 호스트 runtime과 다른지, mount/net namespace가 전용인지 검사해 RUNTIME_VIEW.json에 기록한다.
+
+SELINUX_LAYOUT.json, 최초 실패 journal, 수집 시점 journal 및 별도 수집 rc를 증적에 포함한다. journal은 이 job의 4개 unit과 시작 시각 이후로 제한하며 최근 최대 2,000줄/2MB다. 수집 실패는 시험·정리 성공으로 바꾸지 않는다.
+
+collect의 텍스트 반출본에서 UUID 형태 문자열은 SHA256 표기로 바꾼다. 원본 job/실행 입력은 VM에 보존하며 EXPORT_REDACTION.json에 원본·반출본 해시와 치환 수를 남긴다. pcap 등 바이너리에 UUID 형태 문자열이 있으면 자동 반출을 중단한다. 이는 UUID 평문 반출 방지이며 모든 식별정보의 익명화를 보장하지 않는다. **반출된 REQUEST/decision은 실행 입력으로 재사용하지 않는다.** inspect·template 원본은 VM 내부 바인딩에 필요하므로 전송 시 별도 사본을 비식별 처리하고 원본은 로컬에 보관한다.
+
+보완 소스는 독립 리뷰와 새 inspect/실행 입력 대조가 필요하다. 164f8d5의 APPROVED를 새 digest 승인으로 재사용하지 않는다. TimeoutStopSec/self-cleanup 경합은 별도 잔여이며 kill/deadline/cleanup-retry/reboot 실행을 이번 절차가 허용하지 않는다.
 
 전체 격리 통합시험 qualification을 완성하는 도구는 아니다. 운영 node adapter의 API/SSH/Calico Pod 검증과 생산 recovery service 경로는 이 wrapper로 실행되지 않는다. `RUNTIME_ISOLATED` qualification을 만들거나 기존 생산 계약을 우회하지 않는다. 실제 VM NIC·터널·기존 Pod 경로와 운영 복구 검증은 후속 범위다. `PRODUCTION_MATRIX.json`의 흐름 7개·복구 6개는 NOT_TESTED로 유지하고, 이번 실제 관측은 `component_flows`와 별도 scope로 기록한다.
 
@@ -10,7 +36,7 @@
 - 제출된 18:20:48 KST 준비 증적 `3873_0a1`은 무결성·기존 4개 소스 일치 및 PREPARATION_REVIEW_REQUIRED / blockers=[]로 검토 완료했다. conntrack 추가 설치를 반복하지 않는다.
 - `FDS_CNI_LAB_PRE_CONNTRACK_20260915` snapshot 생성은 18:18:15 KST 화면에서 확인했다. 해당 snapshot으로 되돌리면 추가 RPM 설치 이전 상태가 된다. snapshot 복원 시험 완료를 뜻하지 않는다.
 - VM NIC는 FDS-CNI-LAB로 유지한다. 공유 폴더 FDS_CNI_TRANSFER는 소스 반입 시 read-only, 결과 반출 시에만 일시적으로 쓰기를 허용한다.
-- 새로운 실행 경로는 추가로 dbus-daemon/firewalld/unshare/mount와 CAP_SYS_ADMIN을 사용하므로 아래 inspect로 이 항목과 정확한 소스·VM 식별 바인딩을 확인한다. 이를 일반 준비 수집 12개나 RPM 재설치와 혼동하지 않는다.
+- 실행 경로는 dbus-daemon/firewalld/unshare/mount/busctl/journalctl, libselinux 및 CAP_SYS_ADMIN을 사용하므로 아래 inspect로 이 항목과 정확한 소스·VM 식별 바인딩을 확인한다. 이를 일반 준비 수집 12개나 RPM 재설치와 혼동하지 않는다.
 - 변경 실행 전 이 새 소스에 대한 독립 검토 및 **KERNEL_COMPONENT_ONLY** 실행 결정이 필요하다. 이전 준비 수집 승인이나 설계 PR #10 승인을 새 실행 소스 승인으로 기입하지 않는다.
 
 ## 실제로 만드는 대상
@@ -37,7 +63,7 @@ sudo /usr/bin/python3 -I -B scripts/run-cni-kernel-integration.py inspect
 
 첫 명령은 source 4개를 대조한다. 기본 실행은 PLAN_ONLY이며 프로세스 실행·설정 변경이 없다. inspect는 필요한 프로그램·패키지·권한과 VM 식별을 조회하고, root 전용 새 디렉터리에 `INSPECT.json` 및 `lab-decision.template.json`을 만든다. 오류가 나면 출력을 제출한다. 자동 설치/방화벽 변경은 하지 않는다.
 
-두 파일이 표시되면 **INSPECT 파일과 값이 false/빈칸인 결정 초안**을 반출해 검토한다. template에는 product_uuid, machine-id의 해시와 새 source 4개 해시가 들어 있다. 원문 운영 정보는 PR 댓글에 게시하지 않는다.
+두 파일이 표시되면 **INSPECT 파일과 값이 false/빈칸인 결정 초안의 비식별 사본**을 반출해 검토한다. 오프라인 키트의 inspect 절차는 원본을 VM의 session에 보존하고 별도 반출용 사본을 만든다. 원본 template에는 product_uuid, machine-id의 해시와 새 source 4개 해시가 들어 있다. 비식별 사본을 start 입력으로 쓰지 않으며 원문 운영 정보는 PR 댓글에 게시하지 않는다.
 
 ## 2. 결정 입력
 
@@ -49,7 +75,7 @@ review_url은 **infra-kubernetes PR #11의 해당 소스 독립 리뷰 또는 �
 
 VM 식별과 source hash는 재부팅 전후 동일한 환경에 입력을 묶는 장치다. NIC의 실제 LAN Segment 설정 자체는 VMware 화면/현장 확인 근거로 별도 검토한다. 작업 시작 후 최대 20분, 마지막 3분은 회수용이다. 매번 종료시각을 직접 계산해 적는 방식이 아니다.
 
-## 3. 최초 실제 실행: normal 한 건
+## 3. 변경본 실행: 추가 normal 한 건 — 새 실행 결정 후
 
 독립 검토·실행 결정이 끝난 **결정 파일의 실제 경로**를 `--decision`에 지정한다.
 

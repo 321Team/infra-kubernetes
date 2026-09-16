@@ -7,6 +7,7 @@ Default PLAN_ONLY. No import-time host IO except loading the adjacent source.
 """
 import argparse
 import copy
+import ctypes
 import datetime as dt
 import hashlib
 import importlib.util
@@ -38,6 +39,12 @@ FLAGS = dict(stage='KERNEL_COMPONENT_PENDING', fixture='SYNTHETIC_NETNS',
              actual_calico_pods_tested=False)
 ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LC_ALL': 'C', 'LANG': 'C',
        'SYSTEMD_PAGER': 'cat', 'PAGER': 'cat'}
+LABELS = {'bus.conf': 'dbusd_etc_t', 'dbus': 'system_dbusd_var_run_t',
+          'firewalld': 'firewalld_etc_rw_t', 'firewalld/zones': 'firewalld_etc_rw_t',
+          'firewalld/firewalld.conf': 'firewalld_etc_rw_t',
+          'firewalld/zones/public.xml': 'firewalld_etc_rw_t',
+          'log': 'var_log_t', 'log/firewalld.log': 'firewalld_var_log_t',
+          'run': 'firewalld_var_run_t'}
 
 
 def load(name, path):
@@ -135,7 +142,260 @@ def unit_name(job, role):
 
 
 def private_env(job):
-    return dict(ENV, DBUS_SYSTEM_BUS_ADDRESS='unix:path=' + str(job / 'bus.sock'))
+    return dict(ENV, DBUS_SYSTEM_BUS_ADDRESS='unix:path=' + str(job / 'dbus/bus.sock'))
+
+
+def file_context(path):
+    need(not path.is_symlink(), 'SELinux path is a symlink: ' + str(path))
+    return os.getxattr(path, 'security.selinux', follow_symlinks=False).rstrip(b'\0').decode('ascii')
+
+
+class AccessDecision(ctypes.Structure):
+    # libselinux's public struct av_decision, including domain permissive flags.
+    _fields_ = [(name, ctypes.c_uint) for name in
+                ('allowed', 'decided', 'auditallow', 'auditdeny', 'seqno', 'flags')]
+
+
+class SELinuxPolicy:
+    """Query the loaded policy; never load an allow module or change enforcing."""
+    def __init__(self):
+        self.lib = ctypes.CDLL('libselinux.so.1', use_errno=True)
+        signatures = {
+            'security_getenforce': ([], ctypes.c_int),
+            'string_to_security_class': ([ctypes.c_char_p], ctypes.c_ushort),
+            'string_to_av_perm': ([ctypes.c_ushort, ctypes.c_char_p], ctypes.c_uint),
+            'security_compute_av_flags_raw': ([ctypes.c_char_p, ctypes.c_char_p, ctypes.c_ushort,
+                                              ctypes.c_uint, ctypes.POINTER(AccessDecision)], ctypes.c_int),
+            'security_compute_create_raw': ([ctypes.c_char_p, ctypes.c_char_p, ctypes.c_ushort,
+                                            ctypes.POINTER(ctypes.c_void_p)], ctypes.c_int),
+            'freecon': ([ctypes.c_void_p], None),
+        }
+        for name, (args, result) in signatures.items():
+            function = getattr(self.lib, name); function.argtypes = args; function.restype = result
+        need(self.lib.security_getenforce() == 1, 'SELinux must remain Enforcing')
+        parent = Path('/proc/1/attr/current').read_text().strip().rstrip('\0')
+        need(parent.split(':')[2] == 'init_t', 'Unexpected systemd SELinux domain')
+        self.domains = {}
+        for role, exe, domain in (('bus', '/usr/bin/dbus-daemon', 'system_dbusd_t'),
+                                  ('firewall', '/usr/sbin/firewalld', 'firewalld_t')):
+            context = ctypes.c_void_p()
+            try:
+                rc = self.lib.security_compute_create_raw(parent.encode(), file_context(Path(exe)).encode(),
+                    self.lib.string_to_security_class(b'process'), ctypes.byref(context))
+                need(rc == 0 and context.value, 'Cannot compute daemon SELinux transition: ' + role)
+                value = ctypes.string_at(context).decode('ascii')
+                need(value.split(':')[2] == domain, 'Unexpected daemon SELinux domain: ' + value)
+                self.domains[role] = value
+            finally:
+                if context.value: self.lib.freecon(context)
+
+    def require(self, role, context, kind, permissions):
+        need(self.lib.security_getenforce() == 1, 'SELinux enforcing changed')
+        cls = self.lib.string_to_security_class(kind.encode())
+        need(cls != 0, 'Unknown SELinux class: ' + kind)
+        wanted = 0
+        for permission in permissions.split():
+            bit = self.lib.string_to_av_perm(cls, permission.encode())
+            need(bit != 0, 'Unknown SELinux permission: ' + permission)
+            wanted |= bit
+        decision = AccessDecision()
+        rc = self.lib.security_compute_av_flags_raw(self.domains[role].encode(), context.encode(),
+                                                    cls, wanted, ctypes.byref(decision))
+        need(rc == 0 and decision.allowed & wanted == wanted and not decision.flags & 1,
+             'Loaded SELinux policy does not allow enforced access: ' +
+             role + ' -> ' + context + ' ' + kind + ':' + permissions)
+
+    def check(self):
+        checks = (
+            ('bus', 'dbusd_etc_t', 'file', 'open read getattr'),
+            ('bus', 'system_dbusd_var_run_t', 'dir', 'search write add_name remove_name getattr'),
+            ('bus', 'system_dbusd_var_run_t', 'sock_file', 'create write getattr setattr unlink'),
+            ('firewall', 'system_dbusd_var_run_t', 'dir', 'search'),
+            ('firewall', 'system_dbusd_var_run_t', 'sock_file', 'write'),
+            ('firewall', 'firewalld_etc_rw_t', 'dir', 'search open read getattr write add_name remove_name create rmdir'),
+            ('firewall', 'firewalld_etc_rw_t', 'file', 'open read getattr write create rename unlink setattr'),
+            ('firewall', 'var_log_t', 'dir', 'search'),
+            ('firewall', 'firewalld_var_log_t', 'file', 'open append write getattr setattr'),
+            ('firewall', 'firewalld_var_run_t', 'dir', 'search open read getattr write add_name remove_name create rmdir'),
+            ('firewall', 'firewalld_var_run_t', 'file', 'create open read write getattr setattr unlink'),
+        )
+        for role, label, kind, permissions in checks:
+            self.require(role, 'system_u:object_r:' + label + ':s0', kind, permissions)
+        self.require('firewall', self.domains['bus'], 'unix_stream_socket', 'connectto read write')
+        for path in reversed([ROOT] + list(ROOT.parents)):
+            if path.exists():
+                node.safe_dir(path)
+                for role in self.domains: self.require(role, file_context(path), 'dir', 'search')
+        return dict(domains=self.domains, checks=len(checks) + 1, enforcing=True,
+                    labels=LABELS, method='loaded_policy_access_vectors')
+
+
+def label_owned_path(job, relative):
+    """Label only this source's allowlisted, newly-created job objects."""
+    need(job == job_path(job.name) and relative in LABELS, 'Outside owned label scope')
+    path = job / relative
+    node.safe_dir(path.parent)
+    st = path.lstat()
+    need(st.st_uid == 0 and not st.st_mode & 0o022 and not stat.S_ISLNK(st.st_mode) and
+         (stat.S_ISDIR(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_nlink == 1)),
+         'Unsafe label target: ' + str(path))
+    context = 'system_u:object_r:' + LABELS[relative] + ':s0'
+    os.setxattr(path, 'security.selinux', context.encode(), follow_symlinks=False)
+    need(file_context(path) == context, 'SELinux label did not persist: ' + relative)
+    return dict(path=relative, context=context, device=st.st_dev, inode=st.st_ino)
+
+
+def prepare_daemon_files(job):
+    policy = SELinuxPolicy(); observed = policy.check()
+    # These paths belong to this new job. No reuse/recursive relabel of old jobs.
+    for relative in ('dbus', 'firewalld', 'firewalld/zones', 'log', 'run'):
+        (job / relative).mkdir(mode=0o700)
+        label_owned_path(job, relative)
+    config = job / 'firewalld'
+    node.atomic(config / 'firewalld.conf', b'DefaultZone=public\nFirewallBackend=nftables\nFlushAllOnReload=yes\nCleanupOnExit=yes\n', exclusive=True)
+    node.atomic(config / 'zones/public.xml', b'<zone><interface name="ens160"/><service name="ssh"/></zone>\n', exclusive=True)
+    node.atomic(job / 'log/firewalld.log', b'', exclusive=True)
+    bus = '<busconfig><type>system</type><listen>' + private_env(job)['DBUS_SYSTEM_BUS_ADDRESS'] + '</listen><auth>EXTERNAL</auth><policy context="default"><deny user="*"/></policy><policy user="root"><allow user="root"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>\n'
+    node.atomic(job / 'bus.conf', bus.encode(), exclusive=True)
+    labels = [label_owned_path(job, relative) for relative in LABELS]
+    # Verify traversal after creation, including the job's actual inherited label.
+    for role in policy.domains: policy.require(role, file_context(job), 'dir', 'search')
+    node.save_json(job / 'SELINUX_LAYOUT.json', dict(policy=observed, objects=labels), exclusive=True)
+
+
+def service_state(job, role):
+    raw = system(['show', unit_name(job, role) + '.service', '-p', 'ActiveState', '-p', 'SubState',
+                  '-p', 'MainPID', '-p', 'ExecMainStatus'])
+    state = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
+    need(state.get('ActiveState') not in ('failed', 'inactive', 'deactivating') and
+         state.get('ActiveState') in ('active', 'activating'),
+         'Private ' + role + ' stopped during initialization: ' + json.dumps(state, sort_keys=True))
+    return state
+
+
+def private_socket(job):
+    path = job / 'dbus/bus.sock'
+    node.safe_dir(path.parent)
+    st = path.lstat()
+    need(stat.S_ISSOCK(st.st_mode) and st.st_uid == 0 and
+         file_context(path).split(':')[2] == 'system_dbusd_var_run_t', 'Unexpected private bus socket')
+    return path
+
+
+def wait_for_bus(lab):
+    deadline = time.monotonic() + 15
+    last_error = 'socket not created'
+    while True:
+        state = service_state(lab.job, 'bus')
+        try:
+            private_socket(lab.job)
+        except FileNotFoundError:
+            pass
+        else:
+            try:
+                answer = lab.cmd(['/usr/bin/busctl', '--address=' + private_env(lab.job)['DBUS_SYSTEM_BUS_ADDRESS'],
+                    '--no-pager', '--timeout=2', 'call', 'org.freedesktop.DBus', '/org/freedesktop/DBus',
+                    'org.freedesktop.DBus', 'GetConnectionUnixProcessID', 's', 'org.freedesktop.DBus'])
+            except ValueError as error:
+                last_error = str(error)
+            else:
+                need(re.fullmatch(r'u [1-9][0-9]*', answer) and answer.split()[1] == state.get('MainPID'),
+                     'Private bus PID does not match owned service')
+                need(service_state(lab.job, 'bus').get('MainPID') == state['MainPID'], 'Bus process changed')
+                return
+        lab.guard()
+        need(time.monotonic() < deadline, 'Private bus readiness timeout: ' + last_error)
+        time.sleep(0.1)
+
+
+def verify_runtime_view(job):
+    state = service_state(job, 'firewall')
+    pid = state.get('MainPID', '')
+    need(re.fullmatch(r'[1-9][0-9]*', pid), 'Private firewall has no main process')
+    process = Path('/proc') / pid
+    source = (job / 'run').stat()
+    view = (process / 'root/run/firewalld').stat()
+    host = Path('/run/firewalld').stat()
+    identity = lambda item: [item.st_dev, item.st_ino]
+    need(identity(view) == identity(source) and identity(view) != identity(host), 'Private runtime mount differs')
+    need((process / 'ns/mnt').stat().st_ino != Path('/proc/1/ns/mnt').stat().st_ino, 'Host mount namespace forbidden')
+    need((process / 'ns/net').stat().st_ino == (Path('/run/netns') / ns_names(job)['r']).stat().st_ino,
+         'Private firewall network namespace differs')
+    need(file_context(process / 'root/run/firewalld').split(':')[2] == 'firewalld_var_run_t', 'Runtime label differs')
+    need(service_state(job, 'firewall').get('MainPID') == pid, 'Firewall process changed during mount check')
+    node.save_json(job / 'RUNTIME_VIEW.json', dict(private_runtime=identity(view), host_runtime=identity(host),
+                   main_pid=int(pid), private_mount_verified=True, private_network_verified=True))
+
+
+def start_private_daemons(lab):
+    system(['start', unit_name(lab.job, 'bus') + '.service'])
+    wait_for_bus(lab)
+    system(['start', unit_name(lab.job, 'firewall') + '.service'])
+    deadline = time.monotonic() + 30
+    while True:
+        service_state(lab.job, 'bus')
+        service_state(lab.job, 'firewall')
+        try:
+            need(lab.command(['--state']) == 'running', 'Private firewalld not running')
+        except ValueError:
+            lab.guard()
+            if time.monotonic() >= deadline: raise
+            time.sleep(0.2)
+        else:
+            verify_runtime_view(lab.job)
+            return
+
+
+def daemon_journal(job):
+    """Bounded, job/time-scoped read. Collection failure never replaces test failure."""
+    state = dict(status='UNAVAILABLE', rc=None)
+    try:
+        request = read_json(job / 'REQUEST.json')
+        start_time = float(request['started_at'])
+        end_time = time.time()
+        need(0 < start_time <= end_time, 'Invalid journal time window')
+        fmt = lambda value: dt.datetime.fromtimestamp(value, dt.timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        argv = ['/usr/bin/journalctl', '--no-pager', '--output=short-iso-precise', '--lines=2000',
+                '--since', fmt(start_time), '--until', fmt(end_time + 1)]
+        for role in ('bus', 'firewall', 'work', 'recover'):
+            argv += ['--unit', unit_name(job, role) + '.service']
+        output = call(argv, timeout=5, accepted=(0, 1), output_limit=2_000_000)
+        state.update(status='COLLECTED' if output['rc'] == 0 else 'UNAVAILABLE', rc=output['rc'],
+                     started_at=start_time, until=end_time, line_limit=2000, stderr=output['stderr'])
+        return output['stdout'].encode(), state
+    except Exception as error:
+        state['error'] = str(error)
+        return b'', state
+
+
+def capture_initialization_failure(job):
+    # Keep the first daemon failure before stopping its cgroup, even if collect is later.
+    try:
+        raw, state = daemon_journal(job)
+        node.atomic(job / 'INITIALIZATION_JOURNAL.log', raw, exclusive=True)
+        node.save_json(job / 'INITIALIZATION_JOURNAL_STATE.json', state, exclusive=True)
+    except Exception:
+        pass  # The original exception and cleanup path must still be preserved.
+
+
+def redact_export(evidence):
+    """Sanitize copies only. Durable job/decision files retain their original bytes."""
+    uuid = re.compile(rb'(?i)(?<![0-9a-f])[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}(?![0-9a-f])')
+    ledger = {}
+    for path in sorted(evidence.iterdir()):
+        raw = node.safe_read(path)
+        matches = list(uuid.finditer(raw))
+        if matches:
+            need(path.suffix in ('.json', '.jsonl', '.log', '.trace'), 'UUID in binary evidence needs manual export review')
+            exported = uuid.sub(lambda m: ('[UUID_SHA256:' + hashlib.sha256(m[0].lower()).hexdigest() + ']').encode(), raw)
+            node.atomic(path, exported)
+        else:
+            exported = raw
+        ledger[path.name] = dict(source_bytes_sha256=hashlib.sha256(raw).hexdigest(),
+                                export_bytes_sha256=hashlib.sha256(exported).hexdigest(), redacted_uuid_count=len(matches))
+    node.save_json(evidence / 'EXPORT_REDACTION.json', dict(schema='fds.cni-export-redaction.v1',
+                   strategy='uuid-shaped text replaced with lowercase-value SHA256; binary match blocks export',
+                   original_job_preserved=True, exported_decision_is_not_execution_input=True, files=ledger), exclusive=True)
 
 
 def fingerprint_host():
@@ -165,14 +425,17 @@ def prerequisites():
     need(versions == list(PACKAGES), 'Observed reference package set differs')
     for path in ('/usr/bin/dbus-daemon', '/usr/sbin/firewalld', '/usr/bin/firewall-cmd',
                  '/usr/sbin/ip', '/usr/sbin/nft', '/usr/sbin/conntrack', '/usr/sbin/tcpdump',
-                 '/usr/bin/unshare', '/usr/bin/mount'):
+                 '/usr/bin/unshare', '/usr/bin/mount', '/usr/bin/busctl', '/usr/bin/journalctl'):
         need(Path(path).is_file() and os.access(path, os.X_OK), 'Missing prerequisite ' + path)
     help_text = call(['/usr/sbin/firewalld', '--help'])['stdout']
     need(all(option in help_text for option in ('--system-config', '--default-config', '--nopid', '--nofork', '--log-file')),
          'Private firewalld instance options unavailable')
     return dict(packages=versions, product_uuid=Path('/sys/class/dmi/id/product_uuid').read_text().strip(),
                 machine_id_sha256=hashlib.sha256(Path('/etc/machine-id').read_bytes()).hexdigest(),
-                sources_sha256=hashes(), checked_at_utc=dt.datetime.now(dt.timezone.utc).isoformat())
+                sources_sha256=hashes(), checked_at_utc=dt.datetime.now(dt.timezone.utc).isoformat(),
+                selinux=SELinuxPolicy().check(),
+                policy_packages=call(['/usr/bin/rpm', '-q', 'selinux-policy', 'selinux-policy-targeted',
+                                     'libselinux', 'systemd', 'dbus-daemon'])['stdout'].splitlines())
 
 
 def authorize(decision, observed):
@@ -203,15 +466,17 @@ def documents(job, scenario):
     unit[unit_name(job, 'recover') + '.timer'] = ('[Unit]\nDescription=FDS component deadline/retry\n[Timer]\n'
         'OnActiveSec=' + str(delay) + 's\nOnUnitInactiveSec=30s\nAccuracySec=1s\nUnit=' + unit_name(job, 'recover') + '.service\n[Install]\nWantedBy=timers.target\n')
     unit[unit_name(job, 'bus') + '.service'] = (prefix + 'Type=exec\nRuntimeMaxSec=1200\n'
+        'ProtectSystem=strict\nReadWritePaths=' + str(job / 'dbus') + '\n'
         'ExecStart=/usr/bin/dbus-daemon --nofork --nosyslog --config-file=' + str(job / 'bus.conf') + '\n')
     # A private bus prevents connection to the host firewalld/NM. Read-only /etc
     # also prevents the daemon from updating real ifcfg or NetworkManager files.
     unit[unit_name(job, 'firewall') + '.service'] = (prefix + 'Type=exec\nRuntimeMaxSec=1200\n'
-        'ProtectSystem=strict\nReadWritePaths=' + str(job) + '\n'
-        'Environment=DBUS_SYSTEM_BUS_ADDRESS=unix:path=' + str(job / 'bus.sock') + '\n'
+        'ProtectSystem=strict\nReadWritePaths=' + str(job / 'firewalld') + ' ' + str(job / 'log/firewalld.log') + '\n'
+        'BindPaths=' + str(job / 'run') + ':/run/firewalld:norbind\n'
+        'Environment=DBUS_SYSTEM_BUS_ADDRESS=' + private_env(job)['DBUS_SYSTEM_BUS_ADDRESS'] + '\n'
         'NetworkNamespacePath=/run/netns/' + ns_names(job)['r'] + '\n'
         'ExecStart=/usr/sbin/firewalld --nofork --nopid --system-config=' + str(job / 'firewalld') +
-        ' --default-config=/usr/lib/firewalld --log-file=' + str(job / 'firewalld.log') + '\n')
+        ' --default-config=/usr/lib/firewalld --log-file=' + str(job / 'log/firewalld.log') + '\n')
     for role in ('a', 'b', 'c'):
         unit[unit_name(job, role) + '.service'] = (prefix + 'Type=exec\nRuntimeMaxSec=1200\n'
             'NetworkNamespacePath=/run/netns/' + ns_names(job)[role] + '\n'
@@ -390,6 +655,7 @@ class Lab:
         need((self.job / 'ARMED.json').exists(), 'Recovery not armed')
         need(system(['is-active', unit_name(self.job, 'recover') + '.timer']) == 'active', 'Timer inactive')
         node.save_json(self.job / 'HOST_BEFORE.json', fingerprint_host())
+        prepare_daemon_files(self.job)
         for role in self.ns:
             self.create_namespace(role)
         self.net('r', ['/usr/sbin/ip', 'link', 'add', 'ens160', 'type', 'dummy'])
@@ -410,22 +676,7 @@ class Lab:
             peers.append(dict(name=role, ip=address, interface=iface, host_ifindex=link['ifindex']))
         node.save_json(self.job / 'FIXTURE.json', dict(scope='SYNTHETIC_NETNS_ONLY', peers=peers, production_receipt_used=False))
         (self.job / 'empty-ifcfg').mkdir(mode=0o700)
-        config = self.job / 'firewalld'; (config / 'zones').mkdir(parents=True, mode=0o700)
-        node.atomic(config / 'firewalld.conf', b'DefaultZone=public\nFirewallBackend=nftables\nFlushAllOnReload=yes\nCleanupOnExit=yes\n')
-        node.atomic(config / 'zones/public.xml', b'<zone><interface name="ens160"/><service name="ssh"/></zone>\n')
-        bus = '<busconfig><type>system</type><listen>unix:path=' + str(self.job / 'bus.sock') + '</listen><auth>EXTERNAL</auth><policy context="default"><deny user="*"/></policy><policy user="root"><allow user="root"/><allow own="*"/><allow send_destination="*"/><allow receive_sender="*"/></policy></busconfig>\n'
-        node.atomic(self.job / 'bus.conf', bus.encode())
-        system(['start', unit_name(self.job, 'bus') + '.service'])
-        system(['start', unit_name(self.job, 'firewall') + '.service'])
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                need(self.command(['--state']) == 'running', 'Private firewalld not running')
-                break
-            except ValueError:
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(0.2)
+        start_private_daemons(self)
         for role in ('a', 'b', 'c'):
             system(['start', unit_name(self.job, role) + '.service'])
         for rule in core.six_rules():
@@ -611,6 +862,7 @@ def execute(job, recovery=False):
                 lab.flow(peers[a], peers[b], port)
         except Exception as error:
             lab.result['component_error'] = str(error); node.save_json(job / 'RESULT.json', lab.result)
+            capture_initialization_failure(job)
         else:
             lab.result['measurement_sequence_complete'] = True
         # Not a finally block: intentional SIGKILL/deadline/reboot leave recovery armed.
@@ -636,12 +888,20 @@ def collect(job):
             if path.is_file() and path.suffix in ('.json', '.jsonl', '.pcap', '.trace', '.log'):
                 raw = node.safe_read(path); need(len(raw) <= 8_000_000, 'Evidence requires manual size review')
                 node.atomic(evidence / path.name, raw, exclusive=True)
+        log = job / 'log/firewalld.log'
+        if log.exists():
+            raw = node.safe_read(log); need(len(raw) <= 8_000_000, 'Firewalld log requires manual size review')
+            node.atomic(evidence / 'PRIVATE_FIREWALL.log', raw, exclusive=True)
+        raw, journal_state = daemon_journal(job)
+        node.atomic(evidence / 'COMPONENT_JOURNAL.log', raw, exclusive=True)
+        node.save_json(evidence / 'JOURNAL_COLLECTION.json', journal_state, exclusive=True)
         node.save_json(evidence / 'EXPORT_STATE.json', dict(recovery_pending=not result.get('recovery_disarmed'), snapshot_at=time.time()))
         matrix = dict(schema='fds.cni-kernel-component-matrix.v1', scope='NOT_PRODUCTION_QUALIFICATION',
                       cases={n: 'NOT_TESTED' for n in core.QUALIFICATION_CASES},
                       recovery={n: 'NOT_TESTED' for n in ('disconnect','killed_after_mutation','deadline','reboot','cleanup_retry','nm_ifcfg_unchanged')},
                       reason='Component observations do not exercise the production adapter, physical VM NIC, Calico or production recovery.')
         node.save_json(evidence / 'PRODUCTION_MATRIX.json', matrix)
+        redact_export(evidence)
         sums = ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(evidence.iterdir()))
         node.atomic(evidence / 'SHA256SUMS', sums.encode())
         archive = output / (output.name + '.tar.gz')
