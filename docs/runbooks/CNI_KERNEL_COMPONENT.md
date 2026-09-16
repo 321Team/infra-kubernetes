@@ -1,4 +1,13 @@
-## 2026-09-16 15:22 normal 후속 — D-Bus 설정 문법 수정
+## 2026-09-16 16:51 normal 후속 — zone forwarding 생성 계약 수정
+
+HEAD d015e54의 job d6c7e1e672c418ca는 Permanent zone 생성 후 forward 예상 no / 실제 yes 차이로 실패했다.
+공통 트랜잭션 원복은 실패했으며, 전용 자원 정리·복구 예약 해제와 수집한 host 전후 일치는 별도로 확인했다. 통신은 미측정이다.
+[R4 검토 기록](../change/ICR-D-NET-01-01/CNI_ZONE_R4_REVIEW_20260916.md)에 증적 대조와 수정·회귀시험을 기록했다.
+공통 core는 바인딩 없는 Permanent zone 생성 후 forwarding을 별도 기록·검증 단계에서 끄고, 확인 후에만 reload한다.
+STATIC/MOCK 220/220 PASS. 새 kernel bundle: `1109fe8e2370fdfe09e49300f39d1e1e0f5b732c36ac7b8e55404996bffc507c`.
+새 소스 독립 리뷰·새 inspect·추가 normal 실행 결정 전에는 start하지 않는다. 기존 작업은 보존한다.
+
+## 이전 기록 — 2026-09-16 15:22 normal 후속 — D-Bus 설정 문법 수정
 
 HEAD `5f9dd61`의 job `3271fd1489888551`은 D-Bus 설정의 per-user admission 규칙 오류로 실패했다.
 정리·복구 예약 해제·namespace 부재·전후 host fingerprint 일치는 확인됐고 통신 6개는 미측정이다.

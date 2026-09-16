@@ -118,7 +118,13 @@ def disabled_policy(peers):
 
 
 def xml_documents(run_id, peers):
-    zone = ET.Element('zone')  # Omitted forward tag means disabled, not default new-zone behavior.
+    # firewalld 2.4.3's --new-zone-from-file uses legacy addZone, dropping
+    # forward from the imported tuple and leaving its default True. Make
+    # creation deterministic for both legacy and full-field import paths.
+    # This zone is Permanent-only and unbound. Transaction.prepare disables
+    # forwarding in a separate journaled step before any reload or binding.
+    zone = ET.Element('zone')
+    ET.SubElement(zone, 'forward')
     ET.SubElement(zone, 'short').text = 'FDS diagnostic ' + run_id
     ET.SubElement(zone, 'description').text = run_id
     policy = ET.Element('policy', target='CONTINUE', priority='-500')
@@ -301,7 +307,10 @@ class Transaction:
         self.io.save(self.j)
         self.alter('create-permanent-zone', ['--permanent', '--new-zone-from-file=' +
                     str(directory) + '/' + ZONE + '.xml', '--name=' + ZONE],
-                   lambda s: s['permanent']['zones'].__setitem__(ZONE, empty_zone()))
+                   lambda s: s['permanent']['zones'].__setitem__(ZONE, dict(empty_zone(), forward='yes')))
+        self.alter('disable-permanent-zone-forward',
+                   ['--permanent', '--zone=' + ZONE, '--remove-forward'],
+                   lambda s: s['permanent']['zones'][ZONE].__setitem__('forward', 'no'))
         self.alter('create-disabled-policy', ['--permanent', '--new-policy-from-file=' +
                     str(directory) + '/' + POLICY + '.xml', '--name=' + POLICY],
                    lambda s: s['permanent']['policies'].__setitem__(POLICY, disabled_policy(peers)))

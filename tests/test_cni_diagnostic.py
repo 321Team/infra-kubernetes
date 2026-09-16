@@ -102,11 +102,13 @@ class Simulator:
         elif any(a.startswith('--new-zone-from-file=') for a in args):
             path = next(a.split('=', 1)[1] for a in args if a.startswith('--new-zone-from-file='))
             obj = ET.parse(path).getroot()
-            assert obj.tag == 'zone' and obj.find('forward') is None
+            assert obj.tag == 'zone'
+            # firewalld 2.4.3 file import uses legacy addZone with only 16
+            # fields; forward (index 16) is omitted and defaults to True.
             assert not obj.findall('interface') and not obj.findall('source')
             state['zones'][core.ZONE] = {'target': 'default', 'ingress-priority': '0',
                 'egress-priority': '0', 'icmp-block-inversion': 'no', 'interfaces': '',
-                'sources': '', 'services': '', 'ports': '', 'protocols': '', 'forward': 'no',
+                'sources': '', 'services': '', 'ports': '', 'protocols': '', 'forward': 'yes',
                 'masquerade': 'no', 'forward-ports': '', 'source-ports': '', 'icmp-blocks': '', 'rich rules': []}
         elif any(a.startswith('--new-policy-from-file=') for a in args):
             path = next(a.split('=', 1)[1] for a in args if a.startswith('--new-policy-from-file='))
@@ -134,7 +136,9 @@ class Simulator:
         else:
             zone = next(a.split('=', 1)[1] for a in args if a.startswith('--zone='))
             for a in args:
-                if a.startswith('--add-rich-rule='):
+                if a == '--remove-forward':
+                    state['zones'][zone]['forward'] = 'no'
+                elif a.startswith('--add-rich-rule='):
                     state['zones'][zone]['rich rules'].append(core.rule(a.split('=', 1)[1]))
                     state['zones'][zone]['rich rules'].sort()
                 elif a.startswith('--add-interface='):
@@ -149,7 +153,7 @@ class Simulator:
 
 
 class ContractTests(unittest.TestCase):
-    def test_exact_pair_xml_and_no_zone_allowances(self):
+    def test_exact_pair_xml_and_unbound_creation_zone(self):
         docs = core.xml_documents('owned', peers())
         policy = ET.fromstring(docs[core.POLICY + '.xml'])
         self.assertIsNotNone(policy.find('disable'))
@@ -157,7 +161,7 @@ class ContractTests(unittest.TestCase):
                           for r in policy.findall('rule')], [('10.244.246.80/32', '10.244.246.81/32'),
                                                             ('10.244.246.81/32', '10.244.246.80/32')])
         zone = ET.fromstring(docs[core.ZONE + '.xml'])
-        self.assertEqual({e.tag for e in zone}, {'short', 'description'})
+        self.assertEqual({e.tag for e in zone}, {'forward', 'short', 'description'})
 
     def test_duplicate_or_outside_ips_rejected(self):
         for ip in ('10.244.246.80', '10.244.247.1', 'not-an-ip'):
@@ -345,8 +349,8 @@ def fault_case(position, timing):
     return test
 
 
-# 24 actual mutation positions: create/load/restore/bind/enable and full withdrawal.
-for position in range(1, 25):
+# 25 mutation positions, including Permanent forwarding disable before reload.
+for position in range(1, 26):
     for timing in ('before', 'after'):
         setattr(TransactionTests, 'test_crash_%02d_%s' % (position, timing), fault_case(position, timing))
 

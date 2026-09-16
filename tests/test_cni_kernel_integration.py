@@ -76,8 +76,8 @@ class Boundaries(unittest.TestCase):
         self.assertFalse(tool.FLAGS['qualification_created'])
         self.assertFalse(tool.FLAGS['production_node_recovery_tested'])
 
-    def test_shared_transaction_and_original_firewall_helper_remain_pinned(self):
-        wanted = {'cni_diag_core.py':'286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59',
+    def test_shared_transaction_r4_and_original_firewall_helper_remain_pinned(self):
+        wanted = {'cni_diag_core.py':'4ef4ff77199851851cdc091088ee22679343b51f327f9e69fbd1e9147dc54bb9',
                   'node-firewall.py':'93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa'}
         for name,digest in wanted.items(): self.assertEqual(tool.hashes()[name],digest)
 
