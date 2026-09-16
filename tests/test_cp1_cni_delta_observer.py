@@ -3,8 +3,12 @@ import copy
 import json
 import shlex
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 from test_cp1_cni_delta import fixture as dataplane, unready_dns
 from test_cp1_cni_membership import raw_fixture, BOOT, m
+from test_cp1_cni_membership import MemoryJournal, ModelIO
 from test_cp1_cni_observer import fixture, native, o
 from test_cp1_cni_guard import unit_fixture
 import cp1_cni_delta as d
@@ -105,6 +109,115 @@ class DeltaObserverTests(unittest.TestCase):
         r,a,u,c=bundle();a['projection_schema']='future-permissive'
         with self.assertRaisesRegex(ValueError,'unknown activation'):
             o.snapshot_from_records(r,a,u,CLOCK,membership_capture=c)
+
+
+def unarmed(units):
+    result = copy.deepcopy(units); result['links'] = {}
+    for props in result['properties'].values():
+        props.update(ActiveState='inactive', SubState='dead', MainPID='0', Job='', UnitFileState='static')
+    return result
+
+
+class BootstrapIntegrationTests(unittest.TestCase):
+    def test_raw_peer_whole_state_and_loaded_definitions_can_seed_without_active_guard(self):
+        r,a,u,c = bundle()
+        actual = o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True)
+        state = m.initial_state(a['lease'],actual,CLOCK)
+        seeded = m.seed_observation(state,actual['eligible_observation'],actual,CLOCK)
+        self.assertEqual(seeded['latest_observation']['members'],c['members'])
+        self.assertFalse(actual['guard_armed']); self.assertIsNone(actual['guard_deadline'])
+        with self.assertRaisesRegex(ValueError,'guard unavailable'):m.snapshot(actual,a['lease'])
+        self.assertFalse(seeded['authorizes_cp2_change'])
+
+    def test_bootstrap_mode_cannot_substitute_for_regular_or_withdrawal_observer(self):
+        r,a,u,c = bundle()
+        with self.assertRaises(ValueError):o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c)
+        with self.assertRaisesRegex(ValueError,'ambiguous'):
+            o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True,withdrawal=True)
+        with self.assertRaises(ValueError):o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=1)
+
+    def test_bootstrap_rejects_running_work_pending_jobs_enabled_units_and_dropins(self):
+        r,a,u,c = bundle()
+        for key,value in (('ActiveState','active'),('MainPID','123'),('Job','33/start'),
+                          ('UnitFileState','enabled'),('DropInPaths','/run/foreign.conf')):
+            candidate=unarmed(u); name=next(n for n in candidate['properties'] if n.endswith('-work.service'))
+            candidate['properties'][name][key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                o.snapshot_from_records(r,a,candidate,CLOCK,membership_capture=c,bootstrap=True)
+
+    def test_bootstrap_rejects_missing_raw_peer_legacy_projection_stale_and_changed_foreign_state(self):
+        for case in ('peer','legacy','stale','foreign'):
+            r,a,u,c=bundle()
+            if case=='peer':c=None
+            elif case=='legacy':a.pop('projection_schema')
+            elif case=='stale':r['wall']=900
+            else:r['queries']['runtime/direct_after']['stdout']='foreign rule'
+            with self.subTest(case=case),self.assertRaises(ValueError):
+                o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True)
+
+    def test_nonempty_grant_cannot_enter_bootstrap_even_with_a_matching_fixed_hash(self):
+        r,a,u,c=bundle();item=m.entry(c['members'][0])
+        for suffix in ('','_after'):
+            text=r['queries']['runtime/ipsets/'+o.NAME+suffix]['stdout']
+            r['queries']['runtime/ipsets/'+o.NAME+suffix]['stdout']=text.replace('  entries: ','  entries: '+item)
+            raw=json.loads(r['queries']['native'+suffix]['stdout'])
+            owned=next(v['set'] for v in raw['nftables'] if v.get('set',{}).get('name')==o.NAME)
+            owned['elem']=[{'concat':[{'prefix':{'addr':c['members'][0]['ip'],'len':32}},c['members'][0]['interface']]}]
+            r['queries']['native'+suffix]['stdout']=json.dumps(raw)
+        with self.assertRaisesRegex(ValueError,'empty enabled'):
+            o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True)
+
+    def test_bootstrap_observation_cannot_authorize_add_until_full_guard_proof(self):
+        r,a,u,c=bundle()
+        actual=o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True)
+        state=m.seed_observation(m.initial_state(a['lease'],actual,CLOCK),actual['eligible_observation'],actual,CLOCK)
+        journal=MemoryJournal();io=ModelIO(a['lease'],journal);io.now=copy.deepcopy(CLOCK)
+        io.live=copy.deepcopy(actual);io.member_rows=copy.deepcopy(c['members'])
+        manager=m.Manager(state,io,journal);journal.save(state)
+        with self.assertRaisesRegex(ValueError,'guard unavailable'):manager.reconcile(actual['eligible_observation'])
+        self.assertEqual(io.calls,[])
+        self.assertEqual(manager.state['phase'],'WITHDRAWING')
+        with self.assertRaisesRegex(ValueError,'withdrawal is sticky'):
+            manager.reconcile(actual['eligible_observation'])
+
+    def test_correct_bootstrap_then_guard_order_commits_first_generation(self):
+        r,a,u,c=bundle()
+        actual=o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True)
+        state=m.seed_observation(m.initial_state(a['lease'],actual,CLOCK),actual['eligible_observation'],actual,CLOCK)
+        journal=MemoryJournal();io=ModelIO(a['lease'],journal);io.now=copy.deepcopy(CLOCK)
+        io.member_rows=copy.deepcopy(c['members'])
+        manager=m.Manager(state,io,journal);journal.save(state)
+        # Same lease; the ordinary whole-state observer must now attest the
+        # enabled independent guard before any actual membership can change.
+        active=o.snapshot_from_records(r,a,u,CLOCK,membership_capture=c)
+        io.live=copy.deepcopy(active)
+        result=manager.reconcile(active['eligible_observation'])
+        self.assertEqual(len(result['expected_entries']),3)
+        self.assertEqual(result['lease'],a['lease'])
+        m.validate_generation_chain(result)
+
+    def test_live_bootstrap_cannot_prime_active_membership_cache(self):
+        r,a,u,c=bundle();units=unarmed(u)
+        node=SimpleNamespace(__file__=str(Path(o.__file__).with_name('node-firewall.py')))
+        instance=o.LocalObserver(node,a,lambda _:b'',lambda _:'',lambda:CLOCK)
+        # Only read sources/records are replaced; the real whole-state verifier
+        # and loaded-unit checks still execute against the reference capture.
+        def module_exec(module):module.collect=lambda _:c
+        spec=SimpleNamespace(loader=SimpleNamespace(exec_module=module_exec))
+        with patch.object(o,'collect',return_value=r),patch.object(o,'query_units',return_value=units) as query,\
+             patch.object(o.importlib.util,'spec_from_file_location',return_value=spec),\
+             patch.object(o.importlib.util,'module_from_spec',return_value=SimpleNamespace()):
+            result=instance.bootstrap()
+        self.assertFalse(result['guard_armed']);self.assertIsNone(instance.last_verified)
+        self.assertFalse(query.call_args.kwargs['include_links'])
+        with self.assertRaisesRegex(ValueError,'fresh whole state'):instance.membership()
+
+    def test_bootstrap_seed_never_extends_absolute_or_observation_deadline(self):
+        r,a,u,c=bundle();actual=o.snapshot_from_records(r,a,unarmed(u),CLOCK,membership_capture=c,bootstrap=True)
+        state=m.seed_observation(m.initial_state(a['lease'],actual,CLOCK),actual['eligible_observation'],actual,CLOCK)
+        later={**CLOCK,'wall':CLOCK['wall']+30,'boottime':CLOCK['boottime']+30}
+        self.assertEqual(m.guard_action(state,later),'RECOVER')
+        self.assertEqual(state['lease'],a['lease'])
 
 
 if __name__=='__main__':unittest.main()

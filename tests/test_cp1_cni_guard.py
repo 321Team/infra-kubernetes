@@ -165,5 +165,16 @@ class GuardTests(unittest.TestCase):
             with self.subTest(kind=kind, field=field), self.assertRaises(ValueError):
                 g.validate_owned(observed, self.lease)
 
+    def test_boolean_command_status_is_not_a_successful_guard_query(self):
+        with self.assertRaisesRegex(ValueError, 'query incomplete'):
+            g.query_units(self.lease, lambda *a, **kw: {'rc': False, 'stdout': '', 'stderr': '', 'truncated': False},
+                          lambda p: self.observation['files'][p.name].encode(), lambda p: '')
+
+    def test_boolean_dispatch_status_cannot_claim_recovery_started(self):
+        self.clock['boottime'] += 30
+        with self.assertRaisesRegex(ValueError, 'dispatch uncertain'):
+            g.supervise(self.state, self.clock, self.observation,
+                        lambda *a, **kw: {'rc': False, 'stdout': '', 'stderr': '', 'truncated': False}, lambda _: None)
+
 
 if __name__ == '__main__': unittest.main()

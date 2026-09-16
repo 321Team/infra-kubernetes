@@ -62,7 +62,7 @@ def parse_properties(raw):
     return values
 
 
-def query_units(lease, command, read_private_file, read_link):
+def query_units(lease, command, read_private_file, read_link, *, include_links=True):
     """Read unit state through trusted, bounded adapters. No unit mutation."""
     docs, unit = documents(lease), names(lease['run_id'])
     observed = {'properties': {}, 'files': {}, 'links': {}}
@@ -71,7 +71,7 @@ def query_units(lease, command, read_private_file, read_link):
         left = deadline - time.monotonic()
         need(left > 0, 'unit query budget exhausted')
         value = command(argv, timeout=min(3, left))
-        need(value['rc'] == 0 and not value.get('stderr', '').strip() and
+        need(type(value['rc']) is int and value['rc'] == 0 and not value.get('stderr', '').strip() and
              value.get('truncated') is False, 'unit query incomplete')
         return value['stdout'].strip()
     for name, expected in docs.items():
@@ -106,9 +106,10 @@ def query_units(lease, command, read_private_file, read_link):
         else:
             need(re.fullmatch(r't [0-9]+', raw), 'unit D-Bus time property type differs')
             observed['properties'][name][prop] = raw.split()[1]
-    for directory, name in (('timers.target.wants', unit['timer']), ('multi-user.target.wants', unit['recover'])):
-        key = str(UNITS / directory / name)
-        observed['links'][key] = read_link(Path(key))
+    if include_links:
+        for directory, name in (('timers.target.wants', unit['timer']), ('multi-user.target.wants', unit['recover'])):
+            key = str(UNITS / directory / name)
+            observed['links'][key] = read_link(Path(key))
     return observed
 
 
@@ -202,7 +203,7 @@ def supervise(state, clock, observed, command, persist_request):
         except OSError as error:
             storage_error = error
         result = command(['systemctl', '--no-block', 'start', unit['recover']], timeout=5)
-        need(result['rc'] == 0 and result.get('truncated') is False and not result.get('stderr', '').strip(),
+        need(type(result['rc']) is int and result['rc'] == 0 and result.get('truncated') is False and not result.get('stderr', '').strip(),
              'recovery dispatch uncertain; retry same owned recovery unit')
         need(storage_error is None, 'owned recovery dispatched; stop-request persistence failed')
     return {'action': action, 'run_id': lease['run_id'], 'full_recovery_complete': False}

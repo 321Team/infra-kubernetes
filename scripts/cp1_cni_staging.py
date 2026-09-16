@@ -17,7 +17,7 @@ MAX_FILE = 2 * 1024 * 1024
 MAX_BUNDLE = 16 * 1024 * 1024
 
 
-def root_directory(path):
+def root_directory(path, *, private=True):
     need(os.geteuid() == 0, 'root source staging required')
     path = Path(path)
     need(path.is_absolute() and '..' not in path.parts, 'normalized absolute staging path required')
@@ -28,7 +28,8 @@ def root_directory(path):
             os.close(fd);fd=child
             info=os.fstat(fd)
             need(info.st_uid==0 and not info.st_mode & 0o022, 'untrusted staging ancestor')
-        need(not os.fstat(fd).st_mode & 0o077, 'staging root must be private')
+        if private:
+            need(not os.fstat(fd).st_mode & 0o077, 'staging root must be private')
         return fd
     except BaseException:
         os.close(fd);raise

@@ -1,0 +1,44 @@
+{
+  "schema": "fds.cp1-cni-development-validation.v1",
+  "status": "UNIT_DEFINITION_AND_BOOTSTRAP_BOUNDARIES_IMPLEMENTED_OPERATIONAL_INTEGRATION_INCOMPLETE",
+  "parent_head": "fe4c5fa416034efd3f6ea3c2f77f780774277f47",
+  "unit_regression": {
+    "tests": 318,
+    "previous": 279,
+    "added": 39,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "new_tests": {
+    "unit_definition_files": 28,
+    "guard_return_types": 2,
+    "whole_observer_bootstrap": 9
+  },
+  "pinned_original_sources_unchanged": {
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "scripts/check-cp1-cni-handoff.py": "8fbc4d03fd76fecd27bd6f82a3672f4d0220ed1db8c331c61d9310c98d7db1d3",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc"
+  },
+  "unit_definition_publication_implemented": true,
+  "whole_observer_bootstrap_connected": true,
+  "operational_activation_producer_implemented": false,
+  "unit_enablement_and_operational_entrypoint_implemented": false,
+  "full_recovery_implemented": false,
+  "production_consumer_connected": false,
+  "actual_cri_peer_verified": false,
+  "actual_pod_replacement_tested": false,
+  "zero_endpoint_native_encoding_tested_on_target": false,
+  "target_mutations": false,
+  "systemctl_tests_mocked": true,
+  "authorizes_cp1_acceptance": false,
+  "authorizes_cp2_change": false,
+  "authorizes_join": false,
+  "new_review_request_sent": false,
+  "review_bundle_ready": false,
+  "outputs": {
+    "CP1_CNI_UNIT_BOOTSTRAP_20260917.md": "53067bf55b24e7d53fe51a3e1a9c9cd814f282f1781d263901e6d139d4edc680",
+    "CP1_CNI_UNIT_BOOTSTRAP_TEST_20260917.txt": "54d41bf69f4dd4907e9902076268352c3bf717cbca53f6cfb5962855a1313b4f"
+  }
+}

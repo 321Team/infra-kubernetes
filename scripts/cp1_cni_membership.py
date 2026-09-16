@@ -218,7 +218,7 @@ def snapshot(value, lease, require_guard=True):
     return native
 
 
-def observation_from_capture(capture, lease, actual, clock):
+def observation_from_capture(capture, lease, actual, clock, *, bootstrap=False):
     """Bridge the read-only collector to a trusted full-state observer.
 
     These are local data contracts, not authentication of arbitrary uploaded
@@ -228,7 +228,11 @@ def observation_from_capture(capture, lease, actual, clock):
          capture.get('mode') == 'READ_ONLY' and capture.get('complete') is True and
          capture.get('errors') == [] and capture.get('authorizes_apply') is False,
          'complete read-only capture required')
-    snapshot(actual, lease)
+    need(type(bootstrap) is bool, 'bootstrap mode must be explicit')
+    values = snapshot(actual, lease, require_guard=not bootstrap)
+    if bootstrap:
+        need(values == [] and actual['policy_enabled'] is True and actual.get('guard_armed') is False and
+             actual.get('guard_deadline') is None, 'bootstrap requires an empty unarmed grant')
     before = select_members(capture['raw'])
     after = select_members(capture['raw_after'])
     need(same(before, after) and same(after, capture['members']), 'capture membership differs')

@@ -226,7 +226,7 @@ def policy_definition(value, disabled):
                                 'masquerade', 'rich rules'}, 'unknown owned policy field')
 
 
-def snapshot_from_records(record, activation, units, clock, *, withdrawal=False, membership_capture=None):
+def snapshot_from_records(record, activation, units, clock, *, withdrawal=False, membership_capture=None, bootstrap=False):
     """Derive the Manager snapshot from an actual whole-state capture.
 
     activation contains independently reviewed baseline projections. It must
@@ -238,6 +238,17 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False,
     lease = activation['lease']
     projection = activation.get('projection_schema')
     need(projection in (None, 'fds.cp1-cni-pod-delta.v1'), 'unknown activation projection')
+    need(type(bootstrap) is bool and not (bootstrap and withdrawal), 'ambiguous observer mode')
+    if bootstrap:
+        # Empty-set seeding must be possible before the watchdog is enabled.
+        # The normal grant observer still requires a live independent guard.
+        from cp1_cni_guard import validate_owned
+        from cp1_cni_unit_files import inactive
+        need(projection == 'fds.cp1-cni-pod-delta.v1', 'bootstrap requires peer-bound Pod projection')
+        validate_owned(units, lease)
+        need(units.get('links') == {}, 'bootstrap units must be unarmed')
+        for properties in units['properties'].values():
+            inactive(properties)
     delta_rows = None
     if projection:
         from cp1_cni_delta import capture_members
@@ -246,7 +257,7 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False,
     # A disabled grant can be emptied after expiry/guard failure. Whole
     # fixed-state and same-boot proof remain mandatory for that operation.
     guard = ({'run_id': lease['run_id'], 'armed': False, 'deadline': None}
-             if withdrawal else verified_guard(units, lease, clock))
+             if withdrawal or bootstrap else verified_guard(units, lease, clock))
     boot(record['boot_id'])
     need(record['boot_id'] == lease['boot_id'], 'observer boot differs')
     for key in ('wall', 'boottime'):
@@ -338,6 +349,8 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False,
     need(fingerprint(projected) == lease['fixed_state_sha256'], 'activation fixed-state binding differs')
     if withdrawal:
         need(enabled is False, 'whole-state withdrawal requires disabled policy')
+    if bootstrap:
+        need(enabled is True and actual_entries == [], 'bootstrap requires an empty enabled owned set')
     need(guard['run_id'] == lease['run_id'], 'guard belongs to another run')
     result = {'boot_id': record['boot_id'], 'run_id': lease['run_id'], 'owned': True,
             'fixed_state_sha256': fingerprint(projected), 'policy_enabled': enabled,
@@ -345,7 +358,7 @@ def snapshot_from_records(record, activation, units, clock, *, withdrawal=False,
             'guard_armed': guard['armed'], 'guard_deadline': guard['deadline']}
     if projection and not withdrawal:
         from cp1_cni_membership import observation_from_capture
-        result['eligible_observation'] = observation_from_capture(membership_capture,lease,result,clock)
+        result['eligible_observation'] = observation_from_capture(membership_capture,lease,result,clock,bootstrap=bootstrap)
     return result
 
 
@@ -480,6 +493,13 @@ class LocalObserver:
                 'truncated': result.get('stdout_truncated', False) is not False or result.get('stderr_truncated', False) is not False}
 
     def __call__(self):
+        return self._observe()
+
+    def bootstrap(self):
+        """Seed only an empty grant; never prime the active mutation cache."""
+        return self._observe(bootstrap=True)
+
+    def _observe(self, *, bootstrap=False):
         self.last_verified = None
         delta = self.activation.get('projection_schema') == 'fds.cp1-cni-pod-delta.v1'
         capture = collect(self.node, protection, compatibility=True, delta_api=delta)
@@ -493,12 +513,14 @@ class LocalObserver:
                 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
                 peer_capture=module.collect(self.node)
                 self.evidence['membership_capture']=peer_capture
-            units = query_units(self.activation['lease'], self.unit_command, self.read_unit_file, self.read_unit_link)
+            units = query_units(self.activation['lease'], self.unit_command, self.read_unit_file, self.read_unit_link,
+                                include_links=not bootstrap)
             self.evidence['units'] = units
             clock = self.clock()
             self.evidence['clock'] = clock
-            actual = snapshot_from_records(capture, self.activation, units, clock, membership_capture=peer_capture)
-            self.last_verified = {'actual':copy.deepcopy(actual),'wall':capture['wall'],'boottime':capture['boottime']}
+            actual = snapshot_from_records(capture, self.activation, units, clock, membership_capture=peer_capture,bootstrap=bootstrap)
+            if not bootstrap:
+                self.last_verified = {'actual':copy.deepcopy(actual),'wall':capture['wall'],'boottime':capture['boottime']}
             return actual
         except (ValueError, KeyError, TypeError, OSError) as error:
             self.evidence['verification_error'] = {'message': str(error), 'type': type(error).__name__,
