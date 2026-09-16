@@ -1,0 +1,50 @@
+{
+  "schema": "fds.cp1-handoff-preparation-validation.v1",
+  "base_commit": "447a26781a402bae12ebab820b8625e00e6c1dcc",
+  "classification": "STATIC_MOCK_ONLY",
+  "red": {
+    "command": "python3 -m unittest discover -s tests -p test_node_firewall_v2_contract.py -v",
+    "tests": 28,
+    "failures": 1,
+    "errors": 1,
+    "cause": "distributed template producer pin differs from current contract"
+  },
+  "green": {
+    "command": "python3 -m unittest discover -s tests -p 'test_node_firewall*.py' -v",
+    "files": [
+      "tests/test_node_firewall.py",
+      "tests/test_node_firewall_v2_contract.py"
+    ],
+    "tests": 61,
+    "failures": 0,
+    "errors": 0
+  },
+  "updated_manifest_entries": [
+    {
+      "path": "docs/runbooks/NODE_FIREWALL_FOLLOWUP.md",
+      "before_sha256": "618fa2501b1cea42ab9913def68d6d25ba9a5a89df4bacd5f2fe83ab781c76c3",
+      "after_sha256": "87ba48db99b85a8ed163303124c82f9846f718bdc478fe3001df33e133ff4dc0"
+    },
+    {
+      "path": "policies/icr-d-net-01-01/cp1-runtime-acceptance.template.json",
+      "before_sha256": "7419992a76d7e6f2e6d87f723588ae200ef7435b5197b46fde706a7fcfbb9f3c",
+      "after_sha256": "cfc3d5676fe20d6e8e32e00dd01f2618bc9c34889ec277c7ed1f936f25a15f88"
+    },
+    {
+      "path": "tests/test_node_firewall_v2_contract.py",
+      "before_sha256": "0c25db7b8430ddae59cbc5ddc9e5c94e42bace1cddee22c64d6311a1c803cf63",
+      "after_sha256": "f79ec698c02ea1b8d2b9e11c5412bceff0da81ed6359475544a58f9674aee838"
+    }
+  ],
+  "unchanged_runtime_sources_and_policy": {
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc",
+    "policies/icr-d-net-01-01/node-firewall-v2.json": "7624989f489d983e44a9754d5c9baeeaa665ab80cfed9c8c189791b9578b5021"
+  },
+  "manifest_verification_scope": "changed entries and unchanged runtime files listed here; not a full 70-entry checkout validation",
+  "runtime_executed": false,
+  "ci_executed": false,
+  "cp1_accepted": false,
+  "consumer_extended_for_cni": false
+}

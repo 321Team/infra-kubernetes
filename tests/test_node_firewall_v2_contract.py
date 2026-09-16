@@ -18,6 +18,40 @@ from test_node_firewall import (n, c, ROOT, FakeBackend, MemoryJournal,
 
 
 class ReceiptContract(unittest.TestCase):
+    def acceptance_template(self):
+        return json.loads((ROOT / "policies/icr-d-net-01-01/cp1-runtime-acceptance.template.json").read_bytes())
+
+    def test_distributed_acceptance_template_matches_pinned_producer(self):
+        template = self.acceptance_template()
+        self.assertEqual({key: template[key] for key in n.CP1_CONTRACT}, n.CP1_CONTRACT)
+
+    def test_distributed_acceptance_template_is_not_an_approval(self):
+        template = self.acceptance_template()
+        for key in ("decision", "independent_reviewer", "receipt_input_sha256", "receipt_sha256",
+                    "review_decision", "review_url", "reviewed_at", "run_id"):
+            self.assertIsNone(template[key], key)
+        self.assertEqual(template["checks"], {key: {"status": "NOT_VERIFIED", "evidence_sha256": None}
+                                            for key in ("positive", "negative", "regression")})
+        proof = cp1_producer_receipt()
+        with self.assertRaisesRegex(ValueError, "CP1 Runtime acceptance absent"):
+            c.validate_cp1_acceptance(template, proof["receipt"], "f" * 64)
+
+    def test_completed_distributed_template_accepts_real_producer_with_mock_evidence(self):
+        proof = cp1_producer_receipt()
+        receipt = c.validate_cp1_receipt(proof)
+        template = self.acceptance_template()
+        # Fill only onsite/review fields; never overwrite the distributed source/plan pins.
+        completed = acceptance_for(proof, "f" * 64)
+        template.update({key: value for key, value in completed.items() if key not in n.CP1_CONTRACT})
+        c.validate_cp1_acceptance(template, receipt, "f" * 64)
+        stale = {
+            "source_commit": "f0388b1a372d19b5079e94ec6949ef443d774d2f",
+            "source_sha256": "0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2",
+        }
+        for key, value in stale.items():
+            with self.subTest(stale_field=key), self.assertRaisesRegex(ValueError, "source/plan differs"):
+                c.validate_cp1_acceptance(dict(template, **{key: value}), receipt, "f" * 64)
+
     def test_producer_lock_matches_current_contract_and_integrated_source(self):
         lock = json.loads((ROOT / "tests/fixtures/PR2_PRODUCER_LOCK.json").read_bytes())
         self.assertEqual(lock["commit"], n.CP1_CONTRACT["source_commit"])

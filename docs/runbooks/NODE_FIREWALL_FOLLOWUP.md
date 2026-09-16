@@ -53,7 +53,7 @@ TARGET, CP1_TOPOLOGY, CP1_STATE, POLICY, INSPECTION, RESULT JSON을 검토한다
 
 ## CP1 영수증 및 실제 인수 기록
 
-허용 생산자는 위 PR #2 HEAD이며 helper SHA-256은 `0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2`이다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 새 생산자의 authorization_window와 각 연산 시작 시각도 검사한다. 작업창은 [start, end), 최대 2시간이며 종료 시각의 연산을 허용하지 않는다. receipt ended_at은 결과 보존 시각이므로 창 밖일 수 있고, 전체 성공 상태와 기존 시각 검증을 별도로 적용한다. 계약 시험은 main에서 통합된 `scripts/cp-canary-node.py` 실제 파일의 해시를 확인한 뒤 fake backend로 실행한다. 중복 producer fixture는 제거했다. 실행 source pin은 승인된 CP1 생산자와 영수증 호환성을 유지하기 위한 값이며 PR #4 HEAD로 교체하지 않는다.
+허용 생산자는 고정 커밋 `264b273ab8ad79209bc0fec4a85c4497c946dbe3`이며 helper SHA-256은 `a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc`이다. `node-firewall.py`의 `CP1_CONTRACT`, 생산자 lock, 배포 인수 양식이 같은 값을 사용한다. v2 Runtime 6개 연산의 순서·범위·기존 소유권·실행 결과·전후 상태·Permanent 보존·시각을 검사한다. v1/12개 연산 또는 inspect는 거부한다. 새 생산자의 authorization_window와 각 연산 시작 시각도 검사한다. 작업창은 [start, end), 최대 2시간이며 종료 시각의 연산을 허용하지 않는다. receipt ended_at은 결과 보존 시각이므로 창 밖일 수 있고, 전체 성공 상태와 기존 시각 검증을 별도로 적용한다. 계약 시험은 main에서 통합된 `scripts/cp-canary-node.py` 실제 파일의 해시를 확인한 뒤 fake backend로 실행한다. 배포 양식을 실제로 읽고 현장 입력 필드만 채워 검증하므로, 시험 helper가 양식의 오래된 pin을 덮어 가리지 않는다. 실행 source pin은 승인된 CP1 생산자와 영수증 호환성을 유지하기 위한 값이며 PR #4 또는 PR #11 HEAD로 교체하지 않는다.
 
 `cp1-runtime-acceptance.template.json`을 실제 인수 기록으로 채운다. receipt_input_sha256은 CP1 제출 노드 JSON 파일 해시, receipt_sha256은 내부 영수증 내용 해시다. source/helper/reference plan/execution plan, run ID, 이하영 리뷰 링크·결정·시각, Positive/Negative/Regression 각각의 실제 증적 해시와 PASS를 연결한다. 인수 시각은 영수증 종료 이후여야 한다. 모의 시험이나 형식상 APPROVED를 운영 인수로 사용하지 않는다.
 
