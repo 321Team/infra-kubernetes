@@ -1,0 +1,30 @@
+{
+  "authorizes_cp1_acceptance": false,
+  "authorizes_cp2_change": false,
+  "authorizes_join": false,
+  "base_commit": "5b5b30292d450ae1f727acc4b0f9ecd1bc68201e",
+  "daemon_tests_run": false,
+  "files_sha256": {
+    "scripts/collect-cp1-cni-membership.py": "471c4323c9ca87cb0ad8bb7d5544f91c7ebbdffdc7f72e87bcc58375f8c998f0",
+    "scripts/cp1_cni_journal.py": "4567f49cbc0ef92157213c0f13324b0a3e960f72befa6cbb90090ac4be82cd91",
+    "scripts/cp1_cni_membership.py": "3c3f4f6073579862851e4b1d79d5b114bfffbb390d92a599f882cb089754b644",
+    "scripts/cp1_cni_membership_io.py": "a95a07caf20f1c4579ef7c29c69407cc8dd0265f6ff6867693d4a205befc28fa",
+    "tests/test_cp1_cni_journal.py": "e6d132d6346f3b5427a989fed9d74e9ef2212f88fa55674261ea099907b4fb8a",
+    "tests/test_cp1_cni_membership.py": "549d9044e3e62f5fb8441784eca4e680bd6e7682f72e5fccb235c4afb9193d01",
+    "tests/test_cp1_cni_membership_collect.py": "1f26e3dfd2e8e85024bf4534927ae745410ce104a342b07f84d69ded22bb3e2f"
+  },
+  "full_recovery_implemented": false,
+  "independent_guard_installed": false,
+  "kernel_firewall_tests_run": false,
+  "new_real_filesystem_process_tests": 9,
+  "new_static_mock_cli_tests": 37,
+  "previous_tests_rerun": 124,
+  "production_consumer_connected": false,
+  "schema": "fds.cp1-cni-managed-membership-validation.v1",
+  "status": "CORE_IMPLEMENTED_DEPLOYMENT_BLOCKED",
+  "target_cri_layout_verified": false,
+  "test_command": "python3 -B -m unittest discover -s tests -v",
+  "test_log_sha256": "88c77cc5908c83b044bb4345f0efb96dcbc7a334b1b28eee8ccd2ab32fb53f30",
+  "total_failed": 0,
+  "total_passed": 170
+}
