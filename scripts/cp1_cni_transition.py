@@ -82,6 +82,14 @@ def validate_baseline(value):
     for data in planes.values():
         need(NAME not in data['policies'] and NAME not in data['ipsets'], 'baseline owned name collision')
         need(all(zone.get('sources') == '' for zone in data['zones'].values()), 'source-based zone unsupported')
+        for name, zone in data['zones'].items():
+            if name == 'public':
+                continue
+            for interface in zone.get('interfaces', '').split():
+                prefix = interface.rstrip('+*')
+                need(not ('cali'.startswith(prefix) or prefix.startswith('cali')) and
+                     interface != 'ens160' and not (interface != prefix and 'ens160'.startswith(prefix)),
+                     'Pod/management interface assigned to non-public zone')
     current, saved = (planes[p]['zones']['public']['rich rules'] for p in ('runtime', 'permanent'))
     need(set(current) - set(saved) == set(six_rules()) and set(saved) <= set(current),
          'reload must discard exactly the original Runtime six')

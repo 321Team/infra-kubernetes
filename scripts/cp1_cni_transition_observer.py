@@ -6,6 +6,7 @@ Actual rule presence remains in inventory and must match each transaction
 prefix. No wildcard exemption for other firewalld/Calico objects exists.
 """
 import copy
+import re
 
 from cp1_cni_membership import need, same, fingerprint, number, boot
 from cp1_cni_observer import objects, success, parse_json, native_view, NAME
@@ -40,13 +41,43 @@ def strip_six(raw, present):
     return {'nftables':kept}
 
 
-def observe(record, membership_capture, clock):
+def linked_firewall(q, suffix, inventory, host):
+    """Cross-check the original helper's snapshot against the same capture.
+
+    Preserve the original serialized receipt projection unchanged. It is
+    additional evidence, never a replacement for the complete native view.
+    """
+    fw = parse_json(q['original/firewall' + suffix])
+    need(set(fw) == {'hostname','ip','selinux','default_zone','active_zone','nm_uuid','nm_zone',
+                    'planes','active_policies','direct_runtime','direct_permanent'}, 'original firewall fields differ')
+    need(fw['hostname']=='k8s-control01' and fw['ip']=='10.1.93.102' and fw['selinux']=='Enforcing' and
+         fw['default_zone']==host['default_zone'] and fw['active_zone']==host['management_zone'] and
+         fw['nm_uuid']==host['management_connection'] and fw['nm_zone'] in ('','public'),
+         'original management identity differs')
+    need(set(fw['planes'])==set(inventory), 'original plane inventory differs')
+    policies=fw['active_policies']
+    need(set(policies)=={'active_output','configurations'} and isinstance(policies['active_output'],str) and
+         set(policies['configurations'])==set(inventory), 'original policy inventory differs')
+    for plane,data in inventory.items():
+        zone=copy.deepcopy(data['zones']['public']);rules=zone.pop('rich rules')
+        zone['services']=' '.join(sorted(zone.get('services','').split()))
+        need(same(fw['planes'][plane],{'fields':zone,'rules':rules}) and
+             fw['direct_'+plane]==data['direct'], 'original public/direct projection raced')
+        parsed={}
+        for name,text in policies['configurations'][plane].items():
+            row=objects(text);need(set(row)=={name}, 'original policy header differs');parsed.update(row)
+        need(same(parsed,data['policies']), 'original policy projection raced')
+    return fw
+
+
+def observe(record, membership_capture, clock, *, receipt_link=False):
     """No hashes/flags are accepted as proof of a native rule's meaning.
 
     The root caller authenticates local collector provenance. A JSON capture
     itself is not authentication. API loss blocks broad changes; independent
     narrow policy disable uses its own API-free observer.
     """
+    need(type(receipt_link) is bool, 'receipt linkage mode must be explicit')
     need(record.get('schema')=='fds.cp1-cni-state-capture.v1' and record.get('complete') is True and
          record.get('errors')==[], 'transition whole capture incomplete')
     boot(clock['boot_id']); need(record.get('boot_id')==clock['boot_id'], 'transition boot differs')
@@ -69,7 +100,7 @@ def observe(record, membership_capture, clock):
     # The baseline validator already requires Runtime/Permanent direct rules
     # to match. Unknown reload modes cannot silently change that contract.
     need(config.get('FlushAllOnReload','yes') in ('yes','no'), 'unknown reload flush setting')
-    snapshots = []
+    snapshots = []; original = []
     for suffix in ('','_after'):
         inventory = {}; descriptions = {}
         for plane in ('runtime','permanent'):
@@ -107,10 +138,16 @@ def observe(record, membership_capture, clock):
         api={k:parse_json(q['api/'+k+suffix]) for k in (*FIXED_API,'pods','endpointslices')}
         fixed_native=project({'native':foreign,'xtables':native['fixed']['xtables'],
                               'kernel_ipsets':native['fixed']['kernel_ipsets'],'opaque_expressions':0},api,rows)
-        host=parse_json(q['host'+suffix]);need(host.get('default_zone')==host.get('management_zone')=='public','management zone drift')
+        host=parse_json(q['host'+suffix]);need(host.get('default_zone')==host.get('management_zone')=='public' and
+            isinstance(host.get('management_connection'),str) and
+            re.fullmatch(r'[a-fA-F0-9-]{36}',host['management_connection']), 'management zone/identity drift')
+        if receipt_link:
+            fw=linked_firewall(q,suffix,inventory,host);original.append(fw)
+            host['management_connection_zone']=fw['nm_zone']
         fixed={'native':fixed_native,'host':host,'protection':parse_json(q['protection'+suffix]),
                'configuration':q['configuration'],'version':q['version']}
         snapshot={'inventory':inventory,'descriptions':descriptions,'fixed_sha256':fingerprint(fixed)}
         validate_snapshot(snapshot); snapshots.append(snapshot)
     need(same(snapshots[0],snapshots[1]), 'transition state changed between samples')
+    if receipt_link:need(same(original[0],original[1]), 'original firewall changed between samples')
     return snapshots[0]

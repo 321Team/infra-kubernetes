@@ -53,7 +53,7 @@ def peer_capture(node,deadline):
 
 class LocalTransitionIO:
     def __init__(self,node,lease,baseline,clock,runner,live_guard,quiesced,external_management,
-                 emergency_disable,*,deadline,monotonic=time.monotonic):
+                 emergency_disable,*,deadline,monotonic=time.monotonic,receipt_link=False):
         need(hashlib.sha256(Path(node.__file__).read_bytes()).hexdigest()==NODE_SHA,'transition helper source differs')
         self.node,self.lease,self.baseline=node,copy.deepcopy(lease),copy.deepcopy(baseline)
         self.clock,self.runner,self.live_guard,self.quiesced=clock,runner,live_guard,quiesced
@@ -61,6 +61,8 @@ class LocalTransitionIO:
         self.monotonic,self.deadline=monotonic,number(deadline)
         need(0 < self.deadline-self.monotonic() <= 150,'transition invocation budget differs')
         self.evidence=None
+        need(type(receipt_link) is bool,'receipt linkage mode must be explicit')
+        self.receipt_link=receipt_link
 
     def left(self):
         value=self.deadline-self.monotonic();need(value>0,'transition hard deadline exhausted');return value
@@ -77,12 +79,12 @@ class LocalTransitionIO:
 
     def snapshot(self):
         self.left();end=min(self.deadline,self.monotonic()+29)
-        capture=collect(self.node,protection,compatibility=True,delta_api=True,deadline=end)
+        capture=collect(self.node,protection,compatibility=True,delta_api=True,deadline=end,receipt_link=self.receipt_link)
         self.evidence={'capture':capture}
         peer=peer_capture(self.node,end);self.evidence['membership_capture']=peer
         current=self.clock();self.evidence['clock']=current
         self.left()
-        result=observe(capture,peer,current)
+        result=observe(capture,peer,current,receipt_link=self.receipt_link)
         self.evidence['verified_snapshot']=copy.deepcopy(result)
         return result
 

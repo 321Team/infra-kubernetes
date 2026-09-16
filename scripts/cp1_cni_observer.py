@@ -370,13 +370,14 @@ def compatibility_command(node, argv, timeout):
     return module.command(node, argv, timeout)
 
 
-def collect(node, protection_reader, *, compatibility=False, delta_api=False, deadline=None):
+def collect(node, protection_reader, *, compatibility=False, delta_api=False, deadline=None, receipt_link=False):
     """Read local state twice with a 25-second total helper command budget.
 
     protection_reader must use the same bounded helper, returning the full
     previously accepted protection projection (including namespace policies).
     No caller-supplied owned/fixed/guard flags are queried here.
     """
+    need(type(receipt_link) is bool, 'receipt linkage mode must be explicit')
     started = time.monotonic()
     end = min(started + 25, number(deadline)) if deadline is not None else started + 25
     need(end > started, 'whole observation deadline exhausted')
@@ -403,7 +404,13 @@ def collect(node, protection_reader, *, compatibility=False, delta_api=False, de
                      'management_zone': read('management_zone' + suffix, ['firewall-cmd', '--get-zone-of-interface=ens160']),
                      'management_connection': read('management_connection' + suffix,
                           ['nmcli', '-g', 'GENERAL.CON-UUID', 'device', 'show', 'ens160'])})
+            # The pinned helper already reads this full snapshot for protection.
+            # Do not query it again or reuse a snapshot from the prior sample.
+            backend.cp1_cni_original_firewall = None
             internal('protection' + suffix, protection_reader(backend))
+            if receipt_link:
+                need(isinstance(backend.cp1_cni_original_firewall, dict), 'original firewall capture absent')
+                internal('original/firewall' + suffix, backend.cp1_cni_original_firewall)
             if delta_api:
                 spec = importlib.util.spec_from_file_location('delta_dataplane_queries', ROOT / 'scripts/collect-cp1-cni-dataplane.py')
                 module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
@@ -461,6 +468,7 @@ def protection(backend):
     old = backend.cp1_state()
     for result in list(old['queries'].values()) + list(old['snapshot_queries'].values()):
         success(result)
+    backend.cp1_cni_original_firewall = copy.deepcopy(old['stable']['firewall'])
     result = copy.deepcopy(old['stable']['protection'])
     for key, resource in (('network_policies', 'networkpolicies.networking.k8s.io'),
                           ('calico_network_policies', 'networkpolicies.crd.projectcalico.org'),

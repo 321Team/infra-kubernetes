@@ -249,6 +249,26 @@ class ObserverTests(unittest.TestCase):
         self.assertEqual(compatibility_calls.count(['ip6tables-save', '-c']), 2)
         self.assertEqual(compatibility_calls.count(['ipset', 'save']), 2)
         self.assertTrue(all('reload' not in a and '--add-disable' not in a for a in calls))
+        # Preserve the snapshot already read by the protection callback. No
+        # second snapshot command sequence and no stale prior-sample reuse.
+        count = [0]
+        def linked(backend):
+            count[0] += 1
+            backend.cp1_cni_original_firewall = {'sample': count[0]}
+            return {'calico_image': 'pinned', 'namespace_policies': []}
+        with patch.object(o, 'compatibility_command', side_effect=compatibility_command):
+            linked_capture = o.collect(Node, linked, compatibility=True, receipt_link=True)
+        self.assertTrue(linked_capture['complete'], linked_capture['errors'])
+        self.assertEqual(json.loads(linked_capture['queries']['original/firewall']['stdout']), {'sample': 1})
+        self.assertEqual(json.loads(linked_capture['queries']['original/firewall_after']['stdout']), {'sample': 2})
+        count[0] = 0
+        def missing_second(backend):
+            count[0] += 1
+            if count[0] == 1: backend.cp1_cni_original_firewall = {'sample': 1}
+            return {'calico_image': 'pinned', 'namespace_policies': []}
+        with patch.object(o, 'compatibility_command', side_effect=compatibility_command):
+            broken = o.collect(Node, missing_second, compatibility=True, receipt_link=True)
+        self.assertFalse(broken['complete']); self.assertIn('original firewall capture absent', broken['errors'])
 
     def test_unit_query_failure_preserves_capture_and_cannot_reuse_prior_success(self):
         record, activation, _ = fixture()
