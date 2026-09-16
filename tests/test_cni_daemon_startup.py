@@ -3,6 +3,7 @@ from contextlib import ExitStack
 import ctypes
 import hashlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -54,6 +55,109 @@ class PolicyAccess(unittest.TestCase):
         obj.lib.string_to_security_class.return_value = 0
         with self.assertRaises(ValueError): obj.require('bus', 'target', 'file', 'read')
         obj.lib.security_compute_av_flags_raw.assert_not_called()
+
+
+class PolicyPreflightRegression(unittest.TestCase):
+    """Use an append-only policy model; no live VM/policy result is synthesized."""
+    def policy(self, denied=None, query_rc=0, permissive=False):
+        denied = denied or {}
+        names = ('open read write append getattr setattr search add_name remove_name '
+                 'create rmdir rename unlink connectto connect getopt setopt shutdown').split()
+        bits = {name: 1 << index for index, name in enumerate(names)}
+        obj = tool.SELinuxPolicy.__new__(tool.SELinuxPolicy)
+        obj.domains = {'bus': 'system_u:system_r:system_dbusd_t:s0',
+                       'firewall': 'system_u:system_r:firewalld_t:s0'}
+        def compute(source, target, kind, wanted, pointer):
+            target = target.decode()
+            forbidden = denied.get(target, set())
+            # Policy grants append/setattr but not arbitrary file writes.
+            if ':firewalld_var_log_t:' in target:
+                forbidden = forbidden | {'write'}
+            # Peer domain grants connectto, not read/write of peer-owned socket.
+            if target == obj.domains['bus']:
+                forbidden = forbidden | {'read', 'write'}
+            result = ctypes.cast(pointer, ctypes.POINTER(tool.AccessDecision)).contents
+            result.allowed = wanted & ~sum(bits[p] for p in forbidden)
+            result.flags = int(permissive)
+            return query_rc
+        obj.lib = SimpleNamespace(security_getenforce=Mock(return_value=1),
+            string_to_security_class=Mock(return_value=1),
+            string_to_av_perm=Mock(side_effect=lambda cls, value: bits.get(value.decode(), 0)),
+            security_compute_av_flags_raw=Mock(side_effect=compute))
+        return obj
+
+    def check(self, policy):
+        with patch.object(tool.Path, 'exists', return_value=False):
+            return policy.check()
+
+    def failure(self, policy):
+        output = io.StringIO()
+        with patch('sys.stdout', output), self.assertRaises(ValueError):
+            self.check(policy)
+        line = output.getvalue().strip()
+        self.assertTrue(line.startswith('SELINUX_POLICY_REPORT='))
+        return json.loads(line.split('=', 1)[1])
+
+    def test_append_only_log_and_peer_connect_policy_passes(self):
+        report = self.check(self.policy())
+        self.assertEqual(report['failed_checks'], 0)
+        self.assertEqual(report['checks'], 13)
+        log = next(r for r in report['access_decisions'] if ':firewalld_var_log_t:' in r['target_context'])
+        self.assertEqual(set(log['required_permissions']), {'open', 'append', 'getattr', 'setattr'})
+        sockets = [r for r in report['access_decisions'] if r['object_class'] == 'unix_stream_socket']
+        self.assertEqual(sockets[0]['required_permissions'], ['connectto'])
+        self.assertEqual(sockets[1]['source_context'], sockets[1]['target_context'])
+        self.assertIn('read', sockets[1]['required_permissions'])
+        self.assertIn('write', sockets[1]['required_permissions'])
+
+    def test_required_log_append_and_fchmod_remain_mandatory(self):
+        context = 'system_u:object_r:firewalld_var_log_t:s0'
+        for permission in ('open', 'append', 'getattr', 'setattr'):
+            with self.subTest(permission=permission):
+                report = self.failure(self.policy({context: {permission}}))
+                failed = [r for r in report['access_decisions'] if not r['ok']]
+                self.assertEqual(len(failed), 1)
+                self.assertEqual(failed[0]['denied_permissions'], [permission])
+
+    def test_reports_all_denials_including_after_first_failure(self):
+        report = self.failure(self.policy({
+            'system_u:object_r:dbusd_etc_t:s0': {'read'},
+            'system_u:object_r:firewalld_var_log_t:s0': {'append', 'setattr'},
+            'system_u:system_r:firewalld_t:s0': {'write'}}))
+        failed = [r for r in report['access_decisions'] if not r['ok']]
+        self.assertEqual(report['checks'], 13)
+        self.assertEqual(report['failed_checks'], 3)
+        self.assertEqual(failed[1]['denied_permissions'], ['append', 'setattr'])
+        self.assertEqual(failed[-1]['denied_permissions'], ['write'])
+
+    def test_failed_api_does_not_claim_denied_permissions(self):
+        report = self.failure(self.policy(query_rc=-1))
+        self.assertEqual(report['failed_checks'], 13)
+        for result in report['access_decisions']:
+            self.assertIsNone(result['denied_permissions'])
+            self.assertIsNone(result['allowed_mask'])
+            self.assertEqual(result['query_rc'], -1)
+
+    def test_domain_permissive_is_not_reported_as_policy_pass(self):
+        report = self.failure(self.policy(permissive=True))
+        self.assertEqual(report['failed_checks'], 13)
+        self.assertTrue(all(r['domain_permissive'] for r in report['access_decisions']))
+
+    def test_unknown_permission_is_recorded_and_remaining_checks_continue(self):
+        policy = self.policy()
+        original = policy.lib.string_to_av_perm.side_effect
+        policy.lib.string_to_av_perm.side_effect = lambda cls, value: 0 if value == b'append' else original(cls, value)
+        report = self.failure(policy)
+        self.assertEqual(report['checks'], 13)
+        self.assertEqual(report['failed_checks'], 1)
+        failed = next(r for r in report['access_decisions'] if not r['ok'])
+        self.assertIn('Unknown SELinux permission: append', failed['query_error'])
+
+    def test_enforcing_loss_during_query_cannot_produce_pass(self):
+        policy = self.policy()
+        policy.lib.security_getenforce.side_effect = [1] * 13 + [0]
+        report = self.failure(policy)
+        self.assertFalse(report['enforcing'])
 
 
 class OwnedLabels(unittest.TestCase):

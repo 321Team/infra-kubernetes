@@ -1,0 +1,34 @@
+{
+  "schema": "fds.cni-policy-r2-validation.v1",
+  "parent_head": "d9ec23354960a6a792058d40c3b79453024f08d7",
+  "source_hashes": {
+    "run-cni-kernel-integration.py": "881d7c5c8274a067dab3f837f852dfbc52834619689dbae544cab617840af741",
+    "cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+    "cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+  },
+  "kernel_bundle_sha256": "19f2c97a0379f6e809b257f05615a9446c63d6d9a3635b2cf691e1bd9c97ff3d",
+  "evidence_archive_sha256": "8afd7c5f4f8f445424e1aebdca7e46f4e9e92fc441f820d5031512d49aa3eace",
+  "evidence_inner_checksums": "3/3 MATCH",
+  "static": "Python AST/source checksum PASS",
+  "mock": {
+    "tests_run": 209,
+    "tests_passed": 209,
+    "existing": 202,
+    "new": 7,
+    "command": "python3 -B -m unittest discover -s tests -p 'test_cni*.py' -v"
+  },
+  "target_vm_inspect": "PENDING_R2",
+  "runtime": "NOT_RUN",
+  "independent_review": "PENDING",
+  "ci": "NOT_VERIFIED",
+  "merge": "NOT_PERFORMED",
+  "execution_approved": false,
+  "acceptance_criteria_credit": false,
+  "limitations": [
+    "KU5482 log does not identify the individually denied permission",
+    "Upstream policy is design reference; target installed policy is verified only by a fresh inspect",
+    "All mock vectors are synthetic and are not target policy evidence",
+    "No new service, namespace, packet flow or recovery test performed"
+  ]
+}

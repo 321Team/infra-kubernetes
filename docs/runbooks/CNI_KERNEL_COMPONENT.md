@@ -1,3 +1,11 @@
+## 2026-09-16 KU5482 inspect 후속
+
+정책 검사 보완본은 [R2 검토 기록](../change/ICR-D-NET-01-01/CNI_POLICY_R2_REVIEW_20260916.md)을 따른다.
+append 로그의 일반 write 요구 제거, D-Bus peer/self 소켓 구분, 개별 거부/API 오류 전수 기록을 반영했다.
+소스 4개 bundle SHA256: `19f2c97a0379f6e809b257f05615a9446c63d6d9a3635b2cf691e1bd9c97ff3d`.
+STATIC/MOCK 209 PASS이며 대상 VM의 새 inspect 및 Runtime은 대기다. 새 소스 독립 리뷰와 실행 결정 전에는 start하지 않는다.
+`SELINUX_POLICY_REPORT=`가 있으면 전체 로그를 보존한다. preflight non-zero는 실제 시험 실패/성공이 아닌 준비 차단이다.
+
 # CNI 커널 컴포넌트 시험 — cp1-cni-lab
 
 이 절차는 PR #11의 공통 `cni_diag_core.Transaction`과 parser를 **실제 Linux 커널·firewalld**에 연결해 검증하기 위한 실행 경로다. 네트워크 네임스페이스에 별도 firewalld, 전용 D-Bus, 합성 통신 대상을 만든다. 실행기는 모의 adapter를 사용하지 않는다. 2026-09-16 기존 HEAD 164f8d5의 normal 1회는 daemon 초기화 실패로 종료됐고, 이번 보완 소스의 실제 VM 실행은 미수행이다.

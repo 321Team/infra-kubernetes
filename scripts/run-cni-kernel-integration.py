@@ -189,21 +189,38 @@ class SELinuxPolicy:
             finally:
                 if context.value: self.lib.freecon(context)
 
-    def require(self, role, context, kind, permissions):
+    def access(self, role, context, kind, permissions):
+        """Return named access-vector evidence without changing policy or objects."""
         need(self.lib.security_getenforce() == 1, 'SELinux enforcing changed')
         cls = self.lib.string_to_security_class(kind.encode())
         need(cls != 0, 'Unknown SELinux class: ' + kind)
         wanted = 0
+        bits = {}
         for permission in permissions.split():
             bit = self.lib.string_to_av_perm(cls, permission.encode())
             need(bit != 0, 'Unknown SELinux permission: ' + permission)
+            bits[permission] = bit
             wanted |= bit
         decision = AccessDecision()
+        ctypes.set_errno(0)
         rc = self.lib.security_compute_av_flags_raw(self.domains[role].encode(), context.encode(),
                                                     cls, wanted, ctypes.byref(decision))
-        need(rc == 0 and decision.allowed & wanted == wanted and not decision.flags & 1,
-             'Loaded SELinux policy does not allow enforced access: ' +
-             role + ' -> ' + context + ' ' + kind + ':' + permissions)
+        error_number = ctypes.get_errno() if rc != 0 else 0
+        # On API failure the vector is not evidence of which permission was denied.
+        denied = [name for name, bit in bits.items() if not decision.allowed & bit] if rc == 0 else None
+        return dict(role=role, source_context=self.domains[role], target_context=context,
+                    object_class=kind, required_permissions=list(bits), denied_permissions=denied,
+                    query_rc=rc, query_errno=error_number, requested_mask=wanted,
+                    allowed_mask=decision.allowed if rc == 0 else None,
+                    decision_flags=decision.flags if rc == 0 else None,
+                    domain_permissive=bool(decision.flags & 1) if rc == 0 else None,
+                    ok=rc == 0 and not denied and not decision.flags & 1)
+
+    def require(self, role, context, kind, permissions):
+        result = self.access(role, context, kind, permissions)
+        need(result['ok'], 'Loaded SELinux policy does not allow enforced access: ' +
+             json.dumps(result, sort_keys=True))
+        return result
 
     def check(self):
         checks = (
@@ -215,19 +232,41 @@ class SELinuxPolicy:
             ('firewall', 'firewalld_etc_rw_t', 'dir', 'search open read getattr write add_name remove_name create rmdir'),
             ('firewall', 'firewalld_etc_rw_t', 'file', 'open read getattr write create rename unlink setattr'),
             ('firewall', 'var_log_t', 'dir', 'search'),
-            ('firewall', 'firewalld_var_log_t', 'file', 'open append write getattr setattr'),
+            # firewalld 2.4.3 uses FileLog(..., "a"): O_APPEND, then fchmod.
+            # The file already exists; arbitrary write/create are not required.
+            ('firewall', 'firewalld_var_log_t', 'file', 'open append getattr setattr'),
             ('firewall', 'firewalld_var_run_t', 'dir', 'search open read getattr write add_name remove_name create rmdir'),
             ('firewall', 'firewalld_var_run_t', 'file', 'create open read write getattr setattr unlink'),
         )
+        results = []
+        def record(role, context, kind, permissions):
+            try:
+                results.append(self.access(role, context, kind, permissions))
+            except (ValueError, OSError) as exc:
+                results.append(dict(role=role, target_context=context, object_class=kind,
+                                    required_permissions=permissions.split(),
+                                    query_error=str(exc), ok=False))
         for role, label, kind, permissions in checks:
-            self.require(role, 'system_u:object_r:' + label + ':s0', kind, permissions)
-        self.require('firewall', self.domains['bus'], 'unix_stream_socket', 'connectto read write')
+            record(role, 'system_u:object_r:' + label + ':s0', kind, permissions)
+        # connectto targets the peer; ordinary socket IO targets our own socket.
+        record('firewall', self.domains['bus'], 'unix_stream_socket', 'connectto')
+        record('firewall', self.domains['firewall'], 'unix_stream_socket',
+               'create connect read write getattr getopt setopt shutdown')
         for path in reversed([ROOT] + list(ROOT.parents)):
             if path.exists():
                 node.safe_dir(path)
-                for role in self.domains: self.require(role, file_context(path), 'dir', 'search')
-        return dict(domains=self.domains, checks=len(checks) + 1, enforcing=True,
-                    labels=LABELS, method='loaded_policy_access_vectors')
+                for role in self.domains: record(role, file_context(path), 'dir', 'search')
+        failures = [result for result in results if not result['ok']]
+        report = dict(schema='fds.cni-selinux-access.v1', domains=self.domains,
+                      checks=len(results), failed_checks=len(failures),
+                      enforcing=self.lib.security_getenforce() == 1, access_decisions=results,
+                      labels=LABELS, method='loaded_policy_access_vectors')
+        if failures or not report['enforcing']:
+            # inspect cannot produce a valid decision on failure, but all queried
+            # vectors survive in the captured log for a single review round.
+            print('SELINUX_POLICY_REPORT=' + json.dumps(report, sort_keys=True), flush=True)
+            raise ValueError('Loaded SELinux policy preflight failed; see SELINUX_POLICY_REPORT')
+        return report
 
 
 def label_owned_path(job, relative):
