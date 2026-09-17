@@ -132,8 +132,14 @@ def documents(base):
                 ET.SubElement(root, 'entry').text = entry
         elif kind == 'zones':
             root = ET.Element('zone')
+            # firewalld 2.4.3's --new-zone-from-file path may otherwise drop
+            # the serialized forward field and retain the daemon default yes.
+            # Make that unbound Permanent-only intermediate state explicit;
+            # IO.stage() removes forward and verifies the final no state before
+            # any reload can make the zone Runtime-visible.
+            ET.SubElement(root, 'forward')
             # The reviewed baseline has only these public services/rich rules.
-            # No interface/source/forward tag: staging must remain inactive.
+            # No interface/source tag: the intermediate zone remains inactive.
             for service in obj['fields']['services'].split():
                 ET.SubElement(root, 'service', name=service)
             for text in obj['rules']:
@@ -211,7 +217,8 @@ def validate_baseline(base, original):
     return receipt
 
 
-def validate_view(view, base, *, allow_missing_runtime=False):
+def validate_view(view, base, *, allow_missing_runtime=False,
+                  allow_transient_permanent_forward=False):
     """Closed-set before/after comparison; every owned object is checked fully."""
     need(view['version'] == base['version'] and view['backend'] == base['backend'] and
          view['boot_id'] == base['boot_id'] and view['ipam'] == base['ipam'] and
@@ -230,6 +237,12 @@ def validate_view(view, base, *, allow_missing_runtime=False):
                     need(binding in ('', 'cali+'), 'owned Runtime binding drift')
                     bound = binding == 'cali+'
                     want['fields']['interfaces'] = binding
+                elif (kind == 'zones' and plane == 'permanent' and name == ZONE and
+                      allow_transient_permanent_forward and actual['fields'].get('forward') == 'yes'):
+                    # Recovery only: accept the exact unbound intermediate
+                    # created before --remove-forward. All other fields and
+                    # rules still have to match the reviewed owned object.
+                    want['fields']['forward'] = 'yes'
                 need(actual == want, 'owned object drift: ' + plane + '/' + kind + '/' + name)
     fw = projected['firewall']
     active = active_names(fw['active_policies']['active_output'])
@@ -335,8 +348,9 @@ def recover(io, journal, record):
         io.begin_recovery()
     base = record['before']; view = io.snapshot()
     # No blind reload on foreign drift. Report it and retain the journal/timer.
+    recovery_view = dict(allow_missing_runtime=True, allow_transient_permanent_forward=True)
     try:
-        bound = validate_view(view, base, allow_missing_runtime=True)
+        bound = validate_view(view, base, **recovery_view)
     except ValueError:
         owned = expected_objects(base)
         owned['zones'][ZONE]['fields']['interfaces'] = 'cali+'
@@ -348,12 +362,12 @@ def recover(io, journal, record):
     record['status'] = 'RECOVERING'; journal.save(record)
     if bound:
         io.bind(False)
-        need(not validate_view(io.snapshot(), base, allow_missing_runtime=True), 'withdrawal not observed')
+        need(not validate_view(io.snapshot(), base, **recovery_view), 'withdrawal not observed')
     for kind, name in reversed(ORDER):
-        view = io.snapshot(); validate_view(view, base, allow_missing_runtime=True)
+        view = io.snapshot(); validate_view(view, base, **recovery_view)
         if name in view['objects']['permanent'][kind]:
             io.remove_permanent(kind, name)
-    view = io.snapshot(); validate_view(view, base, allow_missing_runtime=True)
+    view = io.snapshot(); validate_view(view, base, **recovery_view)
     if view != base:
         io.reload_restore(base)
     need(io.snapshot() == base, 'full baseline restoration not observed')

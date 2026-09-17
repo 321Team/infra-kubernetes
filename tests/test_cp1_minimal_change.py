@@ -86,7 +86,14 @@ class FakeIO:
     def arm(self,withdraw): self.armed=True; self.action('arm')
     def stage(self,kind,name,xml):
         assert self.armed
-        self.view['objects']['permanent'][kind][name]=copy.deepcopy(self.model[kind][name]);self.action('stage:'+name)
+        self.view['objects']['permanent'][kind][name]=copy.deepcopy(self.model[kind][name])
+        if kind == 'zones' and name == m.ZONE:
+            self.view['objects']['permanent'][kind][name]['fields']['forward']='yes'
+            self.action('stage-create:'+name)
+            self.view['objects']['permanent'][kind][name]['fields']['forward']='no'
+            self.action('stage-disable-forward:'+name)
+        else:
+            self.action('stage:'+name)
     def remove_permanent(self,kind,name):
         del self.view['objects']['permanent'][kind][name];self.action('remove:'+name)
     def reload_restore(self,base):
@@ -111,7 +118,7 @@ class Transactions(unittest.TestCase):
         m.recover(self.io,self.journal,record)
         self.assertEqual(self.io.snapshot(),self.base);self.assertFalse(self.io.armed)
     def test_uncertain_failure_at_every_mutation_recovered(self):
-        for index in range(2,14):
+        for index in range(2,15):
             with self.subTest(index=index):
                 self.io=FakeIO(self.base);self.io.fail=index;self.journal=MemoryJournal()
                 with self.assertRaises(OSError): self.apply()
@@ -173,15 +180,26 @@ class Transactions(unittest.TestCase):
             bad=copy.deepcopy(record['after']);bad[key]={'unexpected':True}
             with self.subTest(key=key),self.assertRaises(ValueError):m.validate_view(bad,self.base)
     def test_old_controller_sources_still_byte_identical(self):m.legacy()
-    def test_xml_stages_no_binding_or_unrestricted_forward(self):
+    def test_xml_stages_explicit_unbound_forward_then_runtime_model_is_no(self):
         import xml.etree.ElementTree as ET
         docs=m.documents(self.base);zone=ET.fromstring(docs['zones/'+m.ZONE+'.xml'])
-        self.assertIsNone(zone.find('interface'));self.assertIsNone(zone.find('forward'));self.assertIsNone(zone.find('source'))
+        self.assertIsNone(zone.find('interface'));self.assertIsNotNone(zone.find('forward'));self.assertIsNone(zone.find('source'))
+        self.assertEqual(m.expected_objects(self.base)['zones'][m.ZONE]['fields']['forward'],'no')
         self.assertEqual(sorted(x.attrib['name'] for x in zone.findall('service')),['dhcpv6-client','ssh'])
         self.assertEqual(len(zone.findall('rule')),7)
         local=ET.fromstring(docs['policies/'+m.LOCAL+'.xml']);r=local.find('rule')
         self.assertEqual(r.find('source').attrib['address'],m.BLOCK);self.assertEqual(r.find('destination').attrib['address'],m.BLOCK)
         self.assertIsNone(r.find('port'))
+    def test_transient_forward_yes_is_recovery_only_and_exact(self):
+        view=copy.deepcopy(self.base);zone=copy.deepcopy(m.expected_objects(self.base)['zones'][m.ZONE])
+        zone['fields']['forward']='yes';view['objects']['permanent']['zones'][m.ZONE]=zone
+        with self.assertRaises(ValueError):m.validate_view(view,self.base)
+        self.assertFalse(m.validate_view(view,self.base,allow_missing_runtime=True,
+                                         allow_transient_permanent_forward=True))
+        view['objects']['permanent']['zones'][m.ZONE]['fields']['target']='ACCEPT'
+        with self.assertRaises(ValueError):
+            m.validate_view(view,self.base,allow_missing_runtime=True,
+                            allow_transient_permanent_forward=True)
 
 
 class PreservedPolicies(unittest.TestCase):
@@ -358,6 +376,15 @@ class LocalIO(unittest.TestCase):
         with patch.object(io,'command') as cmd:
             io.remove_permanent('policies',m.LOCAL);self.assertIn('--delete-policy='+m.LOCAL,cmd.call_args.args[0])
             io.bind(True);self.assertNotIn('--permanent',cmd.call_args.args[0]);self.assertIn('--add-interface=cali+',cmd.call_args.args[0])
+    def test_zone_stage_explicitly_disables_forward_before_return(self):
+        io=object.__new__(e.IO);io.directory=Path('/reviewed-job')
+        with patch.object(e,'private',return_value=Path('/reviewed-job/xml/zones')), \
+             patch.object(e,'atomic'),patch.object(io,'command') as cmd:
+            io.stage('zones',m.ZONE,'<zone><forward/></zone>\n')
+        calls=[call.args[0] for call in cmd.call_args_list]
+        self.assertEqual(len(calls),2)
+        self.assertIn('--new-zone-from-file=/reviewed-job/xml/zones/'+m.ZONE+'.xml',calls[0])
+        self.assertEqual(calls[1],['firewall-cmd','--permanent','--zone='+m.ZONE,'--remove-forward'])
     def test_parser_rejects_duplicate_unknown_lines_and_canonicalizes_active_header(self):
         obj={'fields':{'services':'dhcpv6-client ssh','interfaces':'cali+'},'rules':['rule family=ipv4 accept']}
         self.assertEqual(m.parse_info(text('demo (active)',obj),'demo'),obj)

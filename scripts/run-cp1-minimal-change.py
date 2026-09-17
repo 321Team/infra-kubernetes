@@ -156,6 +156,12 @@ class IO:
         directory = private(self.directory / 'xml' / kind, True)
         file = directory / (name + '.xml'); atomic(file, xml.encode())
         self.command(['firewall-cmd', '--permanent', '--new-' + SINGULAR[kind] + '-from-file=' + str(file), '--name=' + name])
+        if kind == 'zones' and name == m.ZONE:
+            # firewalld 2.4.3 may import the zone with forward=yes even when
+            # an omitted XML field was read as false. Create the unbound
+            # intermediate state explicitly, then force final forward=no
+            # before the caller permits reload or policy creation.
+            self.command(['firewall-cmd', '--permanent', '--zone=' + name, '--remove-forward'])
 
     def remove_permanent(self, kind, name):
         self.command(['firewall-cmd', '--permanent', '--delete-' + SINGULAR[kind] + '=' + name])
