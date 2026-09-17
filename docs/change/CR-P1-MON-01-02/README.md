@@ -22,6 +22,8 @@
 - [`manifests/monitoring-api/alertmanager-egress-networkpolicy.yaml`](../../../manifests/monitoring-api/alertmanager-egress-networkpolicy.yaml):
   Alertmanager -> egress-proxy01(CONNECT/443) + kube-dns(53) 만 허용하는
   `networking.k8s.io/v1` NetworkPolicy 초안.
+- [`SECRET_PROCEDURE.md`](SECRET_PROCEDURE.md): Discord Webhook Secret 생성/회전/폐기 절차 초안.
+- [`VERIFICATION_PLAN.md`](VERIFICATION_PLAN.md): Allow/Deny/장애복구/Secret노출 검증 시나리오 초안.
 
 ## 이 PR이 아직 하지 않는 것 (실제 적용 전 선행조건)
 
@@ -32,8 +34,8 @@
 | 프록시 IP:port | `10.1.93.56:3128`은 [DEC-P1-EGRESS-01(#78)](https://github.com/321Team/fds-project-baseline/issues/78)의 계획값. `infra-ansible` [PR #12](https://github.com/321Team/infra-ansible/pull/12)는 2026-09-16 GWONUK 최종 APPROVE로 **병합 완료**(코드 승인)됐으나, 이 승인은 코드 병합 승인일 뿐 Squid Runtime apply/서비스 인수를 승인한 것은 아니다. 실제 Alertmanager egress source(Calico/NAT 이후 IP)를 아직 실측하지 않아 코드 내 `cr_mon_proxy_clients_confirmed` 게이트가 `true`로 설정되지 않았고, 이 게이트 없이는 Squid apply 자체가 진행되지 않는다. Squid apply는 여전히 HOLD | 실측된 egress source IP → `cr_mon_proxy_clients_confirmed` 게이트 해제 → Squid apply/verify PASS → endpoint 공식 인계 |
 | Squid 허용 클라이언트 범위 | `infra-ansible`의 `cr_mon_proxy_allowed_clients`는 STALE DEFAULT(K8s 노드 6대 전체, 옛날 "노드 재활용" 안 기준). **후보 축소 논리(미실측 추론)**: `alertmanager-pv`가 `nodeAffinity`로 `k8s-worker03`에 고정돼 있어(위 참조), Alertmanager Pod가 이 PVC를 쓰는 한 항상 worker03에서만 뜬다 → 관측될 출발지도 `10.1.93.108` 하나일 가능성이 높다 | Alertmanager 실배포가 실제로 `alertmanager-pvc`를 참조하는지 확인 + NAT 이후 실제 출발지 IP 실측으로 `10.1.93.108` 단일값 확정 (또는 반증 시 Worker 3대 전체로 되돌림) |
 | kube-dns 라벨 | `k8s-app: kube-dns`는 kubeadm 기본값 가정, 이 클러스터 실측 아님 | 클러스터 실제 구동 후 확인 |
-| Secret 주입/회전/폐기 절차 | 미정 | 담당자(이하영: 생성/회전, 이재환: 설정 인계/검증) 논의 |
-| 검증 계획(허용/차단/알림 흐름) | 미정 | 클러스터·프록시 모두 준비된 뒤 실행 |
+| Secret 주입/회전/폐기 절차 | **절차 초안 작성 완료** — [`SECRET_PROCEDURE.md`](SECRET_PROCEDURE.md) (생성/회전 90일 후보/유출 대응/인계 규칙). 실제 발급·생성·회전 실행은 미실시 | 클러스터·Alertmanager 실배포 확정 후 실제 Secret 생성 실행, 회전 주기 Lead 확정 |
+| 검증 계획(허용/차단/알림 흐름) | **시나리오 목록 작성 완료** — [`VERIFICATION_PLAN.md`](VERIFICATION_PLAN.md) (Allow/Deny/장애복구/Secret노출 4개 범주). 실행 스크립트·실제 시험은 미실시 | 클러스터·프록시 모두 준비된 뒤 실행, 실행 스크립트 작성 |
 
 ## 진행 방식
 
