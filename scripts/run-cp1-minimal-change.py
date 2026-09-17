@@ -332,6 +332,8 @@ def commit_operator_exception(io, record, bundle, exception, trial, trial_sha256
 
 
 def live_status(io, record):
+    if record.get('schema') == 'fds.cp1-minimal-change.v4':
+        return session_status(io, record)
     proof = load_retention(io, record) if record.get('status') == 'ACTIVE_REVIEW_REQUIRED' else None
     cutoff = record['retained_withdraw_at'] if proof is not None else record['withdraw_at']
     if record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3') and record.get('status') == 'ACTIVE_REVIEW_REQUIRED':
@@ -357,6 +359,68 @@ def live_status(io, record):
     return result
 
 
+def load_session(io, record):
+    try:
+        proof = root_document(io.directory, 'SESSION_PROOF.json')
+    except FileNotFoundError:
+        return None
+    return m.validate_session_proof(proof, record, root_document(io.directory, 'HANDOFF.json'),
+                                    root_document(io.directory, 'SESSION_DECISION.json'))
+
+
+def session_status(io, record):
+    proof = load_session(io, record) if record.get('status') == 'ACTIVE_REVIEW_REQUIRED' else None
+    if record.get('status') == 'ACTIVE_REVIEW_REQUIRED':
+        m.need(io.now() + m.dt.timedelta(seconds=360) < m.instant(record['withdraw_at']),
+               'too close to recovery for locked session snapshot')
+    view = io.snapshot(); active = m.validate_view(view, record['before'])
+    armed = io.timer_active()
+    if record.get('status') == 'ACTIVE_REVIEW_REQUIRED':
+        m.need(active and armed and view == record['after'] and io.now() < m.instant(record['withdraw_at']),
+               'session state differs or final recovery unavailable')
+    result = {'status': m.SESSION_ACTIVE if proof is not None else record['status'],
+              'job_id': record['job_id'], 'source_bundle_sha256': record['source_bundle_sha256'],
+              'change_receipt_sha256': m.fingerprint(record), 'withdraw_at': record['withdraw_at'],
+              'current': view, 'recovery_armed': armed, 'observed_at': io.now().isoformat(),
+              'cp1_accepted': False, 'independent_acceptance': 'PENDING'}
+    if proof is not None:
+        result.update(session_decision_sha256=proof['decision_sha256'], handoff_sha256=proof['handoff_sha256'])
+    return result
+
+
+def commit_session(io, record, bundle, decision, trial, trial_sha256, regression):
+    m.need(record.get('schema') == 'fds.cp1-minimal-change.v4', 'session continuation requires a new v4 job')
+    existing = load_session(io, record)
+    if existing is not None:
+        m.need(existing['decision_sha256'] == m.fingerprint(decision), 'session already committed to different decision')
+        return session_status(io, record)
+    handoff = root_document(io.directory, 'HANDOFF.json')
+    original = root_document(io.directory, 'ORIGINAL.json')
+    request, wrapper, _ = m.analyzer().archive_inputs(trial, trial_sha256)
+    m.validate_handoff(handoff, original, request, wrapper, bundle, io.now())
+    m.validate_session_decision(decision, handoff, io.now())
+    checks = decision['checks']
+    m.need(checks['positive']['evidence_sha256'] == trial_sha256 and
+           checks['negative']['evidence_sha256'] == m.fingerprint(handoff['trial_report']) and
+           checks['regression']['evidence_sha256'] == m.digest(regression), 'session evidence hashes differ')
+    expected = (b'MANAGEMENT_SSH=PASS\nENS160_ZONE=public\nKUBE_APISERVER_READYZ=PASS\n'
+                b'CP1_NODE_READY=PASS\nEXTERNAL_DNS_IPV4=PASS\nEXTERNAL_HTTPS_REGISTRY_401=PASS\n'
+                b'HOST_EXTERNAL_REGRESSION=PASS\n')
+    m.need(regression == expected, 'HOST/external regression evidence incomplete')
+    m.live_gate(session_status(io, record), record, clock=io.now())
+    proof = m.session_proof(record, handoff, decision, io.now())
+    atomic(io.directory / 'SESSION_DECISION.json', m.encoded(decision))
+    atomic(io.directory / 'SESSION_REGRESSION.txt', regression)
+    atomic(io.directory / 'SESSION_PROOF.json', m.encoded(proof))
+    if io.now() >= m.instant(record['withdraw_at']):
+        os.replace(io.directory / 'SESSION_PROOF.json', io.directory / 'SESSION_PROOF_LATE.json')
+        fd = os.open(io.directory, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        m.need(False, 'session commit crossed final deadline')
+    return session_status(io, record)
+
+
 def inspect_document(io, original, bundle):
     base = io.snapshot()
     document = {'schema': 'fds.cp1-minimal-inspection.v1', 'created_at': m.now().isoformat(),
@@ -376,8 +440,8 @@ def inspect_document(io, original, bundle):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', nargs='?', default='plan', choices=('plan', 'inspect', 'apply', 'status', 'recover', 'deadline', 'issue-receipt', 'accept-retention', 'retain-by-exception'))
-    for name in ('original', 'authorization', 'inspection', 'acceptance', 'exception', 'regression'):
+    parser.add_argument('mode', nargs='?', default='plan', choices=('plan', 'inspect', 'apply', 'status', 'recover', 'deadline', 'issue-receipt', 'accept-retention', 'retain-by-exception', 'continue-session'))
+    for name in ('original', 'authorization', 'inspection', 'acceptance', 'exception', 'regression', 'decision'):
         parser.add_argument('--' + name); parser.add_argument('--' + name + '-sha256')
     parser.add_argument('--job'); parser.add_argument('--trial'); parser.add_argument('--trial-sha256')
     args = parser.parse_args(); os.umask(0o077)
@@ -385,8 +449,9 @@ def main():
     if args.mode == 'plan':
         print(json.dumps({'mode': 'PLAN_ONLY', 'hostname': m.HOST, 'block': m.BLOCK,
                           'source_bundle_sha256': bundle, 'files': files, 'operational_approval': False,
-                          'new_workflow': 'v3-reviewed-operator-exception', 'old_job_migration': False,
-                          'exception_policy': m.EXCEPTION_POLICY, 'provisional_is_accepted': False}, indent=2)); return
+                          'new_workflow': 'v4-reviewed-cp-session', 'old_job_migration': False,
+                          'exception_policy': m.EXCEPTION_POLICY, 'session_policy': m.SESSION_POLICY,
+                          'provisional_is_accepted': False}, indent=2)); return
     m.need(os.geteuid() == 0, 'invoke as normal account with sudo; root login is not required')
     private(BASE, True)
     lock_fd = os.open(BASE / 'LOCK', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -432,6 +497,11 @@ def main():
         m.need(record['job_id'] == args.job and record['source_bundle_sha256'] == bundle, 'job/source differs')
         io = IO(args.job, directory)
         io.retained_withdraw_at = record.get('retained_withdraw_at')
+        if args.mode == 'continue-session':
+            decision = load_checked(args.decision, args.decision_sha256)
+            regression = load_checked_raw(args.regression, args.regression_sha256)
+            print(m.encoded(commit_session(io, record, bundle, decision, args.trial,
+                                          args.trial_sha256, regression)).decode()); return
         if args.mode == 'recover':
             io.n.COMMAND_STATE['deadline'] = time.monotonic() + 150
             print(m.encoded(m.recover(io, journal, record)).decode()); return

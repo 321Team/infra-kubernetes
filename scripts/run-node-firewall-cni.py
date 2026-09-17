@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CNI handoff adapter: original firewall policy, new independent CP1 acceptance."""
+"""CNI handoff adapter: original policy, independent acceptance or reviewed delegation."""
 import argparse
 import copy
 import datetime as dt
@@ -21,7 +21,7 @@ import tempfile
 KIT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("cni_handoff_consumer", KIT / "scripts/cp1_minimal_consumer.py")
 cni = importlib.util.module_from_spec(spec); spec.loader.exec_module(cni)
-NODE_SOURCE = KIT / "scripts/node-firewall.py"
+NODE_SOURCE = KIT / "scripts/node-firewall-session.py"
 spec = importlib.util.spec_from_file_location("worker_followup_node", NODE_SOURCE)
 node = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(node)
@@ -89,7 +89,7 @@ def verify_source():
         node.need(lock["repository"] == "321Team/infra-kubernetes", "wrong source repository")
         commit = lock["commit"]
         files = lock["files"]
-        required = {"scripts/run-node-firewall.py", "scripts/node-firewall.py",
+        required = {"scripts/run-node-firewall.py", "scripts/node-firewall.py", "scripts/node-firewall-session.py",
                     "scripts/run-node-firewall-cni.py", "scripts/cp1_minimal_consumer.py",
                     "scripts/cp1_minimal_change.py", "scripts/run-cp1-minimal-change.py",
                     "scripts/analyze-cp1-cni-trial.py",
@@ -437,15 +437,30 @@ def main():
                 handoff = load_checked(args.cp1_handoff, args.cp1_handoff_sha256)
                 cni_record = cni.validate(proof, handoff, acceptance, args.cp1_trial, args.cp1_trial_sha256)
                 (out / "CP1_CNI_HANDOFF.json").write_bytes(node.encoded(handoff))
-                node.need(auth.get("cp1_canary_accepted") is True
-                          and auth.get("cp1_receipt_input_sha256") == args.cp1_receipt_sha256
-                          and auth.get("cp1_acceptance_sha256") == args.cp1_acceptance_sha256,
-                          "authorization CP1 receipt/acceptance binding differs")
+                delegated = acceptance.get('schema') == 'fds.cp-session-continuation.v1'
+                if delegated:
+                    node.need(auth.get('schema') == 'fds.node-firewall-authorization.v3' and
+                              auth.get('cp1_canary_accepted') is False and auth.get('cp1_continuation_authorized') is True and
+                              auth.get('cp1_continuation_sha256') == args.cp1_acceptance_sha256 and
+                              auth.get('cp1_session_job') == cni_record['job_id'] and
+                              auth.get('operator_decision_url') == cni_record['operator_decision_url'] and
+                              auth.get('review_url') == cni_record['review_url'] and
+                              auth.get('cp1_receipt_input_sha256') == args.cp1_receipt_sha256 and
+                              args.node in acceptance['targets'], 'session target/source/authority binding differs')
+                    summary.update(independent_acceptance='PENDING', cp1_accepted=False)
+                else:
+                    node.need(auth.get('schema') == 'fds.node-firewall-authorization.v2' and
+                              auth.get("cp1_canary_accepted") is True and
+                              auth.get("cp1_receipt_input_sha256") == args.cp1_receipt_sha256 and
+                              auth.get("cp1_acceptance_sha256") == args.cp1_acceptance_sha256,
+                              "authorization CP1 receipt/acceptance binding differs")
                 request.update(cp1_receipt_sha256=node.fingerprint(cp1_receipt),
                                cp1_receipt_input_sha256=args.cp1_receipt_sha256,
-                               cp1_acceptance_sha256=args.cp1_acceptance_sha256)
+                               cp1_acceptance_sha256=None if delegated else args.cp1_acceptance_sha256)
+                if delegated:
+                    request['cp1_continuation_sha256'] = args.cp1_acceptance_sha256
                 (out / "CP1_RECEIPT.json").write_bytes(node.encoded(proof))
-                (out / "CP1_ACCEPTANCE.json").write_bytes(node.encoded(acceptance))
+                (out / ("CP1_SESSION_DECISION.json" if delegated else "CP1_ACCEPTANCE.json")).write_bytes(node.encoded(acceptance))
             else:
                 wrapper = load_checked(args.receipt, args.receipt_sha256)
                 receipt_data = wrapper.get("result", wrapper)
@@ -459,8 +474,11 @@ def main():
             topology_gate(topology, args.node, request["topology_sha256"], unjoined=True)
             cp1_state = require_result(remote("k8s-control01", "cp1-state", "CP1_STATE_BEFORE.json"), "CP1_STATE_REVIEW_REQUIRED")
             if cni_record is not None:
-                cni.m.validate_acceptance(acceptance, handoff)
-                if cni_record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3'):
+                if cni_record.get('schema') == 'fds.cp1-minimal-change.v4':
+                    cni.m.validate_session_decision(acceptance, handoff)
+                else:
+                    cni.m.validate_acceptance(acceptance, handoff)
+                if cni_record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3', 'fds.cp1-minimal-change.v4'):
                     live = cni.before_or_after(controller, cp1_state, inputs["cp1_state_sha256"], cni_record,
                                                acceptance=acceptance, required_until=auth['window_end'])
                 else:
@@ -484,9 +502,12 @@ def main():
             topology_gate(topology, args.node, request["topology_sha256"], unjoined=True)
             cp1_state = require_result(remote("k8s-control01", "cp1-state", "CP1_STATE_AFTER.json"), "CP1_STATE_REVIEW_REQUIRED")
             if cni_record is not None:
-                cni.m.validate_acceptance(acceptance, handoff)
+                if cni_record.get('schema') == 'fds.cp1-minimal-change.v4':
+                    cni.m.validate_session_decision(acceptance, handoff)
+                else:
+                    cni.m.validate_acceptance(acceptance, handoff)
                 live = cni.before_or_after(controller, cp1_state, inputs["cp1_state_sha256"], cni_record,
-                                           acceptance=acceptance if cni_record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3') else None)
+                                           acceptance=acceptance if cni_record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3', 'fds.cp1-minimal-change.v4') else None)
                 (out / "CP1_CNI_LIVE_AFTER.json").write_bytes(node.encoded(live))
             else:
                 cp1_state_gate(cp1_state, inputs["cp1_state_sha256"], cp1_receipt)

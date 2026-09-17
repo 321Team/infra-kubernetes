@@ -1,3 +1,7 @@
+## 2026-09-18 CP 세션 위임 제안
+
+새 소스/정책을 한 번에 승인한 경우 [CP 세션](CP_SESSION.md)이 CP1 시험 후 `CP_SESSION_ACTIVE_REVIEW_PENDING`을 확인하여 CP2→CP3 Runtime 방화벽을 순서대로 준비한다. 별도의 대상별 수작업 승인 JSON을 요구하지 않는다. source와 현재 상태·실제 결과는 계속 검증한다. `cp1_accepted=false`이며 이 실행 위임을 독립 인수나 Join 승인으로 표시하지 않는다. 기존 Job/legacy 경로는 아래 계약을 유지한다.
+
 ## 2026-09-17 CP1 작업창 v2 연계
 
 CP1 최소 구성과 정본의 보호·포트 범위는 유지한다. [CP1 작업창 v2](CP1_MINIMAL_CHANGE.md)는 CP1 시험/인수 시간과 인수 후 CP2/CP3 유지 시간을 분리한다. 새 v2 작업에만 적용하며 과거 CP1 작업의 기한을 연장하지 않는다.
