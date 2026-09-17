@@ -1,0 +1,29 @@
+{
+  "schema": "fds.cp1-operator-exception.v1",
+  "decision": null,
+  "operator": "GWONUK",
+  "independent_review_status": "PENDING",
+  "cp1_accepted": false,
+  "post_review_required": true,
+  "reason_code": "REVIEWER_UNAVAILABLE",
+  "reason": null,
+  "authority_url": null,
+  "authorized_at": null,
+  "job_id": null,
+  "source_bundle_sha256": null,
+  "handoff_sha256": null,
+  "expires_at": null,
+  "scope": {
+    "hostname": "k8s-control01",
+    "action": "retain-existing-cp1",
+    "plane": "runtime",
+    "pod_block": "10.244.246.64/26",
+    "interfaces": "cali+",
+    "l4": "ALL"
+  },
+  "checks": {
+    "positive": {"status": "NOT_VERIFIED", "evidence_sha256": null},
+    "negative": {"status": "NOT_VERIFIED", "evidence_sha256": null},
+    "regression": {"status": "NOT_VERIFIED", "evidence_sha256": null}
+  }
+}

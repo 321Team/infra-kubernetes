@@ -460,7 +460,7 @@ def main():
             cp1_state = require_result(remote("k8s-control01", "cp1-state", "CP1_STATE_BEFORE.json"), "CP1_STATE_REVIEW_REQUIRED")
             if cni_record is not None:
                 cni.m.validate_acceptance(acceptance, handoff)
-                if cni_record.get('schema') == 'fds.cp1-minimal-change.v2':
+                if cni_record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3'):
                     live = cni.before_or_after(controller, cp1_state, inputs["cp1_state_sha256"], cni_record,
                                                acceptance=acceptance, required_until=auth['window_end'])
                 else:
@@ -486,7 +486,7 @@ def main():
             if cni_record is not None:
                 cni.m.validate_acceptance(acceptance, handoff)
                 live = cni.before_or_after(controller, cp1_state, inputs["cp1_state_sha256"], cni_record,
-                                           acceptance=acceptance if cni_record.get('schema') == 'fds.cp1-minimal-change.v2' else None)
+                                           acceptance=acceptance if cni_record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3') else None)
                 (out / "CP1_CNI_LIVE_AFTER.json").write_bytes(node.encoded(live))
             else:
                 cp1_state_gate(cp1_state, inputs["cp1_state_sha256"], cp1_receipt)
