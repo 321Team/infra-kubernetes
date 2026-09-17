@@ -1,0 +1,30 @@
+"""Runs inside a temporary test Pod; only fixed test destinations are supplied."""
+import http.client
+import json
+import socket
+import sys
+
+request = json.loads(sys.argv[1])
+results = []
+for item in request['http']:
+    conn = http.client.HTTPConnection(item['ip'], 8080, timeout=4)
+    result = dict(item)
+    try:
+        conn.request('GET', '/')
+        response = conn.getresponse()
+        body = response.read(4096).decode()
+        result.update(status=response.status, body=body,
+                      passed=response.status == 200 and body == item['expected'])
+    except Exception as error:
+        result.update(passed=False, error=str(error))
+    finally:
+        conn.close()
+    results.append(result)
+dns = {'name': request['dns_name'], 'expected': request['dns_ip']}
+try:
+    ips = sorted({row[4][0] for row in socket.getaddrinfo(request['dns_name'], 8080,
+                                                       socket.AF_INET, socket.SOCK_STREAM)})
+    dns.update(addresses=ips, passed=ips == [request['dns_ip']])
+except Exception as error:
+    dns.update(passed=False, error=str(error))
+print(json.dumps({'http': results, 'dns': dns}))
