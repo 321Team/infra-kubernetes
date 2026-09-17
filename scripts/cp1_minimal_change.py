@@ -279,7 +279,7 @@ def validate_view(view, base, *, allow_missing_runtime=False,
 
 def check_authorization(auth, base, source_digest, clock=None):
     clock = clock or now()
-    need(auth.get('schema') == 'fds.cp1-minimal-authorization.v1' and auth.get('execution_approved') is True and
+    need(auth.get('schema') in ('fds.cp1-minimal-authorization.v1', 'fds.cp1-minimal-authorization.v2') and auth.get('execution_approved') is True and
          auth.get('independent_reviewer') == 'hayeounglee' and auth.get('review_decision') == 'APPROVED', 'independent execution decision absent')
     need(auth.get('operator') == 'GWONUK' and all(auth.get(key) is True for key in
          ('maintenance_freeze', 'console_recovery_available', 'backup_verified', 'protection_reviewed',
@@ -292,22 +292,54 @@ def check_authorization(auth, base, source_digest, clock=None):
     need(auth.get('reviewed_bundle_sha256') == source_digest and auth.get('before_sha256') == fingerprint(base) and
          auth.get('scope') == {'hostname': HOST, 'pod_block': BLOCK, 'interfaces': 'cali+', 'l4': 'ALL', 'plane': 'runtime'}, 'reviewed scope/source/state differs')
     start, end, reviewed = (instant(auth[key]) for key in ('window_start', 'window_end', 'reviewed_at'))
-    need(reviewed <= clock and start <= clock < end and 0 < (end - start).total_seconds() <= 7200 and
-         clock + dt.timedelta(seconds=600) < end, 'window expired/too short/unbounded')
     kst = dt.timezone(dt.timedelta(hours=9))
     need(start.astimezone(kst).weekday() < 5 and end.astimezone(kst).weekday() < 5, 'weekday work window required')
+    if auth['schema'] == 'fds.cp1-minimal-authorization.v2':
+        retained = instant(auth['retention_until'])
+        margin = auth.get('recovery_margin_seconds')
+        # A staffed educational workday, not a measured performance guarantee.
+        # No arbitrary 90-minute default, no silent overnight or weekend hold.
+        need(type(margin) is int and margin >= 180, 'recovery margin must cover the existing 180-second recovery service')
+        need(auth.get('retention_approved') is True, 'bounded retention was not reviewed')
+        need(start.astimezone(kst).date() == end.astimezone(kst).date() == retained.astimezone(kst).date(),
+             'one staffed KST workday required; overnight retention is a separate change')
+        need(reviewed <= clock and start <= clock < end < retained and
+             clock + dt.timedelta(seconds=margin + 420) < end,
+             'work window expired/too short or retention order invalid')
+        return {'review_url': url, 'withdraw_at': (end - dt.timedelta(seconds=margin)).isoformat(),
+                'expires_at': end.isoformat(), 'retained_withdraw_at': (retained - dt.timedelta(seconds=margin)).isoformat(),
+                'retention_until': retained.isoformat(), 'recovery_margin_seconds': margin}
+    need(reviewed <= clock and start <= clock < end and 0 < (end - start).total_seconds() <= 7200 and
+         clock + dt.timedelta(seconds=600) < end, 'window expired/too short/unbounded')
     return {'review_url': url, 'withdraw_at': (end - dt.timedelta(seconds=180)).isoformat(), 'expires_at': end.isoformat()}
 
 
 def apply(io, journal, original, auth, source_digest):
     base = io.snapshot(); validate_baseline(base, original)
     window = check_authorization(auth, base, source_digest, io.now())
-    record = {'schema': 'fds.cp1-minimal-change.v1', 'job_id': io.job_id, 'status': 'PREPARED',
+    version = 'v2' if auth['schema'] == 'fds.cp1-minimal-authorization.v2' else 'v1'
+    record = {'schema': 'fds.cp1-minimal-change.' + version, 'job_id': io.job_id, 'status': 'PREPARED',
               'source_bundle_sha256': source_digest, 'authorization_sha256': fingerprint(auth),
               'original_receipt_sha256': fingerprint(original), 'before': base, 'operations': [],
               'started_at': io.now().isoformat(), **window, 'cp1_accepted': False}
     journal.save(record)
-    io.arm(window['withdraw_at'])
+    if version == 'v2':
+        try:
+            io.arm(window['withdraw_at'], window['retained_withdraw_at'])
+        except Exception as error:
+            record.update(status='FAILED_REVIEW_REQUIRED', error=str(error))
+            journal.save(record)
+            try:
+                io.disarm()
+                need(io.snapshot() == base, 'state changed during timer setup')
+                record.update(status='RESTORED_REVIEW_REQUIRED', restored=base, cleanup_complete=True,
+                              recovery_armed=False, recovered_at=io.now().isoformat())
+                journal.save(record)
+            except Exception as cleanup_error:
+                record['recovery_error'] = str(cleanup_error); journal.save(record)
+            raise
+    else:
+        io.arm(window['withdraw_at'])
     record['recovery_armed'] = True; journal.save(record)
     model = documents(base)
     try:
@@ -412,23 +444,34 @@ def receipt(record, original, trial_request, trial_wrapper, reviewed_bundle, clo
             'issued_at': clock.isoformat(), 'cp1_accepted': False, 'authorizes_cp2_change': False}
 
 
-def validate_handoff(handoff, original, trial_request, trial_wrapper, reviewed_bundle, clock=None):
+def validate_handoff(handoff, original, trial_request, trial_wrapper, reviewed_bundle, clock=None, acceptance=None):
     clock = clock or now()
     rebuilt = receipt(handoff['change'], original, trial_request, trial_wrapper, reviewed_bundle,
                       instant(handoff['issued_at']))
-    need(handoff == rebuilt and instant(handoff['issued_at']) <= clock < instant(handoff['change']['withdraw_at']),
+    cutoff = handoff['change']['withdraw_at']
+    if acceptance is not None and acceptance.get('schema') == 'fds.cp1-minimal-acceptance.v2':
+        validate_acceptance(acceptance, handoff, clock)
+        cutoff = handoff['change']['retained_withdraw_at']
+    need(handoff == rebuilt and instant(handoff['issued_at']) <= clock < instant(cutoff),
          'handoff differs/expired')
     return handoff['change']
 
 
 def validate_acceptance(data, handoff, clock=None):
     clock = clock or now()
-    need(data.get('schema') == 'fds.cp1-minimal-acceptance.v1' and data.get('decision') == 'ACCEPTED' and
+    retained = data.get('schema') == 'fds.cp1-minimal-acceptance.v2'
+    need(data.get('schema') in ('fds.cp1-minimal-acceptance.v1', 'fds.cp1-minimal-acceptance.v2') and data.get('decision') == 'ACCEPTED' and
          data.get('independent_reviewer') == 'hayeounglee' and data.get('review_decision') == 'APPROVED',
          'new independent CP1 acceptance absent')
+    record = handoff['change']
+    need(retained == (record.get('schema') == 'fds.cp1-minimal-change.v2'), 'acceptance/change version mismatch')
+    if retained:
+        need(data.get('retention_approved') is True and
+             instant(data['reviewed_at']) < instant(record['withdraw_at']), 'retention requires acceptance before the first deadline')
+    cutoff = record['retained_withdraw_at'] if retained else record['withdraw_at']
     need(data.get('handoff_sha256') == fingerprint(handoff) and
          data.get('source_bundle_sha256') == handoff['change']['source_bundle_sha256'] and
-         data.get('expires_at') == handoff['change']['withdraw_at'], 'acceptance binding/lifetime differs')
+         data.get('expires_at') == cutoff, 'acceptance binding/lifetime differs')
     need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/11#(?:issuecomment|pullrequestreview)-[0-9]+',
                       data.get('review_url', '')), 'acceptance review URL required')
     need(instant(handoff['issued_at']) <= instant(data['reviewed_at']) <= clock < instant(data['expires_at']),
@@ -441,12 +484,43 @@ def validate_acceptance(data, handoff, clock=None):
     return data
 
 
-def live_gate(status, record, minimum_seconds=0, clock=None):
+def live_gate(status, record, minimum_seconds=0, clock=None, acceptance=None, required_until=None):
     clock = clock or now()
-    need(status.get('status') == 'ACTIVE_REVIEW_REQUIRED' and status.get('recovery_armed') is True and
+    retained = acceptance is not None and acceptance.get('schema') == 'fds.cp1-minimal-acceptance.v2'
+    cutoff = record['retained_withdraw_at'] if retained else record['withdraw_at']
+    if retained:
+        need(status.get('acceptance_sha256') == fingerprint(acceptance) and
+             status.get('handoff_sha256') == acceptance.get('handoff_sha256'), 'live retained acceptance differs')
+    need(status.get('status') == ('ACCEPTED_RETAINED' if retained else 'ACTIVE_REVIEW_REQUIRED') and status.get('recovery_armed') is True and
          status.get('job_id') == record['job_id'] and status.get('source_bundle_sha256') == record['source_bundle_sha256'] and
-         status.get('change_receipt_sha256') == fingerprint(record) and status.get('withdraw_at') == record['withdraw_at'],
+         status.get('change_receipt_sha256') == fingerprint(record) and status.get('withdraw_at') == cutoff,
          'live job/source/recovery differs')
     need(status.get('current') == record['after'] and validate_view(status['current'], record['before']),
          'live whole after-state differs')
-    need(clock + dt.timedelta(seconds=minimum_seconds) < instant(record['withdraw_at']), 'remaining lifetime insufficient')
+    need(clock + dt.timedelta(seconds=minimum_seconds) < instant(cutoff), 'remaining lifetime insufficient')
+    if required_until is not None:
+        need(clock < instant(required_until) < instant(cutoff), 'target work window must finish before CP1 withdrawal')
+
+
+def retention_proof(record, handoff, acceptance, clock=None):
+    """Bind an already reviewed result; never infer GitHub approval from a hash."""
+    clock = clock or now()
+    need(record.get('schema') == 'fds.cp1-minimal-change.v2' and
+         record.get('status') == 'ACTIVE_REVIEW_REQUIRED' and record.get('recovery_armed') is True,
+         'only a new active v2 job can enter retained state')
+    need(handoff.get('schema') == 'fds.cp1-minimal-handoff.v1' and handoff.get('change') == record and
+         handoff.get('change_receipt_sha256') == fingerprint(record), 'retention handoff/job differs')
+    validate_acceptance(acceptance, handoff, clock)
+    need(clock < instant(record['withdraw_at']), 'retention cannot revive an expired trial')
+    return {'schema': 'fds.cp1-minimal-retention.v1', 'job_id': record['job_id'],
+            'change_receipt_sha256': fingerprint(record), 'handoff_sha256': fingerprint(handoff),
+            'acceptance_sha256': fingerprint(acceptance), 'accepted_at': clock.isoformat(),
+            'withdraw_at': record['retained_withdraw_at']}
+
+
+def validate_retention(proof, record, handoff, acceptance):
+    # Replay at the committed acceptance time, including at final expiry. The
+    # caller still checks the effective deadline; this is not a lifetime bypass.
+    need(proof == retention_proof(record, handoff, acceptance, instant(proof['accepted_at'])),
+         'root retention proof differs')
+    return proof

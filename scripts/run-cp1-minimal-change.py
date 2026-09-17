@@ -9,6 +9,7 @@ import datetime as dt
 import fcntl
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -138,18 +139,32 @@ class IO:
                 'version': self.command(['firewall-cmd', '--version']), 'backend': matches[0],
                 'ipam': {'cidr': m.BLOCK, 'affinity': 'host:' + m.HOST, 'state': 'confirmed'}}
 
-    def timer_active(self):
-        result = self.n.command(['systemctl', 'is-active', self.unit + '.timer'])
+    def unit_active(self, unit):
+        result = self.n.command(['systemctl', 'is-active', unit + '.timer'])
         return result['rc'] == 0 and result['stdout'].strip() == 'active' and not result['stderr'].strip()
 
-    def arm(self, withdraw):
-        seconds = int((m.instant(withdraw) - self.now()).total_seconds())
+    def timer_active(self, retained=False):
+        if getattr(self, 'retained_withdraw_at', None):
+            hard = self.unit_active(self.unit + '-retention')
+            return hard and (retained or self.unit_active(self.unit))
+        return self.unit_active(self.unit)
+
+    def arm_one(self, unit, withdraw, mode):
+        seconds = math.ceil((m.instant(withdraw) - self.now()).total_seconds())
         m.need(seconds > 360 and self.directory is not None, 'deadline too close for bounded apply')
-        argv = ['systemd-run', '--unit=' + self.unit, '--on-active=' + str(seconds) + 's',
+        argv = ['systemd-run', '--unit=' + unit, '--on-active=' + str(seconds) + 's',
                 '--timer-property=AccuracySec=1s', '--property=Type=oneshot', '--property=User=root',
                 '--property=TimeoutStartSec=180s', '--quiet', '/usr/bin/python3', '-I', '-B',
-                str(self.directory / 'scripts/run-cp1-minimal-change.py'), 'recover', '--job', self.job_id]
+                str(self.directory / 'scripts/run-cp1-minimal-change.py'), mode, '--job', self.job_id]
         self.command(argv)
+
+    def arm(self, withdraw, retained_withdraw=None):
+        self.retained_withdraw_at = retained_withdraw
+        # Both one-shot deadlines are armed before any firewall mutation. No
+        # live rearming race, extension daemon or cancellation on acceptance.
+        if retained_withdraw:
+            self.arm_one(self.unit + '-retention', retained_withdraw, 'deadline')
+        self.arm_one(self.unit, withdraw, 'deadline' if retained_withdraw else 'recover')
         m.need(self.timer_active(), 'independent recovery timer not armed')
 
     def stage(self, kind, name, xml):
@@ -185,24 +200,95 @@ class IO:
 
     def disarm(self):
         # Do not stop the recovery service from inside itself.
-        result = self.n.command(['systemctl', 'show', self.unit + '.timer', '--property=LoadState', '--value'])
-        if result['stdout'].strip() == 'not-found' and not self.timer_active():
-            return
-        self.command(['systemctl', 'stop', self.unit + '.timer'])
-        m.need(not self.timer_active(), 'recovery timer still active')
+        units = [self.unit]
+        if getattr(self, 'retained_withdraw_at', None):
+            units.append(self.unit + '-retention')
+        for unit in units:
+            result = self.n.command(['systemctl', 'show', unit + '.timer', '--property=LoadState', '--value'])
+            if result['stdout'].strip() == 'not-found' and not self.unit_active(unit):
+                continue
+            self.command(['systemctl', 'stop', unit + '.timer'])
+            m.need(not self.unit_active(unit), 'recovery timer still active')
+
+
+def root_document(directory, name):
+    path = directory / name
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb') as stream:
+        st = os.fstat(stream.fileno())
+        m.need(stat.S_ISREG(st.st_mode) and st.st_uid == 0 and not st.st_mode & 0o022, 'untrusted root document')
+        raw = stream.read(8 * 1024 * 1024 + 1)
+    m.need(len(raw) <= 8 * 1024 * 1024, 'root document too large')
+    return m.analyzer().parse(raw)
+
+
+def load_retention(io, record):
+    if record.get('schema') != 'fds.cp1-minimal-change.v2':
+        return None
+    try:
+        proof = root_document(io.directory, 'RETENTION.json')
+    except FileNotFoundError:
+        return None
+    handoff = root_document(io.directory, 'HANDOFF.json')
+    acceptance = root_document(io.directory, 'ACCEPTANCE.json')
+    return m.validate_retention(proof, record, handoff, acceptance)
+
+
+def deadline_action(io, journal, record, proof):
+    if record.get('cleanup_complete') is True:
+        return record
+    m.need(io.now() >= m.instant(record['withdraw_at']), 'deadline has not arrived')
+    if proof is not None and io.now() < m.instant(record['retained_withdraw_at']) and io.timer_active(retained=True):
+        return dict(status='ACCEPTED_RETAINED', job_id=record['job_id'],
+                    withdraw_at=record['retained_withdraw_at'], recovery_armed=True)
+    return m.recover(io, journal, record)
+
+
+def commit_retention(io, record, bundle, acceptance, trial, trial_sha256):
+    m.need(record.get('schema') == 'fds.cp1-minimal-change.v2', 'old jobs cannot be extended or migrated')
+    directory = io.directory
+    handoff = root_document(directory, 'HANDOFF.json')
+    existing = load_retention(io, record)
+    if existing is not None:
+        m.need(existing['acceptance_sha256'] == m.fingerprint(acceptance), 'retention already committed to different evidence')
+        return live_status(io, record)
+    original = root_document(directory, 'ORIGINAL.json')
+    request, wrapper, _ = m.analyzer().archive_inputs(trial, trial_sha256)
+    m.validate_handoff(handoff, original, request, wrapper, bundle, io.now())
+    m.live_gate(live_status(io, record), record, clock=io.now())
+    proof = m.retention_proof(record, handoff, acceptance, io.now())
+    atomic(directory / 'ACCEPTANCE.json', m.encoded(acceptance))
+    # The commit marker is written last. CHANGE/HANDOFF hashes stay immutable;
+    # interruption leaves the early deadline armed, including after file fsync.
+    atomic(directory / 'RETENTION.json', m.encoded(proof))
+    if io.now() >= m.instant(record['withdraw_at']):
+        os.replace(directory / 'RETENTION.json', directory / 'RETENTION_LATE.json')
+        fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try: os.fsync(fd)
+        finally: os.close(fd)
+        m.need(False, 'retention commit crossed the first deadline; early recovery remains required')
+    return dict(status='RETENTION_COMMITTED', **proof)
 
 
 def live_status(io, record):
+    proof = load_retention(io, record) if record.get('status') == 'ACTIVE_REVIEW_REQUIRED' else None
+    cutoff = record['retained_withdraw_at'] if proof is not None else record['withdraw_at']
+    if record.get('schema') == 'fds.cp1-minimal-change.v2' and record.get('status') == 'ACTIVE_REVIEW_REQUIRED':
+        # A status snapshot owns the same lock as recovery and has a 360s
+        # command budget. Do not start it across the effective recovery deadline.
+        m.need(io.now() + dt.timedelta(seconds=360) < m.instant(cutoff), 'too close to recovery for a locked status snapshot')
     view = io.snapshot()
     active = m.validate_view(view, record['before'])
     status = record['status']
-    armed = io.timer_active()
+    armed = io.timer_active(retained=True) if proof is not None else io.timer_active()
     if status == 'ACTIVE_REVIEW_REQUIRED':
-        m.need(active and armed and view == record['after'] and io.now() < m.instant(record['withdraw_at']),
+        m.need(active and armed and view == record['after'] and io.now() < m.instant(cutoff),
                'live change differs/expired/recovery absent')
-    return {'status': status, 'job_id': record['job_id'], 'source_bundle_sha256': record['source_bundle_sha256'],
-            'change_receipt_sha256': m.fingerprint(record), 'withdraw_at': record['withdraw_at'],
+    result = {'status': 'ACCEPTED_RETAINED' if proof is not None else status, 'job_id': record['job_id'], 'source_bundle_sha256': record['source_bundle_sha256'],
+            'change_receipt_sha256': m.fingerprint(record), 'withdraw_at': cutoff,
             'current': view, 'recovery_armed': armed, 'observed_at': io.now().isoformat()}
+    if proof is not None:
+        result.update(acceptance_sha256=proof['acceptance_sha256'], handoff_sha256=proof['handoff_sha256'])
+    return result
 
 
 def inspect_document(io, original, bundle):
@@ -224,22 +310,23 @@ def inspect_document(io, original, bundle):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', nargs='?', default='plan', choices=('plan', 'inspect', 'apply', 'status', 'recover', 'issue-receipt'))
-    for name in ('original', 'authorization', 'inspection'):
+    parser.add_argument('mode', nargs='?', default='plan', choices=('plan', 'inspect', 'apply', 'status', 'recover', 'deadline', 'issue-receipt', 'accept-retention'))
+    for name in ('original', 'authorization', 'inspection', 'acceptance'):
         parser.add_argument('--' + name); parser.add_argument('--' + name + '-sha256')
     parser.add_argument('--job'); parser.add_argument('--trial'); parser.add_argument('--trial-sha256')
     args = parser.parse_args(); os.umask(0o077)
     files = source_files(); bundle = m.fingerprint(files)
     if args.mode == 'plan':
         print(json.dumps({'mode': 'PLAN_ONLY', 'hostname': m.HOST, 'block': m.BLOCK,
-                          'source_bundle_sha256': bundle, 'files': files, 'operational_approval': False}, indent=2)); return
+                          'source_bundle_sha256': bundle, 'files': files, 'operational_approval': False,
+                          'new_workflow': 'explicit-v2-workday-and-retention', 'old_job_migration': False}, indent=2)); return
     m.need(os.geteuid() == 0, 'invoke as normal account with sudo; root login is not required')
     private(BASE, True)
     lock_fd = os.open(BASE / 'LOCK', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
         m.need(os.fstat(lock_fd).st_uid == 0 and stat.S_ISREG(os.fstat(lock_fd).st_mode) and
                not os.fstat(lock_fd).st_mode & 0o077, 'untrusted lock')
-        deadline = time.monotonic() + (30 if args.mode == 'recover' else 0)
+        deadline = time.monotonic() + (30 if args.mode in ('recover', 'deadline') else 0)
         while True:
             try: fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB); break
             except BlockingIOError:
@@ -277,9 +364,21 @@ def main():
         journal = Journal(directory); record = journal.load()
         m.need(record['job_id'] == args.job and record['source_bundle_sha256'] == bundle, 'job/source differs')
         io = IO(args.job, directory)
+        io.retained_withdraw_at = record.get('retained_withdraw_at')
         if args.mode == 'recover':
             io.n.COMMAND_STATE['deadline'] = time.monotonic() + 150
             print(m.encoded(m.recover(io, journal, record)).decode()); return
+        if args.mode == 'deadline':
+            m.need(record.get('schema') == 'fds.cp1-minimal-change.v2', 'deadline requires a v2 job')
+            try:
+                proof = load_retention(io, record) if record.get('cleanup_complete') is not True else None
+            except (ValueError, OSError, KeyError, TypeError, AttributeError, OverflowError):
+                # An absent/partial/invalid acceptance must never suppress recovery.
+                proof = None
+            print(m.encoded(deadline_action(io, journal, record, proof)).decode()); return
+        if args.mode == 'accept-retention':
+            acceptance = load_checked(args.acceptance, args.acceptance_sha256)
+            print(m.encoded(commit_retention(io, record, bundle, acceptance, args.trial, args.trial_sha256)).decode()); return
         status = live_status(io, record)
         if args.mode == 'status': print(m.encoded(status).decode()); return
         original = m.analyzer().parse((directory / 'ORIGINAL.json').read_bytes())

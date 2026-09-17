@@ -393,12 +393,12 @@ class LocalIO(unittest.TestCase):
 
 
 class AdapterWorkflow(unittest.TestCase):
-    def exercise(self, failure=None):
+    def exercise(self, failure=None, auth_factory=authorization, io_factory=FakeIO):
         import contextlib, io, os
         from test_node_firewall import Gates
         adapter=load('adapter_integration','scripts/run-node-firewall-cni.py');n=adapter.node
-        base,original=baseline();fake=FakeIO(base);journal=MemoryJournal()
-        record=m.apply(fake,journal,original,authorization(base),BUNDLE)
+        base,original=baseline();fake=io_factory(base);journal=MemoryJournal()
+        record=m.apply(fake,journal,original,auth_factory(base),BUNDLE)
         req,wrapper=fixture();wrapper['result']['firewall_before']=copy.deepcopy(record['after']['firewall'])
         wrapper['result']['firewall_after']=copy.deepcopy(record['after']['firewall'])
         req['kit_hashes']['expected-firewall.json']=a.sha(a.encoded(record['after']['firewall']));wrapper['kit_hashes']=copy.deepcopy(req['kit_hashes'])
@@ -407,6 +407,9 @@ class AdapterWorkflow(unittest.TestCase):
             review_decision='APPROVED',review_url=authorization(base)['review_url'],reviewed_at=clock.isoformat(),
             expires_at=record['withdraw_at'],handoff_sha256=m.fingerprint(handoff),source_bundle_sha256=BUNDLE,
             checks={k:dict(status='PASS',evidence_sha256='a'*64) for k in ('positive','negative','regression')})
+        if record['schema']=='fds.cp1-minimal-change.v2':
+            accept.update(schema='fds.cp1-minimal-acceptance.v2',retention_approved=True,
+                          expires_at=record['retained_withdraw_at'])
         target='k8s-control02';backend=FakeBackend(MemoryJournal(),target);before=backend.snapshot();topology=Gates().topology()
         stable={'firewall':record['after']['firewall'],'protection':record['after']['protection']}
         state={'stable':stable,'sha256':n.fingerprint(stable),'status':'CP1_STATE_REVIEW_REQUIRED'}
@@ -429,6 +432,10 @@ class AdapterWorkflow(unittest.TestCase):
             live_calls.append(rec['job_id'])
             result=dict(status=rec['status'],job_id=rec['job_id'],source_bundle_sha256=BUNDLE,current=copy.deepcopy(rec['after']),
                         recovery_armed=True,change_receipt_sha256=m.fingerprint(rec),withdraw_at=rec['withdraw_at'])
+            if rec['schema']=='fds.cp1-minimal-change.v2':
+                result.update(status='ACCEPTED_RETAINED',withdraw_at=rec['retained_withdraw_at'],
+                              acceptance_sha256=m.fingerprint(accept),handoff_sha256=m.fingerprint(handoff))
+                if failure=='retention-proof':result['acceptance_sha256']='f'*64
             if failure=='before' or failure=='after' and len(live_calls)==2:result['recovery_armed']=False
             return result
         old=Path.cwd()
@@ -448,6 +455,7 @@ class AdapterWorkflow(unittest.TestCase):
                 review_decision='APPROVED',window_start=(t-dt.timedelta(minutes=1)).isoformat(),window_end=(t+dt.timedelta(minutes=40)).isoformat(),
                 inspection_sha256=inspectsha,cp1_canary_accepted=True,cp1_receipt_input_sha256=originalsha,cp1_acceptance_sha256=acceptsha,
                 zone_controls={p:{'forward':'yes','masquerade':'no'} for p in ('runtime','permanent')})
+            if failure=='target-window':auth['window_end']=record['retained_withdraw_at']
             for key in ('source_sha256','plan_sha256','policy_sha256','before_sha256','residual_metadata_sha256','cp1_state_sha256'):auth[key]=inspection[key]
             for key in ('maintenance_freeze','console_recovery_available','backup_verified','protection_reviewed','rollback_runbook_reviewed','runtime_only_acknowledged','target_state_reviewed'):auth[key]=True
             save('authorization',auth)
