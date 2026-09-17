@@ -6,6 +6,13 @@
 - 2026-09-17 갱신: 아래 "프록시 IP:port" 행의 `infra-ansible` PR #12 상태를 최신화(작성 당시
   REQUEST_CHANGES → 이후 병합 완료로 확인). 병합됐다고 Squid apply HOLD가 풀린 것은
   아니며, 막힌 이유가 "코드 미승인"에서 "실측 IP 미확보로 인한 게이트 미해제"로 바뀐 것.
+- 2026-09-17 갱신: `cr_mon_proxy_allowed_clients`(Squid 허용 클라이언트)의 후보 범위를
+  Worker 3대 전체에서 **worker03 1대로 좁힐 수 있다는 논리**를 아래 표에 추가. Storage
+  티켓(P1-SEC-01)의 `alertmanager-pv`가 이미 `nodeAffinity`로 `k8s-worker03`에 고정돼
+  있어(`manifests/04-storage.yaml`, `p1-k8s-01/p1-sec-01-revision` 브랜치), Alertmanager
+  Pod는 이 PVC를 쓰는 한 항상 worker03에서만 스케줄된다 — 즉 egress-proxy01이 관측할
+  출발지 IP도 항상 `10.1.93.108` 하나로 고정될 것으로 추론된다. 다만 이는 아직 실측
+  전 추론이며(Alertmanager 실배포가 이 PVC를 실제로 쓰는지도 미검증), 공식 결정은 아니다.
 
 ## 이 PR이 지금 하는 것
 
@@ -23,6 +30,7 @@
 | 쿠버네티스 클러스터 | P1-K8S-01 Gate 0(사전점검)만 통과. 실제 클러스터 미부트스트랩, 이 리포에 Gate 1/2 실행 코드 없음 | 클러스터 실제 구동 |
 | Alertmanager Pod/podSelector | `app: alertmanager` 가정뿐, 검증할 실배포 매니페스트 부재. `fds-msa` 리포는 321Team org에 아직 존재하지 않음 | 실제 Alertmanager Deployment/StatefulSet 매니페스트 |
 | 프록시 IP:port | `10.1.93.56:3128`은 [DEC-P1-EGRESS-01(#78)](https://github.com/321Team/fds-project-baseline/issues/78)의 계획값. `infra-ansible` [PR #12](https://github.com/321Team/infra-ansible/pull/12)는 2026-09-16 GWONUK 최종 APPROVE로 **병합 완료**(코드 승인)됐으나, 이 승인은 코드 병합 승인일 뿐 Squid Runtime apply/서비스 인수를 승인한 것은 아니다. 실제 Alertmanager egress source(Calico/NAT 이후 IP)를 아직 실측하지 않아 코드 내 `cr_mon_proxy_clients_confirmed` 게이트가 `true`로 설정되지 않았고, 이 게이트 없이는 Squid apply 자체가 진행되지 않는다. Squid apply는 여전히 HOLD | 실측된 egress source IP → `cr_mon_proxy_clients_confirmed` 게이트 해제 → Squid apply/verify PASS → endpoint 공식 인계 |
+| Squid 허용 클라이언트 범위 | `infra-ansible`의 `cr_mon_proxy_allowed_clients`는 STALE DEFAULT(K8s 노드 6대 전체, 옛날 "노드 재활용" 안 기준). **후보 축소 논리(미실측 추론)**: `alertmanager-pv`가 `nodeAffinity`로 `k8s-worker03`에 고정돼 있어(위 참조), Alertmanager Pod가 이 PVC를 쓰는 한 항상 worker03에서만 뜬다 → 관측될 출발지도 `10.1.93.108` 하나일 가능성이 높다 | Alertmanager 실배포가 실제로 `alertmanager-pvc`를 참조하는지 확인 + NAT 이후 실제 출발지 IP 실측으로 `10.1.93.108` 단일값 확정 (또는 반증 시 Worker 3대 전체로 되돌림) |
 | kube-dns 라벨 | `k8s-app: kube-dns`는 kubeadm 기본값 가정, 이 클러스터 실측 아님 | 클러스터 실제 구동 후 확인 |
 | Secret 주입/회전/폐기 절차 | 미정 | 담당자(이하영: 생성/회전, 이재환: 설정 인계/검증) 논의 |
 | 검증 계획(허용/차단/알림 흐름) | 미정 | 클러스터·프록시 모두 준비된 뒤 실행 |
