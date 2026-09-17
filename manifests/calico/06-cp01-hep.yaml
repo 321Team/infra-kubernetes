@@ -1,7 +1,12 @@
 # SEC-06 2차 수정 — CP 단계 1/3. Worker 전체(1개 이상의 관찰 주기) 안정화 확인 후 적용.
 # CP는 etcd/API 가용성에 직접 영향을 주므로 적용 후 반드시 quorum 상태를 확인한다
 # (docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md 4단계 참조).
-# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+#
+# interfaceName=ens160 (2026-09-17 CP01 실측: `ip -o link show`/`ip route get`/`nmcli`
+# 3개 read-only 명령 결과 전부 ens160으로 일치, Worker와 동일 패턴). baseline
+# "2026-08-28 사전 상태 이력"과도 부합하나, 이 값은 K8S/SEC Lead #10 결정 리스트에는
+# 아직 정식 항목으로 없어 AS_BUILT_CANDIDATE로 취급한다 — 별도 Lead Decision 게시 전까지
+# 최종 확정값은 아니다. 적용 직전 동일 3개 명령을 다시 실행해 불일치 시 STOP한다.
 apiVersion: crd.projectcalico.org/v1
 kind: HostEndpoint
 metadata:
@@ -11,6 +16,6 @@ metadata:
     rollout-stage: cp
 spec:
   node: k8s-control01
-  interfaceName: <실제-NIC-이름>
+  interfaceName: ens160
   expectedIPs:
     - "10.1.93.102"

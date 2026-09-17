@@ -1,3 +1,13 @@
+# SEC-06 5차 수정 (GWONUK HEAD 4af1393e 재검토 잔여 차단 #2) — egress TCP22 제거.
+#
+# 4차 제출 결함:
+#   - ingress는 ansible01 단일 source로 좁혔으나 egress 쪽엔 6개 노드 상호 22가 그대로
+#     남아있어, 단계적 HEP 전환 중 미보호 노드→노드 SSH가 허용될 수 있었음.
+#   - 2026-09-17 실측 중 k8s-worker01(server05 계정)에서 k8s-control01로 SSH 직접 접속이
+#     실사용되고 있음을 확인(로그인 이력에 10.1.93.105 출처 기록). 이 경로가 정식 운영
+#     절차인지 우연히 열려있던 경로인지는 별도 확인 필요 — OID-01 egress 제거로 이 경로가
+#     막히면 실제 운영에 영향이 있을 수 있으므로 Support(이권욱)에게 확인 요청 남김.
+#
 # SEC-06 4차 수정 (OID-01, supreme33-kr issuecomment-5697293093) — SSH(22) ingress를
 # OID-01 관리 Source(ansible01)로 한정.
 #
@@ -76,11 +86,27 @@ spec:
           - "10.1.93.108/32"
       destination:
         ports: [4789]  # VXLAN (BGP Disabled 구성이므로 179 대신 이게 필요)
+    # SEC-06 5차 수정 (GWONUK HEAD 4af1393e 재검토 잔여 차단 #1) — NTP 내부 소스(control01)
+    # 수신을 위한 ingress. control02/03·Worker 3대가 control01:123으로 보내는 요청을
+    # control01이 받으려면 egress(아래)뿐 아니라 이 ingress도 명시적으로 필요하다
+    # (이 GNP는 6443/10250처럼 방향별로 별도 규칙을 명시하는 기존 관례를 따름).
+    - action: Allow
+      protocol: UDP
+      source:
+        nets:
+          - "10.1.93.103/32"  # k8s-control02
+          - "10.1.93.104/32"  # k8s-control03
+          - "10.1.93.105/32"  # k8s-worker01
+          - "10.1.93.107/32"  # k8s-worker02
+          - "10.1.93.108/32"  # k8s-worker03
+      destination:
+        ports: [123]
+        nets: ["10.1.93.102/32"]  # k8s-control01 — 내부 유일 NTP 소스
   egress:
     - action: Allow
       protocol: TCP
       destination:
-        ports: [22, 6443, 2379, 2380, 10250]
+        ports: [6443, 2379, 2380, 10250]  # SEC-06 5차 수정: 22(SSH) 제거 — OID-01 egress 잔존 결함
         nets:
           - "10.1.93.102/32"
           - "10.1.93.103/32"
@@ -114,5 +140,26 @@ spec:
       destination:
         ports: [53]
         nets: ["10.1.93.52/32", "10.1.93.53/32"]  # dns01/dns02만 허용 (SEC-06 3차 수정)
-  # NTP(#14 미확정) egress는 이 Bootstrap 규칙에 포함하지 않는다 — 목적지/운영 주체가
-  # 아직 확정되지 않았으므로(baseline "미결 사양") 별도 승인 후 추가한다.
+    # SEC-06 5차 수정 — NTP egress. 토폴로지(control01 단일 내부 소스, Relay안 기각)는
+    # Lead Decision(이슈#10, 2026-09-16)으로 확정됐다. control01의 upstream(ansible01)은
+    # 이 PR 작성자 내부 판단이며 아직 별도 이슈에 공식 게시·Lead Decision 확정되지 않았다
+    # — 독립 리뷰·공식 결정 게시 전까지는 PENDING_REVIEW로 취급한다.
+    - action: Allow
+      protocol: UDP
+      source:
+        nets:
+          - "10.1.93.103/32"  # k8s-control02
+          - "10.1.93.104/32"  # k8s-control03
+          - "10.1.93.105/32"  # k8s-worker01
+          - "10.1.93.107/32"  # k8s-worker02
+          - "10.1.93.108/32"  # k8s-worker03
+      destination:
+        ports: [123]
+        nets: ["10.1.93.102/32"]  # k8s-control01만 — 내부 유일 NTP 소스 (Lead Decision 2026-09-16)
+    - action: Allow
+      protocol: UDP
+      source:
+        nets: ["10.1.93.102/32"]  # k8s-control01만 — 자신의 upstream으로 나가는 egress
+      destination:
+        ports: [123]
+        nets: ["10.250.10.10/32"]  # ansible01 — control01 upstream (PENDING_REVIEW, 위 주석 참조)

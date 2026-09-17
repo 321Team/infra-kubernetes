@@ -1,5 +1,7 @@
 # SEC-06 2차 수정 — CP 단계 2/3. CP01(06-cp01-hep.yaml)의 회귀·quorum 확인 PASS 후 적용.
-# 적용 전: 실제 NIC 이름을 `ip -o link show`로 확인 후 <실제-NIC-이름>을 교체할 것.
+#
+# interfaceName=ens160 (2026-09-17 CP02 실측, 06-cp01-hep.yaml과 동일 근거·동일 조건).
+# AS_BUILT_CANDIDATE — 적용 직전 재확인 필수, 06-cp01-hep.yaml 주석 참조.
 apiVersion: crd.projectcalico.org/v1
 kind: HostEndpoint
 metadata:
@@ -9,6 +11,6 @@ metadata:
     rollout-stage: cp
 spec:
   node: k8s-control02
-  interfaceName: <실제-NIC-이름>
+  interfaceName: ens160
   expectedIPs:
     - "10.1.93.103"
