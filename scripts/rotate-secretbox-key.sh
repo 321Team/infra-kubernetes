@@ -145,14 +145,20 @@ EOF
   confirm "위 형식으로 3개 CP 모두 편집·반영(권한 600, root-only)하셨습니까?"
 
   # SEC-01: 문자열 grep이 아니라 Python YAML 파서로 volume/volumeMount를 구조적으로 대조.
+  # Deep Review 6276ade 지적 #2: 예전 코드는 quoted heredoc(<<'REMOTE') 안에서
+  # 로컬 $APISERVER_MANIFEST를 그대로 참조했다. quoted heredoc은 로컬 변수 확장이
+  # 되지 않으므로 원격 쉘에는 그 변수가 정의돼 있지 않고, set -euo pipefail(-u)
+  # 때문에 python3가 실행되기도 전에 "unbound variable"로 즉시 죽는다.
+  # 수정: APISERVER_MANIFEST를 원격 명령의 환경변수로 명시 전달하고, python도
+  # 하드코딩 경로 대신 그 값(argv)을 실제로 사용하도록 바꾼다.
   for node in "${CP_NODES[@]}"; do
     log "[$node] kube-apiserver static Pod manifest의 volume/mount 구조 검증..."
-    ssh_cp "$node" bash -s <<'REMOTE'
+    ssh_cp "$node" "APISERVER_MANIFEST=${APISERVER_MANIFEST}" bash -s <<'REMOTE'
 set -euo pipefail
 python3 - "$APISERVER_MANIFEST" <<'PYEOF'
-import sys, yaml
+import os, sys, yaml
 
-path = "/etc/kubernetes/manifests/kube-apiserver.yaml"
+path = sys.argv[1]
 with open(path) as f:
     doc = yaml.safe_load(f)
 
@@ -164,10 +170,18 @@ args = containers[0].get("command", []) + containers[0].get("args", [])
 flag = next((a for a in args if a.startswith("--encryption-provider-config=")), None)
 if not flag:
     print("FAIL: --encryption-provider-config 플래그 없음"); sys.exit(1)
-config_path = flag.split("=", 1)[1]
+config_path = os.path.normpath(flag.split("=", 1)[1])
+
+# Deep Review 6276ade 지적 #2: config_path.startswith(mountPath) 문자열 접두어 매칭은
+# "/etc/kubernetes/enc" vs "/etc/kubernetes/encryption-config.yaml"처럼 서로 다른
+# 경로가 우연히 문자열로 겹치면 오탐 PASS가 난다. 정규화 후 정확 일치이거나
+# 디렉토리 경계(구분자 포함)로 시작하는 경우만 매칭으로 인정한다.
+def covers(mount_path):
+    mount_path = os.path.normpath(mount_path)
+    return config_path == mount_path or config_path.startswith(mount_path + os.sep)
 
 mounts = containers[0].get("volumeMounts", [])
-mount = next((m for m in mounts if config_path.startswith(m.get("mountPath", "\x00"))), None)
+mount = next((m for m in mounts if covers(m.get("mountPath", "\x00"))), None)
 if not mount:
     print(f"FAIL: {config_path}를 커버하는 volumeMount 없음"); sys.exit(1)
 

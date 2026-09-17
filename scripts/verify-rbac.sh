@@ -24,8 +24,14 @@ OUT="${1:-rbac-verification-$(date +%Y%m%dT%H%M%SZ).tsv}"
 PASS_COUNT=0
 FAIL_COUNT=0
 ERROR_COUNT=0
+# Deep Review 6276ade 지적 #5: API 호출에 timeout이 없으면 API 서버가 응답을
+# 멈췄을 때 스크립트 전체가 무한정 걸린다.
+CHECK_TIMEOUT_SEC="${CHECK_TIMEOUT_SEC:-10}"
 
-printf 'service_account\tcheck\texpect\tactual\tresult\tstderr_summary\n' > "$OUT"
+die() { echo "ERROR: $*" >&2; exit 3; }
+
+printf 'service_account\tcheck\texpect\tactual\tresult\tstderr_summary\n' > "$OUT" \
+  || die "TSV 결과 파일 초기화 실패: $OUT"
 
 # args: sa(namespace:name) description expect(yes|no) -- kubectl-auth-can-i-args...
 check() {
@@ -34,16 +40,18 @@ check() {
 
   errfile="$(mktemp)"
   # stdout만 캡처(kubectl auth can-i는 정상 시 정확히 "yes" 또는 "no" 한 줄만 출력),
-  # stderr는 별도 파일로 분리해 오류 원인을 남긴다.
-  out="$(kubectl auth can-i "$@" --as="system:serviceaccount:${sa}" 2>"$errfile")"
+  # stderr는 별도 파일로 분리해 오류 원인을 남긴다. timeout으로 API 무응답 시
+  # 무한 대기 대신 rc=124로 즉시 실패시킨다.
+  out="$(timeout "${CHECK_TIMEOUT_SEC}s" kubectl auth can-i "$@" --as="system:serviceaccount:${sa}" 2>"$errfile")"
   rc=$?
   err_summary="$(head -c 200 "$errfile" | tr '\n\t' '  ')"
   rm -f "$errfile"
 
-  # kubectl auth can-i의 exit code는 yes=0, no=1이지만, API 서버 접속 실패·인증
-  # 오류 등도 nonzero를 반환할 수 있어 exit code만으로는 no와 구분되지 않는다.
-  # stdout이 정확히 "yes" 또는 "no"인 경우에만 그 값을 신뢰한다.
-  if [[ "$out" == "yes" || "$out" == "no" ]]; then
+  # Deep Review 6276ade 지적 #5: stdout이 yes/no라는 이유만으로 exit code와
+  # 모순돼도 그대로 신뢰하면 안 된다. kubectl auth can-i는 yes=rc0, no=rc1이
+  # 정상 쌍이므로, stdout·rc 쌍이 이 조합이 아니면 ERROR로 분리한다
+  # (예: stdout="no"인데 rc=0 같은 비정상 조합은 결과를 신뢰할 수 없음).
+  if { [[ "$out" == "yes" && "$rc" -eq 0 ]] || [[ "$out" == "no" && "$rc" -eq 1 ]]; }; then
     actual="$out"
     if [[ "$actual" == "$expect" ]]; then
       result="PASS"
@@ -56,11 +64,18 @@ check() {
     actual="ERROR"
     result="ERROR"
     ERROR_COUNT=$((ERROR_COUNT + 1))
-    [[ -z "$err_summary" ]] && err_summary="(stdout='${out}' rc=${rc}, yes/no 아님)"
+    if [[ "$out" != "yes" && "$out" != "no" ]]; then
+      [[ -z "$err_summary" ]] && err_summary="(stdout='${out}' rc=${rc}, yes/no 아님)"
+    else
+      err_summary="stdout='${out}' rc=${rc} 불일치 (yes=rc0/no=rc1이어야 함)${err_summary:+ / ${err_summary}}"
+    fi
   fi
 
+  # Deep Review 6276ade 지적 #5: TSV 쓰기가 실패해도 무시하고 계속 진행하면
+  # 검증 결과가 조용히 유실될 수 있으므로, 쓰기 실패 시 즉시 중단한다.
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$sa" "$desc" "$expect" "$actual" "$result" "$err_summary" \
-    | tee -a "$OUT" >&2
+    | tee -a "$OUT" >&2 \
+    || die "TSV 파일 쓰기 실패 ($OUT) — 이 시점까지의 결과 기록을 신뢰할 수 없음, 즉시 중단"
 }
 
 echo "== kube-state-metrics-sa ==" >&2

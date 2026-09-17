@@ -141,9 +141,10 @@ spec:
         ports: [53]
         nets: ["10.1.93.52/32", "10.1.93.53/32"]  # dns01/dns02만 허용 (SEC-06 3차 수정)
     # SEC-06 5차 수정 — NTP egress. 토폴로지(control01 단일 내부 소스, Relay안 기각)는
-    # Lead Decision(이슈#10, 2026-09-16)으로 확정됐다. control01의 upstream(ansible01)은
-    # 이 PR 작성자 내부 판단이며 아직 별도 이슈에 공식 게시·Lead Decision 확정되지 않았다
-    # — 독립 리뷰·공식 결정 게시 전까지는 PENDING_REVIEW로 취급한다.
+    # Lead Decision(이슈#10, 2026-09-16)으로 확정됐다.
+    # control01의 upstream(ansible01) 규칙은 별도 이슈 공식 게시·Lead Decision 확정 전까지
+    # 여기 넣지 않는다 (Deep Review 6276ade 지적 #1 — 미승인 값을 Allow로 반영한 실수 수정).
+    # control01 자체의 NTP 동기화는 이 GNP가 아닌 별도 승인 경로로 처리한다.
     - action: Allow
       protocol: UDP
       source:
@@ -156,10 +157,3 @@ spec:
       destination:
         ports: [123]
         nets: ["10.1.93.102/32"]  # k8s-control01만 — 내부 유일 NTP 소스 (Lead Decision 2026-09-16)
-    - action: Allow
-      protocol: UDP
-      source:
-        nets: ["10.1.93.102/32"]  # k8s-control01만 — 자신의 upstream으로 나가는 egress
-      destination:
-        ports: [123]
-        nets: ["10.250.10.10/32"]  # ansible01 — control01 upstream (PENDING_REVIEW, 위 주석 참조)

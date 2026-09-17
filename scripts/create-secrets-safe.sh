@@ -118,15 +118,28 @@ cmd_cicd_token() {
   local outfile
   outfile="$(mktemp)"
   chmod 600 "$outfile"
+  # Deep Review 6276ade 지적 #6: 예전 코드는 "성공 후 인계"를 위해 이 파일을 처음부터
+  # TMP_FILES에서 뺐는데, 그러면 kubectl 자체가 실패/중단돼도 trap이 정리하지 않아
+  # 빈 파일이나 부분 노출된 데이터가 남는다. 일단 TMP_FILES에 등록해 실패 시
+  # 자동 폐기되게 하고, 성공을 확인한 뒤에만 아래에서 제외해 인계용으로 남긴다.
+  TMP_FILES+=("$outfile")
 
   kubectl create token cicd-runner-sa -n ci-cd \
-    --duration="$duration" --audience="$audience" > "$outfile"
+    --duration="$duration" --audience="$audience" > "$outfile" \
+    || die "TokenRequest 실패 — 임시 파일은 trap으로 자동 폐기됩니다."
+
+  [[ -s "$outfile" ]] || die "TokenRequest 결과 파일이 비어 있음 — 임시 파일은 trap으로 자동 폐기됩니다."
+
+  local -a kept=()
+  local f
+  for f in "${TMP_FILES[@]}"; do
+    [[ "$f" == "$outfile" ]] || kept+=("$f")
+  done
+  TMP_FILES=("${kept[@]:-}")
 
   log "TokenRequest 완료. 토큰은 화면에 출력하지 않았습니다."
   log "저장 위치: $outfile (권한 600) — P1-CICD-01 소관 주입 절차로 즉시 이관 후 이 파일을 폐기하십시오."
   log "이 스크립트 종료 시 trap이 자동 폐기하지 않도록, 주입 완료 전까지는 별도 터미널에서 수동 관리하십시오."
-  # 주의: 이 파일은 위 TMP_FILES 배열에 넣지 않는다 — 스크립트 종료와 함께 지워지면
-  # 인계 자체가 불가능해지므로, 인계 완료 여부는 운영자가 직접 확인 후 폐기한다.
 }
 
 case "${1:-}" in
