@@ -64,7 +64,8 @@ python3 -m unittest discover -s tests -v
 ## 현재 검증 범위
 
 - 관련 130/130 STATIC/MOCK PASS: 기존 94 + 새 36. 불완전/응답 유실 변경 지점 12개, 복원·drift·window·receipt·실제 어댑터 함수 흐름을 대역으로 실행.
-- firewalld v2.4.3 hash-pinned 함수 실행 + 로컬 패킷 모델 21조건 PASS. 실제 XML parser/D-Bus daemon/nft kernel/서비스 timer는 미실행이다.
+- firewalld v2.4.3 hash-pinned 함수 실행 + 로컬 패킷 모델 21조건 PASS.
+- 보충 검사: 실제 XML parser/config 검사/저장 후 재읽기와 선택된 Settings·CLI formatter 대조 **18/18 PASS**. [범위·재현·제한](../change/ICR-D-NET-01-01/CP1_MINIMAL_XML_REVIEW_20260917.md). D-Bus daemon/nft kernel/서비스 timer는 미실행이다.
 - 과거 실제 p3dmjivl 자료 재생: **3/5, INCOMPLETE_REVIEW_REQUIRED**, consistency issue 0. 새로운 실측 결과가 아니다.
 - 실제 CP1 적용·5/5·HOST/외부 회귀·새 인수·CP2/CP3 적용·Join·CI PASS·병합은 미수행이다.
 
