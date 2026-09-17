@@ -271,6 +271,7 @@ spec:
         app: alertmanager
     spec:
       serviceAccountName: alertmanager-sa
+      automountServiceAccountToken: false  # D-SEC-01 §4: K8s API 호출 없음
       securityContext:
         runAsNonRoot: true
         runAsUser: <확인된-UID>
@@ -327,6 +328,7 @@ spec:
         app: grafana
     spec:
       serviceAccountName: grafana-sa
+      automountServiceAccountToken: false  # D-SEC-01 §4: K8s API 호출 없음, Prometheus Service만 조회
       securityContext:
         runAsNonRoot: true
         runAsUser: <확인된-UID>
@@ -441,6 +443,7 @@ spec:
         app: node-exporter
     spec:
       serviceAccountName: node-exporter-sa
+      automountServiceAccountToken: false  # D-SEC-01 §4: K8s API 호출 없음, hostPath로 OS 정보 직접 읽음
       hostNetwork: true
       hostPID: true
       containers:

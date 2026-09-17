@@ -1,0 +1,160 @@
+# P1-SEC-01 / D-SEC-01 §4(RBAC/ServiceAccount) 반영.
+#
+# 02-securitycontext.yaml의 7개 Deployment/DaemonSet이 이미 아래 ServiceAccount
+# 이름을 serviceAccountName으로 참조하고 있었지만(transaction-api-sa, fds-engine-sa,
+# prometheus-sa, alertmanager-sa, grafana-sa, kube-state-metrics-sa, node-exporter-sa),
+# 정작 ServiceAccount/Role/ClusterRole 오브젝트 자체가 이 저장소 어디에도 없었다.
+# scripts/verify-rbac.sh가 검증하는 대상이 실존하도록 이 파일에서 생성한다.
+#
+# D-SEC-01 원칙: "Prometheus와 kube-state-metrics는 ClusterRole을 공유하지 않는다."
+# 두 ClusterRole 모두 secrets에 대한 get/list/watch를 포함하지 않으며(§4 명시적 금지
+# 사항), nodes/proxy도 부여하지 않는다(kubelet 프록시를 통한 컨테이너 우회 명령 차단).
+---
+# ── K8s API를 호출하지 않는 ServiceAccount (RBAC 불필요, Pod identity 목적만) ──
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: transaction-api-sa
+  namespace: fds-app
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fds-engine-sa
+  namespace: fds-app
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: node-exporter-sa
+  namespace: monitoring-node
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alertmanager-sa
+  namespace: monitoring-api
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-sa
+  namespace: monitoring-api
+automountServiceAccountToken: false
+---
+# ── kube-state-metrics-sa: 클러스터 Object Discovery 전용 ClusterRole ──────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics-sa
+  namespace: monitoring-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-state-metrics-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "namespaces", "services", "endpoints",
+                "configmaps", "persistentvolumeclaims", "persistentvolumes",
+                "replicationcontrollers", "resourcequotas"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  # secrets, nodes/proxy — 명시적 금지 (D-SEC-01 §4). 부여하지 않음.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-state-metrics-binding
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics-sa
+    namespace: monitoring-api
+roleRef:
+  kind: ClusterRole
+  name: kube-state-metrics-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ── prometheus-sa: Service Discovery + kubelet/API metrics 전용 ClusterRole ──
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus-sa
+  namespace: monitoring-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-role
+rules:
+  # 1. Service Discovery (파드/노드/서비스 탐색용)
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+  # 2. kubelet 지표 수집 (nodes/metrics만 — nodes/proxy는 부여하지 않음)
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get"]
+  # 3. API Server 자체 지표 수집 (non-resource URL)
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+  # secrets, nodes/proxy, create/update/patch/delete — 명시적 금지 (D-SEC-01 §4). 부여하지 않음.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-binding
+subjects:
+  - kind: ServiceAccount
+    name: prometheus-sa
+    namespace: monitoring-api
+roleRef:
+  kind: ClusterRole
+  name: prometheus-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ── cicd-runner-sa: fds-app Namespace 내 지정 Deployment 2개만 갱신 가능 ──────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cicd-runner-sa
+  namespace: ci-cd
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cicd-deploy-updater
+  namespace: fds-app
+rules:
+  # resourceNames는 이미 존재하는 리소스에만 적용된다 — create는 이름으로 제한할 수
+  # 없다는 Kubernetes 제약 때문에 이 Role에 create를 포함하지 않는다. transaction-api/
+  # fds-engine Deployment는 최초 배포 시 별도로 1회 생성해둔다 (D-SEC-01 §5 축소안).
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["transaction-api", "fds-engine"]
+    verbs: ["get", "update", "patch"]
+  # secrets, create, delete — 명시적 금지 (D-SEC-01 §5). 부여하지 않음.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cicd-deploy-updater-binding
+  namespace: fds-app
+subjects:
+  - kind: ServiceAccount
+    name: cicd-runner-sa
+    namespace: ci-cd
+roleRef:
+  kind: Role
+  name: cicd-deploy-updater
+  apiGroup: rbac.authorization.k8s.io
