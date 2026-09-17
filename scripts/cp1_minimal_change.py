@@ -19,6 +19,8 @@ HOST, BLOCK = 'k8s-control01', '10.244.246.64/26'
 ZONE, LOCAL, EGRESS = 'fds-cp1-min', 'fds-cp1-local', 'fds-cp1-egress'
 SETS = ('fds-cp1-out4', 'fds-cp1-out6')
 NAMES = {'ipsets': SETS, 'zones': (ZONE,), 'policies': (LOCAL, EGRESS)}
+PRESERVED_DISABLED_POLICIES = frozenset(('gateway-dmz-to-HOST', 'gateway-lan-to-HOST',
+    'gateway-lan-to-work', 'gateway-lan-to-world', 'gateway-world-to-HOST'))
 ORDER = [('ipsets', s) for s in SETS] + [('zones', ZONE), ('policies', LOCAL), ('policies', EGRESS)]
 PINS = {'node-firewall.py': '93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa',
         'run-node-firewall.py': 'cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3'}
@@ -182,11 +184,29 @@ def validate_baseline(base, original):
         need(base['objects'][plane]['zones']['public'] == fw['planes'][plane], 'public inventory mismatch')
         for kind, names in NAMES.items():
             need(not set(names) & set(base['objects'][plane][kind]), 'owned name already exists')
-        need(set(base['objects'][plane]['policies']) == {'allow-host-ipv6'}, 'additional policies need explicit preservation analysis')
+        policies = base['objects'][plane]['policies']
+        raw = fw['active_policies']['configurations'][plane]
+        need(policies == {name: parse_info(value, name) for name, value in raw.items()},
+             'policy inventory/receipt mismatch: ' + plane)
+        additional = set(policies) - {'allow-host-ipv6'}
+        need('allow-host-ipv6' in policies and additional <= PRESERVED_DISABLED_POLICIES,
+             'unsupported policy inventory: ' + plane + '/' + ','.join(sorted(additional)))
+        need(policies['allow-host-ipv6']['fields'].get('disable') == 'no', 'HOST IPv6 policy disabled')
+        # These five definitions already exist in the original CP1 receipt.
+        # v2.4.3 excludes disabled policies from activation, even after reload or
+        # a new zone binding. Preserve every field and raw output in whole-state
+        # comparisons; this exception never enables, deletes or edits a policy.
+        for name in sorted(additional):
+            header = name + (' (disabled)' if plane == 'runtime' else '')
+            need(policies[name]['fields'].get('disable') == 'yes' and raw[name].splitlines()[0] == header,
+                 'preserved policy is not disabled: ' + plane + '/' + name)
         for name, zone in base['objects'][plane]['zones'].items():
             need(not zone['fields'].get('sources'), 'source-bound zone needs separate review')
             if name != 'public':
                 need(not zone['fields'].get('interfaces'), 'other bound zone needs separate review')
+    need(active_names(fw['active_policies']['active_output']) == {
+        'allow-host-ipv6': 'allow-host-ipv6\n  ingress-zones: ANY\n  egress-zones: HOST'},
+        'additional active policy needs preservation analysis')
     need(not fw['direct_runtime'] and not fw['direct_permanent'], 'direct rules need separate review')
     return receipt
 

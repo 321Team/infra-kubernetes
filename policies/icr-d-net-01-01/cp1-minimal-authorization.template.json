@@ -11,7 +11,7 @@
   "review_decision": null,
   "review_url": null,
   "reviewed_at": null,
-  "reviewed_bundle_sha256": "e2b98fdc22cd15d8577b0df8b45f9d841e1beb1b41e953cbe2e7dfd42979ac33",
+  "reviewed_bundle_sha256": "c79a4d27260bc894c528e8c6286b04b6cd2580ef72e3c7199fe4d6a7f3047fe8",
   "schema": "fds.cp1-minimal-authorization.v1",
   "scope": {
     "hostname": "k8s-control01",

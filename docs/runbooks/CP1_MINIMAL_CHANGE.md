@@ -13,6 +13,10 @@
 - `fds-cp1-egress`: 기존 public의 cali 유입 → **oif ens160** 전달 허용을 보존한다. `hash:net,iface` 목적지 집합을 IPv4/IPv6 각각 두 `/1`로 구성하여 실제 `daddr . oifname` 조건을 사용한다. ANY egress 정책이라는 이유로 다른 oif를 모두 ACCEPT하지 않는다. HOST INPUT/OUTPUT에는 이 정책을 적용하지 않는다.
 - 기존 Calico가 앞선 hook에서 DROP하는 패킷을 이 규칙으로 허용한다고 주장하지 않는다. full nft ruleset 전체 동치나 실제 HOST/외부 통신 보존은 아직 실측하지 않았다.
 
+## 원본의 비활성 정책
+
+원 receipt에 있는 gateway 정책 다섯 개는 양쪽 plane의 disable=yes와 활성 목록 부재를 확인하여 그대로 보존한다. 다른 정책·활성화·원본 변경은 중단한다. 실패한 inspect는 별도 진단 schema로 완료된 snapshot을 남기며, apply 입력으로 쓸 수 없다. [현장 중단 원인·수정·회귀검증](../change/ICR-D-NET-01-01/CP1_DISABLED_POLICY_REVIEW_20260917.md).
+
 ## 수명과 복원
 
 작업창은 KST 평일, 최대 2시간이다. 종료 180초 전에 한 개의 transient systemd timer/service가 같은 root 보관 소스의 `recover --job`을 실행한다. 상시 watcher/부팅 service와 #13 서비스 확장은 추가하지 않는다.
@@ -63,7 +67,7 @@ python3 -m unittest discover -s tests -v
 
 ## 현재 검증 범위
 
-- 관련 130/130 STATIC/MOCK PASS: 기존 94 + 새 36. 불완전/응답 유실 변경 지점 12개, 복원·drift·window·receipt·실제 어댑터 함수 흐름을 대역으로 실행.
+- 관련 145/145 STATIC/MOCK PASS: 기존 130 + 비활성 정책/실패 진단 15. 실제 과거 정책 6개와 zone 10개 투영을 포함한다. 불완전/응답 유실 변경 지점 12개, 복원·drift·window·receipt·실제 어댑터 함수 흐름을 대역으로 실행.
 - firewalld v2.4.3 hash-pinned 함수 실행 + 로컬 패킷 모델 21조건 PASS.
 - 보충 검사: 실제 XML parser/config 검사/저장 후 재읽기와 선택된 Settings·CLI formatter 대조 **18/18 PASS**. [범위·재현·제한](../change/ICR-D-NET-01-01/CP1_MINIMAL_XML_REVIEW_20260917.md). D-Bus daemon/nft kernel/서비스 timer는 미실행이다.
 - 과거 실제 p3dmjivl 자료 재생: **3/5, INCOMPLETE_REVIEW_REQUIRED**, consistency issue 0. 새로운 실측 결과가 아니다.

@@ -199,6 +199,23 @@ def live_status(io, record):
             'current': view, 'recovery_armed': armed, 'observed_at': io.now().isoformat()}
 
 
+def inspect_document(io, original, bundle):
+    base = io.snapshot()
+    document = {'schema': 'fds.cp1-minimal-inspection.v1', 'created_at': m.now().isoformat(),
+                'source_bundle_sha256': bundle, 'before': base, 'before_sha256': m.fingerprint(base),
+                'original_receipt_sha256': m.fingerprint(original), 'operational_approval': False}
+    try:
+        m.validate_baseline(base, original)
+    except Exception as error:
+        # Keep the completed read-only snapshot, but give rejected evidence a
+        # distinct schema that apply cannot consume as a successful inspection.
+        document.update(schema='fds.cp1-minimal-inspect-diagnostic.v1', status='STOP_REVIEW_REQUIRED',
+                        error=str(error), mutation_attempted=False)
+        print(m.encoded(document).decode())
+        raise
+    print(m.encoded(document).decode())
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode', nargs='?', default='plan', choices=('plan', 'inspect', 'apply', 'status', 'recover', 'issue-receipt'))
@@ -224,10 +241,7 @@ def main():
         if args.mode in ('inspect', 'apply'):
             original = load_checked(args.original, args.original_sha256)
             if args.mode == 'inspect':
-                io = IO('inspect'); base = io.snapshot(); m.validate_baseline(base, original)
-                print(m.encoded({'schema': 'fds.cp1-minimal-inspection.v1', 'created_at': m.now().isoformat(),
-                      'source_bundle_sha256': bundle, 'before': base, 'before_sha256': m.fingerprint(base),
-                      'original_receipt_sha256': m.fingerprint(original), 'operational_approval': False}).decode()); return
+                inspect_document(IO('inspect'), original, bundle); return
             inspection = load_checked(args.inspection, args.inspection_sha256)
             auth = load_checked(args.authorization, args.authorization_sha256)
             m.need(inspection['schema'] == 'fds.cp1-minimal-inspection.v1' and inspection['source_bundle_sha256'] == bundle and

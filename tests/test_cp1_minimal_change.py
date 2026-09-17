@@ -1,5 +1,7 @@
 """Failure-oriented transaction/receipt tests; no host mutation and no fake PASS claims."""
 import copy
+import contextlib
+import io as streams
 import datetime as dt
 import json
 from pathlib import Path
@@ -22,24 +24,26 @@ def text(name, obj):
         ('\n  rich rules:' + ('\n' + '\n'.join('    ' + rule for rule in obj['rules']) if obj['rules'] else '') if 'type' not in obj['fields'] else '')
 
 
-def baseline():
+def baseline(policy_state=None):
+    observed = json.loads((Path(__file__).parent / 'fixtures/CP1_FCJv61h8_FIREWALL.json').read_text())['firewall']
     original_init = FakeBackend.__init__
     def complete(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
-        for plane in self.state['planes'].values():
-            plane['fields'] = {'target': 'default', 'ingress-priority': '0', 'egress-priority': '0',
-                 'icmp-block-inversion': 'no', 'interfaces': 'ens160', 'sources': '', 'services': 'dhcpv6-client ssh',
-                 'ports': '', 'protocols': '', 'forward': 'yes', 'masquerade': 'no', 'forward-ports': '',
-                 'source-ports': '', 'icmp-blocks': ''}
-        self.state.update(ip='10.1.93.102', direct_runtime='', direct_permanent='', active_policies={
-            'active_output': 'allow-host-ipv6\n  ingress-zones: ANY\n  egress-zones: HOST',
-            'configurations': {p: {'allow-host-ipv6': 'allow-host-ipv6\n  target: CONTINUE\n  rich rules:'}
-                               for p in ('runtime', 'permanent')}})
+        for plane in ('runtime','permanent'):
+            self.state['planes'][plane]['fields']=copy.deepcopy(observed['planes'][plane]['fields'])
+        self.state.update(ip='10.1.93.102', direct_runtime='', direct_permanent='',
+                          active_policies=copy.deepcopy(observed['active_policies'] if policy_state is None else policy_state))
     with patch.object(FakeBackend, '__init__', complete): original = cp1_producer_receipt()
     fw = copy.deepcopy(m.legacy().validate_cp1_receipt(original)['after'])
     objects = {p: {'zones': {'public': copy.deepcopy(fw['planes'][p])},
-                     'policies': {'allow-host-ipv6': {'fields': {'target': 'CONTINUE'}, 'rules': []}}, 'ipsets': {}}
+                     'policies': {name:m.parse_info(raw,name) for name,raw in fw['active_policies']['configurations'][p].items()}, 'ipsets': {}}
                for p in ('runtime', 'permanent')}
+    zones=json.loads((Path(__file__).parent/'fixtures/CP1_QP5Lan_ZONES.json').read_text())['list_all_zones']
+    import re
+    for plane,raw in zones.items():
+        for block in re.split(r'\n\s*\n',raw.strip()):
+            name=block.split()[0]
+            if name!='public':objects[plane]['zones'][name]=m.parse_info(block,name)
     base = dict(firewall=fw, objects=objects, services={p: {'ssh': 'MOCK-shared-service'} for p in objects},
                 protection={'calico': 'MOCK-unchanged'}, boot_id='a'*8+'-'+ 'b'*4+'-'+ 'c'*4+'-'+ 'd'*4+'-'+ 'e'*12,
                 version='2.4.3', backend='nftables', ipam={'cidr':m.BLOCK,'affinity':'host:'+m.HOST,'state':'confirmed'})
@@ -65,7 +69,10 @@ class FakeIO:
     def snapshot(self):
         fw=self.view['firewall']
         fw['planes']={p:copy.deepcopy(self.view['objects'][p]['zones']['public']) for p in ('runtime','permanent')}
-        fw['active_policies']['configurations']={p:{name:text(name,obj) for name,obj in self.view['objects'][p]['policies'].items()}
+        def policy_text(plane,name,obj):
+            raw=self.base['firewall']['active_policies']['configurations'][plane].get(name)
+            return raw if raw is not None and m.parse_info(raw,name)==obj else text(name,obj)
+        fw['active_policies']['configurations']={p:{name:policy_text(p,name,obj) for name,obj in self.view['objects'][p]['policies'].items()}
                                                for p in ('runtime','permanent')}
         fw['active_policies']['active_output']=self.base['firewall']['active_policies']['active_output']
         zone=self.view['objects']['runtime']['zones'].get(m.ZONE,{})
@@ -175,6 +182,110 @@ class Transactions(unittest.TestCase):
         local=ET.fromstring(docs['policies/'+m.LOCAL+'.xml']);r=local.find('rule')
         self.assertEqual(r.find('source').attrib['address'],m.BLOCK);self.assertEqual(r.find('destination').attrib['address'],m.BLOCK)
         self.assertIsNone(r.find('port'))
+
+
+class PreservedPolicies(unittest.TestCase):
+    def setUp(self):
+        self.base,self.original=baseline()
+        self.policy_state=copy.deepcopy(self.base['firewall']['active_policies'])
+    def assert_rejected_before_arm(self,state):
+        base,original=baseline(state);io=FakeIO(base)
+        with self.assertRaises(ValueError):m.apply(io,MemoryJournal(),original,authorization(base),BUNDLE)
+        self.assertEqual(io.actions,[])
+    def test_observed_firewall_projection_is_used_by_full_transaction_tests(self):
+        observed=json.loads((Path(__file__).parent/'fixtures/CP1_FCJv61h8_FIREWALL.json').read_text())
+        self.assertEqual({k:self.base['firewall'][k] for k in observed['firewall']},observed['firewall'])
+        self.assertEqual(set(self.base['objects']['runtime']['policies']),m.PRESERVED_DISABLED_POLICIES|{'allow-host-ipv6'})
+        m.validate_baseline(self.base,self.original)
+    def test_each_gateway_enabled_in_both_planes_is_rejected_before_arm(self):
+        for name in m.PRESERVED_DISABLED_POLICIES:
+            state=copy.deepcopy(self.policy_state)
+            for plane in ('runtime','permanent'):
+                state['configurations'][plane][name]=state['configurations'][plane][name].replace('disable: yes','disable: no').replace(' (disabled)','')
+            with self.subTest(name=name):self.assert_rejected_before_arm(state)
+    def test_missing_disable_flag_in_both_planes_is_rejected(self):
+        state=copy.deepcopy(self.policy_state)
+        for plane in ('runtime','permanent'):
+            name='gateway-lan-to-world';state['configurations'][plane][name]=state['configurations'][plane][name].replace('  disable: yes\n','')
+        self.assert_rejected_before_arm(state)
+    def test_unknown_disabled_policy_cannot_be_added_to_receipt_to_bypass_review(self):
+        state=copy.deepcopy(self.policy_state)
+        for plane in ('runtime','permanent'):
+            state['configurations'][plane]['gateway-extra']=state['configurations'][plane]['gateway-lan-to-world'].replace('gateway-lan-to-world','gateway-extra')
+        self.assert_rejected_before_arm(state)
+    def test_known_disabled_policy_marked_active_is_rejected(self):
+        state=copy.deepcopy(self.policy_state)
+        state['active_output']+='\ngateway-lan-to-world\n  ingress-zones: internal home trusted\n  egress-zones: external public'
+        self.assert_rejected_before_arm(state)
+    def test_runtime_disabled_header_must_agree_with_flag(self):
+        state=copy.deepcopy(self.policy_state);name='gateway-lan-to-world'
+        state['configurations']['runtime'][name]=state['configurations']['runtime'][name].replace(' (disabled)',' (active)')
+        self.assert_rejected_before_arm(state)
+    def test_policy_inventory_must_match_raw_receipt(self):
+        base=copy.deepcopy(self.base)
+        # Both semantic planes remain equal, but the raw evidence differs.
+        for p in ('runtime','permanent'):base['objects'][p]['policies']['gateway-lan-to-world']['fields']['target']='DROP'
+        with self.assertRaisesRegex(ValueError,'policy inventory/receipt mismatch'):
+            m.validate_baseline(base,self.original)
+    def test_runtime_permanent_disabled_definition_delta_is_rejected(self):
+        state=copy.deepcopy(self.policy_state);name='gateway-lan-to-world'
+        state['configurations']['runtime'][name]=state['configurations']['runtime'][name].replace('priority: 1000','priority: 999')
+        self.assert_rejected_before_arm(state)
+    def test_original_receipt_equality_remains_required(self):
+        base=copy.deepcopy(self.base)
+        for plane in ('runtime','permanent'):
+            base['firewall']['active_policies']['configurations'][plane]['gateway-lan-to-world']+=' '
+        with self.assertRaisesRegex(ValueError,'CP1 differs from original receipt'):m.validate_baseline(base,self.original)
+    def test_full_comparison_keeps_each_disabled_policy_in_each_plane(self):
+        io=FakeIO(self.base);record=m.apply(io,MemoryJournal(),self.original,authorization(self.base),BUNDLE)
+        for name in m.PRESERVED_DISABLED_POLICIES:
+            for plane in ('runtime','permanent'):
+                bad=copy.deepcopy(record['after']);bad['objects'][plane]['policies'][name]['fields']['disable']='no'
+                with self.subTest(name=name,plane=plane),self.assertRaises(ValueError):m.validate_view(bad,self.base)
+    def test_changed_disabled_policy_blocks_blind_reload_during_recovery(self):
+        io=FakeIO(self.base);journal=MemoryJournal();record=m.apply(io,journal,self.original,authorization(self.base),BUNDLE)
+        io.view['objects']['runtime']['policies']['gateway-lan-to-world']['fields']['target']='DROP';offset=len(io.actions)
+        with self.assertRaises(ValueError):m.recover(io,journal,record)
+        self.assertEqual(io.actions[offset:],['bind:False']);self.assertTrue(io.armed)
+        self.assertEqual(io.view['objects']['runtime']['policies']['gateway-lan-to-world']['fields']['target'],'DROP')
+
+
+class InspectionDiagnostics(unittest.TestCase):
+    def setUp(self):self.base,self.original=baseline()
+    def inspect(self,base):
+        io=FakeIO(base);output=streams.StringIO()
+        with contextlib.redirect_stdout(output):
+            try:e.inspect_document(io,self.original,BUNDLE)
+            except ValueError:pass
+        self.assertEqual(io.actions,[])
+        return json.loads(output.getvalue())
+    def test_successful_read_only_inspection_preserves_contract(self):
+        doc=self.inspect(self.base)
+        self.assertEqual(doc['schema'],'fds.cp1-minimal-inspection.v1')
+        self.assertEqual(doc['before_sha256'],m.fingerprint(doc['before']))
+        self.assertFalse(doc['operational_approval'])
+    def test_rejected_inspection_keeps_full_snapshot_and_error_separate_from_success(self):
+        base=copy.deepcopy(self.base);base['version']='unsupported'
+        doc=self.inspect(base)
+        self.assertEqual(doc['schema'],'fds.cp1-minimal-inspect-diagnostic.v1')
+        self.assertEqual(doc['status'],'STOP_REVIEW_REQUIRED');self.assertEqual(doc['before'],base)
+        self.assertIn('unsupported',doc['error']);self.assertFalse(doc['mutation_attempted'])
+        self.assertFalse(doc['operational_approval'])
+    def test_incomplete_snapshot_raises_without_claiming_full_inspection(self):
+        io=FakeIO(self.base);output=streams.StringIO()
+        with patch.object(io,'snapshot',side_effect=ValueError('query failed')),contextlib.redirect_stdout(output),self.assertRaisesRegex(ValueError,'query failed'):
+            e.inspect_document(io,self.original,BUNDLE)
+        self.assertEqual(output.getvalue(),'');self.assertEqual(io.actions,[])
+    def test_rejected_diagnostic_cannot_be_consumed_by_apply(self):
+        base=copy.deepcopy(self.base);base['version']='unsupported';doc=self.inspect(base)
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp)
+            with patch.object(e,'BASE',directory),patch.object(e,'private',return_value=directory),patch.object(e.os,'geteuid',return_value=0), \
+                 patch.object(e,'load_checked',side_effect=[self.original,doc,authorization(base)]), \
+                 patch.object(e,'IO') as io,patch('sys.argv',['run-cp1-minimal-change.py','apply']), \
+                 self.assertRaisesRegex(ValueError,'inspection binding differs'):
+                e.main()
+            io.assert_not_called()
 
 
 class Receipts(unittest.TestCase):
