@@ -82,13 +82,18 @@ class UnitCleanup:
     actual loaded properties and cgroups must still be read each time.
     It must not trust a submitted boolean or an old recovery receipt.
     """
-    def __init__(self,lease,manifest,reviewed_sha256,publication,journal,fresh_quiescent_proof):
+    def __init__(self,lease,manifest,reviewed_sha256,publication,journal,fresh_quiescent_proof,*,launch_state=None):
         self.lease,self.manifest=copy.deepcopy(lease),copy.deepcopy(manifest)
         self.sha,self.journal,self.proof=reviewed_sha256,journal,fresh_quiescent_proof
         self.expected=binding(lease,guard.UNITS,manifest,reviewed_sha256)
         validate_publication(publication,self.expected,sorted(guard.documents(lease)))
         need(publication['phase']=='DEFINITIONS_LOADED','owned publication not complete')
         self.items=artifacts(lease);self.order=[v[0] for v in self.items]
+        self.candidates={p:[v] for p,k,v in self.items}
+        if launch_state is not None:
+            from cp1_cni_service_control import link_expectations
+            self.candidates.update(link_expectations(launch_state,self.expected,lease))
+            self.expected={**self.expected,'launch_sha256':fingerprint(launch_state)}
 
     def sources(self):verify_sources(guard.ROOT,self.lease['run_id'],self.manifest,self.sha)
 
@@ -97,10 +102,11 @@ class UnitCleanup:
         try:
             try:state=self.journal.load()
             except FileNotFoundError:
-                # Enablement links may be absent only if they were never
-                # installed. This cleanup path is for a fully armed run.
-                # Partial installation uses its installation intent journal.
-                need(all(inspect(directory,p,k)==v for p,k,v in self.items),'unproven initial owned unit artifacts')
+                # A full installation requires every artifact. A partial
+                # enablement prefix permits absence only where its immutable
+                # launch journal proves never-created or uncertain creation.
+                need(all(inspect(directory,p,k) in self.candidates[p] for p,k,v in self.items),
+                     'unproven initial owned unit artifacts')
                 state=initial(self.expected);self.proof(copy.deepcopy(state));self.journal.save(state)
             validate(state,self.expected,self.order)
             for index,(path,kind,expected) in enumerate(self.items):
@@ -109,14 +115,14 @@ class UnitCleanup:
                     need(actual is None,'removed unit artifact reappeared');continue
                 need(state['phase']=='REMOVING','cleanup phase/prefix differs')
                 if state['pending'] is None:
-                    need(actual==expected,'owned unit artifact missing/foreign before intent')
+                    need(actual in self.candidates[path],'owned unit artifact missing/foreign before intent')
                     state['pending']=path;self.journal.save(state)
-                else:need(state['pending']==path and actual in (None,expected),'pending removal has foreign state')
+                else:need(state['pending']==path and actual in [None,*self.candidates[path]],'pending removal has foreign state')
                 self.sources();self.proof(copy.deepcopy(state))
                 # Re-read after external proof before unlink. No recursive rm,
                 # symlink following or unrelated-file adoption is allowed.
                 actual=inspect(directory,path,kind)
-                need(actual in (None,expected),'artifact changed while checking live state')
+                need(actual in [None,*self.candidates[path]],'artifact changed while checking live state')
                 if actual is not None:remove(directory,path)
                 else:
                     fd,_=parent(directory,path)

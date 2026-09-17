@@ -33,7 +33,7 @@ SOURCE_NAMES = tuple(sorted({*PINS,
     'cp1_cni_membership.py','cp1_cni_membership_io.py','cp1_cni_observer.py','cp1_cni_recovery.py',
     'cp1_cni_staging.py','cp1_cni_transition.py','cp1_cni_transition_io.py',
     'cp1_cni_transition_observer.py','cp1_cni_unit_cleanup.py','cp1_cni_unit_files.py',
-    'cp1_cni_withdrawal.py'}))
+    'cp1_cni_withdrawal.py','cp1_cni_service_control.py','cp1_cni_cgroup.py','cp1_cni_systemd.py'}))
 WINDOW = ('run_id','boot_id','wall_start','wall_end','boot_start','boot_end')
 FALSE_FLAGS = ('authorizes_apply','authorizes_cp1_acceptance','authorizes_cp2_change','authorizes_join')
 

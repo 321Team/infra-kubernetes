@@ -62,13 +62,14 @@ def parse_properties(raw):
     return values
 
 
-def query_units(lease, command, read_private_file, read_link, *, include_links=True):
+def query_units(lease, command, read_private_file, read_link, *, include_links=True, deadline=None):
     """Read unit state through trusted, bounded adapters. No unit mutation."""
     docs, unit = documents(lease), names(lease['run_id'])
     observed = {'properties': {}, 'files': {}, 'links': {}}
-    deadline = time.monotonic() + 10
+    end = min(time.monotonic()+10,number(deadline)) if deadline is not None else time.monotonic()+10
+    need(end>time.monotonic(),'unit query deadline exhausted')
     def run(argv):
-        left = deadline - time.monotonic()
+        left = end - time.monotonic()
         need(left > 0, 'unit query budget exhausted')
         value = command(argv, timeout=min(3, left))
         need(type(value['rc']) is int and value['rc'] == 0 and not value.get('stderr', '').strip() and
@@ -110,6 +111,7 @@ def query_units(lease, command, read_private_file, read_link, *, include_links=T
         for directory, name in (('timers.target.wants', unit['timer']), ('multi-user.target.wants', unit['recover'])):
             key = str(UNITS / directory / name)
             observed['links'][key] = read_link(Path(key))
+    need(time.monotonic()<end,'unit query deadline exhausted')
     return observed
 
 
