@@ -1,0 +1,31 @@
+{
+  "archive_sha256": "81a4210a2aaddf69d508fd9d166589630b17d87f6209658dc919a1bb1b18cb39",
+  "authorizes_cp2_change": false,
+  "authorizes_join": false,
+  "cp1_accepted": false,
+  "cp1_receipt_input_sha256": null,
+  "expected_flows": 5,
+  "firewall_after_sha256": "b9bd547181dbb905af64b25341bf0d8d6570093ca6801ec9037443bdf9119c6a",
+  "firewall_changed_paths": [],
+  "flows": {
+    "a_dns": "PASS",
+    "a_to_b_pod": "FAIL",
+    "a_to_service": "PASS",
+    "b_dns": "PASS",
+    "b_to_a_pod": "FAIL"
+  },
+  "health_after_sha256": "999895f1a76a2815ba3b31fd320c058a4df6a50834e60000e294f6060acee3f1",
+  "health_changed_paths": [],
+  "input_hashes": {
+    "REQUEST.json": "4d45b1217747444c4dca712a5d3faf073e463e9d38ef4acb0fc63cf5f2e8fde4",
+    "RESULT.json": "aef7844c2ea2a1b0dd86f9640c740ebebb893fb691cad06a702ed12a6bfd7567"
+  },
+  "issue_details": {},
+  "issues": [],
+  "legacy_receipt_after_matches": null,
+  "mode": "OFFLINE_EVIDENCE_REVIEW",
+  "passed_flows": 3,
+  "production_consumer_connected": false,
+  "schema": "fds.cp1-cni-trial-analysis.v1",
+  "status": "INCOMPLETE_REVIEW_REQUIRED"
+}

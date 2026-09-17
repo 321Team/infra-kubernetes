@@ -1,0 +1,25 @@
+{
+  "checks": {
+    "negative": {
+      "evidence_sha256": null,
+      "status": "NOT_VERIFIED"
+    },
+    "positive": {
+      "evidence_sha256": null,
+      "status": "NOT_VERIFIED"
+    },
+    "regression": {
+      "evidence_sha256": null,
+      "status": "NOT_VERIFIED"
+    }
+  },
+  "decision": null,
+  "expires_at": null,
+  "handoff_sha256": null,
+  "independent_reviewer": null,
+  "review_decision": null,
+  "review_url": null,
+  "reviewed_at": null,
+  "schema": "fds.cp1-minimal-acceptance.v1",
+  "source_bundle_sha256": "e2b98fdc22cd15d8577b0df8b45f9d841e1beb1b41e953cbe2e7dfd42979ac33"
+}
