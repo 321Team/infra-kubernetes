@@ -997,7 +997,8 @@ spec:
   - action: Allow
     protocol: TCP
     source:
-      nets: &id001      - 10.1.93.102/32
+      nets: &id001
+      - 10.1.93.102/32
       - 10.1.93.103/32
       - 10.1.93.104/32
     destination:
@@ -1996,7 +1997,8 @@ def main():
     cmd = ['ausearch', '--input-logs', '-m', 'AVC,USER_AVC,SELINUX_ERR,USER_SELINUX_ERR'] + interval
     r = call(cmd)
     (a.dir / 'avc.stdout').write_text(r.stdout)
-    (a.dir / 'avc.stderr').write_text(r.stderr)    (a.dir / 'avc.command.json').write_text(json.dumps({'argv': cmd, 'rc': r.returncode}, indent=2))
+    (a.dir / 'avc.stderr').write_text(r.stderr)
+    (a.dir / 'avc.command.json').write_text(json.dumps({'argv': cmd, 'rc': r.returncode}, indent=2))
     markers = call(['ausearch', '--input-logs', '-m', 'USER'] + interval)
     (a.dir / 'markers.stdout').write_text(markers.stdout)
     (a.dir / 'markers.stderr').write_text(markers.stderr)
@@ -2994,6 +2996,7 @@ def main():
     print('PASS:', count, 'GNP/HEP/Felix objects: served API, recursive fields/types/required/enum/pattern/bounds/allOf/anyOf subset')
     print('PASS: Calico offline preparation: VXLAN backend, IPPool env/CIDR/NAT/MTU, both BIRD probes, image digests')
     print('NOT RUN: full JSONSchema, CEL, server admission, Calico semantic validation, runtime enforcement')
+
 
 if __name__ == '__main__':
     main()
