@@ -1,13 +1,13 @@
 {
   "schema": "fds.icr-ac-review.v1",
-  "reviewed_at": "2026-09-18T03:52:00+00:00",
+  "reviewed_at": "2026-09-18T04:13:26.167255+00:00",
   "baseline_tag": "docs-v3.1.19",
   "baseline_commit": "966fc5365874b1d259a9810fc876b57c3bfa0e08",
   "ac_conditions_unchanged_from_v18": true,
-  "complete": 0,
+  "complete": 1,
   "total": 20,
   "partial": 5,
-  "not_verified": 13,
+  "not_verified": 12,
   "blocked": 1,
   "last_observed_fail": 1,
   "cp_implementation": "THREE_CP_READY_RUNTIME_RETAINED_REVIEW_REQUIRED",
@@ -96,8 +96,8 @@
     {
       "id": "ICR-AC-14",
       "condition": "Worker 3대에서 동일 경로 조회 회귀가 통과한다.",
-      "status": "NOT_VERIFIED",
-      "assessment": "기존 Worker route 수집은 재사용하고, 실제 관련 경로 변경 후의 회귀 증거만 추가."
+      "status": "RUNTIME_PASS",
+      "assessment": "2026-09-18 13:04 KST Worker01/02/03에서 monitor01(.30) route-get rc0, source .105/.107/.108 및 gateway .58 일치. AC 원문 범위 충족. 최종 보호 전환 후에만 인정한다는 추가 조건을 제거. 이후 관련 변경의 회귀와 전체 독립 인수는 별도."
     },
     {
       "id": "ICR-AC-15",
@@ -135,5 +135,7 @@
       "status": "PARTIAL",
       "assessment": "기존 마스킹 보완과 제출본별 검증 재사용. 최신 Join archive 외부 SHA·내부15/15·승인 실행 소스 일치 및 공유본 비밀정보 검사 완료. 전체 최종 Evidence 종결은 미완료."
     }
-  ]
+  ],
+  "complete_semantics": "Current AC condition supported by Runtime evidence; independent final ICR acceptance remains pending",
+  "latest_collection": "results/20260918T040403Z_zgby6ckp/README.md"
 }

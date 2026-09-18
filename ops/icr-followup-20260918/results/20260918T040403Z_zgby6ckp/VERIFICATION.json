@@ -1,0 +1,34 @@
+{
+  "schema": "fds.icr-next-result-review.v1",
+  "reviewed_at": "2026-09-18T04:13:26.167255+00:00",
+  "source_archive": "ICR_Next_20260918T040403Z_zgby6ckp.tar.gz",
+  "archive_sha256": "17f8b6878cb47ded1ddc45ebd4d4e8d302988954e622ca104dfa002e581b48a4",
+  "external_hash_verified": true,
+  "internal_hashes_verified": 6,
+  "collector_commit": "fec790e28668833daef99254c8a699b3ce23802a",
+  "collector_sha256": "0660b90a364e14461ee551b919d05aefac5e9acf24c9e23aef2bc9a8e066db42",
+  "collector_matches_published_source": true,
+  "shared_json_secret_patterns_found": 0,
+  "three_cp_ready": true,
+  "worker_joined_count": 0,
+  "calico_ready_pods": 4,
+  "lb_tls_authenticated_node_get": true,
+  "ac14": {
+    "status": "RUNTIME_PASS",
+    "scope": "Worker01/02/03 ip -j -4 route get 10.250.10.30; gateway10.1.93.58 and expectedsource",
+    "observed_at": {
+      "k8s-worker01": "2026-09-18T04:04:04.100454+00:00",
+      "k8s-worker02": "2026-09-18T04:04:04.594179+00:00",
+      "k8s-worker03": "2026-09-18T04:04:05.041464+00:00"
+    },
+    "independent_final_acceptance": false
+  },
+  "limits": [
+    "No Worker join performed",
+    "No Worker firewall/TCP or cross-node CNI test",
+    "No LB backend3/3 or failover test",
+    "No new etcd health or Runtime timer re-read",
+    "No packet capture/SNAT/reboot persistence proof",
+    "AC13 edge/harbor/db unchanged; ICR final acceptance pending"
+  ]
+}

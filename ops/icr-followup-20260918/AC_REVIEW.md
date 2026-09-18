@@ -1,6 +1,6 @@
 # ICR AC 대조 및 3CP 이후 실행 인계 — 2026-09-18
 
-검토 기준: 2026-09-18 12:52 KST GitHub·보관 증적 대조. 이번 작업은 서버 재시험이 아니다.
+검토 기준: 2026-09-18 13:04 KST 추가 현장 수집본과 GitHub 기록 대조. 검토자는 제출 증적을 검증했으며 별도 서버 재시험을 실행하지 않았다.
 
 ## 적용 기준과 실제 완료
 
@@ -18,7 +18,7 @@
 
 ## AC별 판정
 
-전체 조건 충족으로 확인한 AC는 0/20이며 PARTIAL 5, NOT_VERIFIED 13, BLOCKED 1, 마지막 확인 FAIL/DRIFT 1이다. 이는 ICR 최종 인수조건의 수이며 구축 공수나 3CP 구현 진행률이 아니다. 이번 3CP 성공을 완료 실적으로 따로 기록한다.
+현재 증거로 조건 충족을 확인한 AC는 1/20(AC-14 Runtime PASS)이며 PARTIAL 5, NOT_VERIFIED 12, BLOCKED 1, 마지막 확인 FAIL/DRIFT 1이다. 전체 독립 인수 완료를 뜻하지 않는다. 이는 ICR 최종 인수조건의 수이며 구축 공수나 3CP 구현 진행률이 아니다. 이번 3CP 성공을 완료 실적으로 따로 기록한다.
 
 | AC | 정본 조건 | 현재 판정·남은 증거 |
 |---|---|---|
@@ -35,7 +35,7 @@
 | ICR-AC-11 | monitor01에서 Cluster Workload로 신규 Ingress를 시작할 수 없다. | **NOT_VERIFIED** — monitor01의 Cluster Workload 신규 Ingress 차단 증거 필요. |
 | ICR-AC-12 | IF-06B Remote Write의 TLS/Auth/Payload Allowlist가 충족되고 비승인 Egress가 차단된다. | **BLOCKED** — IF-06B Receiver/TLS/Auth/Payload Allowlist·비승인 Egress 및 실제 Source/Return Path 인수 미완료. |
 | ICR-AC-13 | edge/harbor/db에 `10.250.10.0/24 via .58`가 적용되고 `.30` route-get이 통과한다. | **FAIL_LAST_OBSERVED_DRIFT** — 마지막 확인은 edge/harbor/db route DRIFT. 신규 시정 증거가 없어 해소로 올리지 않음. 현시각 서버를 재조회한 결과는 아님. |
-| ICR-AC-14 | Worker 3대에서 동일 경로 조회 회귀가 통과한다. | **NOT_VERIFIED** — 기존 Worker route 수집은 재사용하고, 실제 관련 경로 변경 후의 회귀 증거만 추가. |
+| ICR-AC-14 | Worker 3대에서 동일 경로 조회 회귀가 통과한다. | **RUNTIME_PASS** — 2026-09-18 13:04 KST Worker01/02/03에서 monitor01(.30) route-get rc0, source .105/.107/.108 및 gateway .58 일치. AC 원문 범위 충족. 최종 보호 전환 후에만 인정한다는 추가 조건을 제거. 이후 관련 변경의 회귀와 전체 독립 인수는 별도. |
 | ICR-AC-15 | mgmt-gw IP Forward/Zone/Policy/NAT가 승인안과 일치하고 내부 SNAT가 없다. | **NOT_VERIFIED** — mgmt-gw Forward/Zone/Policy/NAT와 내부 Source 보존 인수 필요. |
 | ICR-AC-16 | monitor01 `.30:443` Receiver/Protocol/TLS/Auth가 정본과 일치한다. | **NOT_VERIFIED** — monitor01 Receiver/Protocol/TLS/Auth 실제 구성 및 인수 필요. |
 | ICR-AC-17 | 패킷 관찰의 실제 Source와 양방향 Return Path가 정본과 일치한다. | **NOT_VERIFIED** — 실제 허용 흐름의 패킷 Source와 양방향 반환 경로 확인 필요. |
@@ -69,5 +69,9 @@ AC-01의 미확인 과거 route 원본은 이미 제출한 자료에서 연결�
 
 [RUN_ICR_NEXT.py](RUN_ICR_NEXT.py)는 위 첫 작업의 미확인 현재 상태를 한 번 묶는 운영 보조 파일이다. CP1과 Worker 3대 조회 및 기존 CP1 자격증명을 통한 LB API 조회만 수행한다. Node 구성 변경, Join/reset, 방화벽·HEP·서비스·타이머·NTP 변경 기능은 없다.
 
-이 파일은 PR #16 승인 실행 소스를 변경하거나 그 코드 승인 범위에 포함됐다고 주장하지 않는다. 코드의 정적/로컬 검증 결과와 현장 실행 결과를 분리한다. 지금 환경에는 현장 SSH 키가 없어 VM 조회·Worker 변경을 직접 실행하지 못했다. 다음 현장 결과가 있어야 Worker 현재 상태에 맞는 변경을 이어갈 수 있다.
+이 파일은 PR #16 승인 실행 소스를 변경하거나 그 코드 승인 범위에 포함됐다고 주장하지 않는다. 코드의 정적/로컬 검증 결과와 현장 실행 결과를 분리한다. 현장 제출본에서 조회4대 완료, Worker3 미가입과 LB 인증 성공을 확인했다. [13:04 실측과 AC-14 판정](results/20260918T040403Z_zgby6ckp/README.md)을 후속 입력으로 사용한다. 이 환경에는 현장 SSH 키가 없으며 Worker 변경·Join은 실행하지 않았다.
 
+
+## AC-14 판정 정정
+
+이전 안내의 “최종 보호 전환 후에만 인정”은 정본 AC-14에 없는 추가 조건이었다. 이번 Worker3대 route-get 증거로 현재 AC-14 Runtime PASS를 기록한다. 같은 경로를 다시 수집하도록 요구하지 않는다. AC-13(edge/harbor/db), AC-15(NAT), AC-17(패킷 관찰), AC-18(지속성)과 전체 독립 인수는 이 결과로 완료하지 않는다.
