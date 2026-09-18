@@ -1,0 +1,25 @@
+test_already_correct_does_not_mutate (test_if16_route.TransactionTests.test_already_correct_does_not_mutate) ... ok
+test_drift_before_first_change_prevents_mutation (test_if16_route.TransactionTests.test_drift_before_first_change_prevents_mutation) ... ok
+test_drift_refuses_rollback (test_if16_route.TransactionTests.test_drift_refuses_rollback) ... ok
+test_failure_preserves_preexisting_runtime (test_if16_route.TransactionTests.test_failure_preserves_preexisting_runtime) ... ok
+test_persistent_failure_only_removes_own_runtime (test_if16_route.TransactionTests.test_persistent_failure_only_removes_own_runtime) ... ok
+test_preimage_write_failure_prevents_mutation (test_if16_route.TransactionTests.test_preimage_write_failure_prevents_mutation) ... ok
+test_probe_failure_removes_persistent_before_runtime (test_if16_route.TransactionTests.test_probe_failure_removes_persistent_before_runtime) ... ok
+test_probe_failure_rolls_back_only_added_persistent (test_if16_route.TransactionTests.test_probe_failure_rolls_back_only_added_persistent) ... ok
+test_rollback_denied_is_not_recovery_pass (test_if16_route.TransactionTests.test_rollback_denied_is_not_recovery_pass) ... ok
+test_success_preserves_unrelated_state_and_records_preimage (test_if16_route.TransactionTests.test_success_preserves_unrelated_state_and_records_preimage) ... ok
+test_timeout_after_side_effect_does_not_claim_ownership (test_if16_route.TransactionTests.test_timeout_after_side_effect_does_not_claim_ownership) ... ok
+test_command_timeout_and_stderr_not_exposed (test_if16_route.ValidationTests.test_command_timeout_and_stderr_not_exposed) ... ok
+test_conflicting_route_is_not_replaced (test_if16_route.ValidationTests.test_conflicting_route_is_not_replaced) ... ok
+test_duplicate_exact_route_is_rejected (test_if16_route.ValidationTests.test_duplicate_exact_route_is_rejected) ... ok
+test_existing_implicit_profile_zero_route_requires_review (test_if16_route.ValidationTests.test_existing_implicit_profile_zero_route_requires_review) ... ok
+test_more_specific_route_is_rejected (test_if16_route.ValidationTests.test_more_specific_route_is_rejected) ... ok
+test_nm_parser_preserves_unrelated_attributes (test_if16_route.ValidationTests.test_nm_parser_preserves_unrelated_attributes) ... ok
+test_owned_persistent_table_change_refuses_compensation (test_if16_route.ValidationTests.test_owned_persistent_table_change_refuses_compensation) ... ok
+test_owned_runtime_source_drift_is_rejected (test_if16_route.ValidationTests.test_owned_runtime_source_drift_is_rejected) ... ok
+test_unrecognized_nm_output_is_rejected (test_if16_route.ValidationTests.test_unrecognized_nm_output_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 0.007s
+
+OK

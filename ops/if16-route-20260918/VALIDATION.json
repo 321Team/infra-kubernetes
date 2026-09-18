@@ -1,0 +1,25 @@
+{
+  "schema": "fds.if16-route-candidate-validation.v1",
+  "stage": "STATIC_MOCK",
+  "tests_passed": 20,
+  "tests_failed": 0,
+  "runtime_executed": false,
+  "live_networkmanager_tested": false,
+  "reboot_persistence_tested": false,
+  "independent_code_review": "PENDING",
+  "operational_deployment": "NOT_EXECUTED",
+  "whole_ac_pass": false,
+  "test_command": "python3 -B -m unittest discover -s . -p 'test_*.py' -v",
+  "source_references": {
+    "baseline_commit": "966fc5365874b1d259a9810fc876b57c3bfa0e08",
+    "networkmanager_commit": "58864ef92d3241787c311fad9a16a28524b206e1",
+    "networkmanager_route_formatter": "src/libnmc-setting/nm-meta-setting-desc.c::_objlist_obj_to_str_fcn_ip_config_routes"
+  },
+  "limits": [
+    "NetworkManager output parser inspected against upstream source; host version not exercised",
+    "Advisory lock serializes this tool only; external NM changes have pre/post drift checks",
+    "Unknown command completion or changed ownership fails to PARTIAL_REVIEW_REQUIRED",
+    "No automatic recovery claim for SIGKILL, power loss or storage failure",
+    "Existing implicit persistent route under profile table 0 requires review"
+  ]
+}
