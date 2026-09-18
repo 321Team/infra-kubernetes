@@ -1,0 +1,14 @@
+{
+  "files": {
+    "READ_CP_PREJOIN.py": "4ae9c5f63ab317bc4c287d5837ed461ad000a89441f2aa1a96f0f8515bdf3e6b",
+    "build.py": "dc9418f89dcec610c304b1398541fdc3b45eeefba532c939bbed7e07444470a4",
+    "controller_template.py": "2814ff982f6c252269dfca177794d09793ef349a7a276b6a45e77cf8dddb245f",
+    "cp1_reuse_adapter.py": "dd04393147c4aa3d1c904b67179c5dfe2d54eb38e85820e2e787e717398c7934",
+    "prejoin_node_read.py": "1913d20af0d372b76404d04cc129ac75ed3a8a7f3812f8c7a99c49c4cec8a378",
+    "test_prejoin_collection.py": "ad56e4fb808c5f5b7214ced2900cb9293ee990110fac0dc9667f7b63cddfb67c"
+  },
+  "focused_tests_passed": 8,
+  "remote_configuration_mutation": false,
+  "scope": "read-only observation preparation",
+  "status": "STATIC_MOCK_PASS_RUNTIME_NOT_EXECUTED"
+}
