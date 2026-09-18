@@ -58,12 +58,15 @@ AC-01의 미확인 과거 route 원본은 이미 제출한 자료에서 연결�
 
 | 작업 묶음 | 담당·진입 조건 | 실행과 종료 판단 |
 |---|---|---|
-| Worker 및 LB 후속 | K8S #10 / LB #9. 3CP 구축 완료를 입력으로 즉시 준비 | 필요한 현재 Node/Calico·Worker 서비스·LB TLS 인증 경로만 한 번 확인. Worker 미가입/NotReady/Ready를 구분하고 정확한 현재 상태에 맞춰 Worker 3대 가입·회귀를 진행. LB backend 3/3·장애복구는 LB 기존 Stage B 절차로 별도 인수 |
+| Worker 후속 | K8S #10 이하영. 3CP 완료·13:04 상태 증거 재사용 | 기존 K8S 절차로 필요한 preflight→Worker 3대 Join→6/6·Calico·Pod/Service 검증→임시 인증정보 회수. 이권욱은 확인된 호스트 통신 차단만 보완. 별도 우리 측 Worker 실행기 개발·승인은 선행조건이 아님 |
+| LB 후속 | LB #9 이권욱. Worker 작업과 병행 | 기존 CP1→LB TLS 인증·Node GET 증거 재사용. backend 3/3·장애복구는 LB 기존 Stage B 절차로 인수 |
 | ICR 경로 후속 | ICR #14, Worker 작업과 병행 | IF-16 edge/harbor/db route DRIFT의 현재 구성·소유자·변경 범위를 연결하여 시정. IF-06B Receiver/TLS/Auth/Source 입력을 Monitoring 담당과 연결 |
-| 최종 보호 전환·통신 시험 | [기존 Lead 결정](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5697547621)의 3CP+3Worker Ready / 6/6 이후 | named HEP/GNP/Bootstrap 보호 및 승인 Source/거부 흐름을 같은 변경 묶음으로 검증. firewalld OFF는 그 보호 인계 범위에서 수행 |
+| 최종 보호 전환·통신 시험 | [기존 Lead 결정](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5697547621)의 3CP+3Worker Ready / 6/6 이후 | 이하영은 Calico/SEC manifest 적용, 이권욱은 호스트 firewalld·관리 경로 전환을 담당하는 공동 작업창 한 번으로 진행. 적용 순서·허용/거부·실패 시 회수 기준을 함께 맞추고 공통 증거 재사용 |
 | ICR 종결 | 해당 변경 증거가 모인 뒤 | 최종 지속성·복구·비밀정보 검사·Evidence Index를 남은 범위에만 보완하고 통합 독립 인수 및 Lead 최종 판정 |
 
 현재 PR #7 HEP/GNP/SEC 보완과 NTP upstream 입력은 각 기존 검토 범위로 남긴다. 이를 Worker 준비의 새 선행조건으로 추가하지 않는다. 구 Worker 실행기는 과거 CP1 receipt/인수 계약을 사용하므로 현재 Runtime에 그대로 재실행하지 않는다.
+
+[담당 분리·Worker 인계](WORKER_HANDOFF.md)는 기존 티켓 오너에 맞춘 운영 정리안이다. CP 정리·Join은 한정 지원이었으며 K8S 오너 변경을 뜻하지 않는다. 우리 측 별도 Worker Join 실행기 준비는 중단하고, 이하영님의 기존 절차와 중복 실행하지 않는다. 새로운 담당자 합의·승인을 받은 것으로 간주하지 않는다.
 
 ## 현장 현재성 확인의 정확한 범위
 
