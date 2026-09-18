@@ -1,0 +1,44 @@
+{
+  "schema": "fds.cp-join-submitted-evidence-verification.v1",
+  "archive_sha256": "3108ecacc750a8b830e31f558c2cf363f00ea877beed46759389c7d610ba3262",
+  "archive_hash": "PASS",
+  "internal_hashes": {
+    "passed": 15,
+    "failed": 0
+  },
+  "runner_sha256": "460b5f8603fe2798e6f379b85efd5cb56926fd9f37308fb961c204e14c6d8147",
+  "runner_matches_approved_source": true,
+  "source_commit": "bab9608557205b3bf5294b729d0960517d7a2847",
+  "contract_sha256": "4efe5a0d70883aefb7c4af8d23922534783dfa1f8e29b2008ee6206f913de392",
+  "runtime_execution": "OBSERVED_IN_SUBMITTED_EVIDENCE",
+  "fresh_remote_queries_by_reviewer": false,
+  "elapsed_seconds": 194.777612,
+  "cp2_join_rc": 0,
+  "cp3_join_rc": 0,
+  "final_control_plane_nodes_ready": 3,
+  "final_etcd_voters": 3,
+  "etcd_learners": 0,
+  "final_endpoint_health": {
+    "passed": 3,
+    "failed": 0
+  },
+  "cp1_original_node_and_member_preserved": true,
+  "transfer_before_after_runtime_sha256_equal": true,
+  "legacy_timer_inactive_reported_at_transfer": true,
+  "credential_revocation_reported": "REVOKED",
+  "failure_recovery_tested": false,
+  "independent_result_acceptance": "PENDING",
+  "lb_backend_3_of_3_verified": false,
+  "cross_node_cni_flows_verified": false,
+  "worker_join_verified": false,
+  "permanent_promotion_performed": false,
+  "warnings": [
+    "KubeProxyConfiguration bindAddress recommended ::, configured 0.0.0.0",
+    "firewalld active: ensure 6443 and 10250 allowed"
+  ],
+  "proof_limits": [
+    "Root TRANSFER_COMMITTED receipt body not included; approved helper returns its digest and successful state.",
+    "Credential deletion API responses not included; approved helper returns REVOKED.",
+    "No post-Join full firewall/CP1 retention status snapshot in this archive."
+  ]
+}

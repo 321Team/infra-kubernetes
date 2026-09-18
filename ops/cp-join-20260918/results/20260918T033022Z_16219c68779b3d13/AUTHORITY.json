@@ -1,0 +1,21 @@
+{
+  "contract_sha256": "4efe5a0d70883aefb7c4af8d23922534783dfa1f8e29b2008ee6206f913de392",
+  "decision": "APPROVED",
+  "expected_contract_sha256": "4efe5a0d70883aefb7c4af8d23922534783dfa1f8e29b2008ee6206f913de392",
+  "repository": "321Team/infra-kubernetes",
+  "review_url": "https://github.com/321Team/infra-kubernetes/pull/16#pullrequestreview-5243927101",
+  "reviewed_at": "2026-09-18T03:22:34Z",
+  "reviewed_commit": "bab9608557205b3bf5294b729d0960517d7a2847",
+  "reviewer": "hayeounglee",
+  "schema": "fds.cp-join-controller-verified-review.v1",
+  "scope": {
+    "cp1_runtime_ownership_transfer": true,
+    "deadline": "NO_AUTOMATIC_WITHDRAWAL",
+    "failure": "PHASE_OWNED_RECOVERY_ONLY",
+    "join": true,
+    "success": "RETAIN_JOINED_CLUSTER_AND_RUNTIME"
+  },
+  "source_commit": "bab9608557205b3bf5294b729d0960517d7a2847",
+  "verified_at": "2026-09-18T03:30:22.441181+00:00",
+  "verified_by": "controller-live-github-api"
+}

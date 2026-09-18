@@ -1,0 +1,63 @@
+{
+  "configuration": {
+    "ca_spki_sha256": "a584e64a70d6cfe9ba488c320d4ef5ec18a3f63fde436a96e9abe5ecc0bb4198",
+    "configuration_sha256": "cfd4b2d5645edbc72dfe5574a9fb373f084dca714415b0a548475ac51066cc62",
+    "endpoint": "10.1.93.109:6443",
+    "kubeadm_version": "v1.36.4"
+  },
+  "topology": {
+    "api_ready": true,
+    "endpoint_health": [
+      {
+        "endpoint": "https://10.1.93.102:2379",
+        "health": true,
+        "took": "3.248963ms"
+      }
+    ],
+    "endpoint_status": [
+      {
+        "Endpoint": "https://10.1.93.102:2379",
+        "Status": {
+          "dbSize": 4046848,
+          "dbSizeInUse": 1413120,
+          "dbSizeQuota": 2147483648,
+          "downgradeInfo": {},
+          "header": {
+            "cluster_id": 4016449463138308410,
+            "member_id": 1755679419291778130,
+            "raft_term": 6,
+            "revision": 741499
+          },
+          "leader": 1755679419291778130,
+          "raftAppliedIndex": 1112831,
+          "raftIndex": 1112831,
+          "raftTerm": 6,
+          "storageVersion": "3.6.0",
+          "version": "3.6.8"
+        }
+      }
+    ],
+    "members": [
+      {
+        "client_urls": [
+          "https://10.1.93.102:2379"
+        ],
+        "id": "1755679419291778130",
+        "learner": false,
+        "name": "k8s-control01",
+        "peer_urls": [
+          "https://10.1.93.102:2380"
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "control_plane": true,
+        "name": "k8s-control01",
+        "ready": true,
+        "uid": "75735bd5-937a-463f-a93f-a8e7e51fa7a1"
+      }
+    ],
+    "observed_at": "2026-09-18T03:30:23.192584+00:00"
+  }
+}

@@ -1,0 +1,326 @@
+{
+  "automatic_reset": false,
+  "backup_path": "/var/lib/fds/cp-join/16219c68779b3d13/private-backup/etc-kubernetes",
+  "baseline_inventory": [
+    {
+      "bytes": 5635,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352832032719,
+      "path": "admin.conf",
+      "sha256": "27c2315ef04395045db745e07a6d124672177aed46c3ffc91f9f99e7d9335762",
+      "uid": 0
+    },
+    {
+      "bytes": 5659,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352847032510,
+      "path": "controller-manager.conf",
+      "sha256": "41685eaa2a30c7c095b5872c986f08a9f8ec94eeda2df406d4cd9639e80c88ec",
+      "uid": 0
+    },
+    {
+      "gid": 0,
+      "kind": "directory",
+      "mode": 493,
+      "mtime_ns": 1788958352898021473,
+      "path": "manifests",
+      "uid": 0
+    },
+    {
+      "gid": 0,
+      "kind": "directory",
+      "mode": 493,
+      "mtime_ns": 1788958352662388818,
+      "path": "pki",
+      "uid": 0
+    },
+    {
+      "bytes": 5607,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352894031855,
+      "path": "scheduler.conf",
+      "sha256": "d89d85bda608ec901a9e9f2850cea2f9af2b1f3b11d3fa72949fef369dca043c",
+      "uid": 0
+    },
+    {
+      "bytes": 3659,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352896031827,
+      "path": "manifests/kube-apiserver.yaml",
+      "sha256": "9c6c75d7ee5981c39386c7fde8039a8b9cb9bdcd88f6951c1e4e3815593a09c4",
+      "uid": 0
+    },
+    {
+      "bytes": 2939,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352897031813,
+      "path": "manifests/kube-controller-manager.yaml",
+      "sha256": "8acf707b42c2b28f9ea7481082315b63174fb9abf09ba3ecde1b4c7d59978bd6",
+      "uid": 0
+    },
+    {
+      "bytes": 1726,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352898021473,
+      "path": "manifests/kube-scheduler.yaml",
+      "sha256": "22a0cf186029c3d93743f6e9838a75b2becc6c937024727d42b2da995147f035",
+      "uid": 0
+    },
+    {
+      "bytes": 1123,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352662388818,
+      "path": "pki/apiserver-etcd-client.crt",
+      "sha256": "9c333c12808e065d9e83c31afce50aee9336efc109933dfe421f171c78f8edd9",
+      "uid": 0
+    },
+    {
+      "bytes": 1675,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352662035089,
+      "path": "pki/apiserver-etcd-client.key",
+      "sha256": "258dea464c36b75b1f50af6c19a6acfc5ab97d39093f0860d08f489e8dfacbf8",
+      "uid": 0
+    },
+    {
+      "bytes": 1131,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352535584200,
+      "path": "pki/apiserver-kubelet-client.crt",
+      "sha256": "c99a543c5f702724b4e308a64a4cce782aa6b886676799956bd89d2287864d0e",
+      "uid": 0
+    },
+    {
+      "bytes": 1679,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352535036858,
+      "path": "pki/apiserver-kubelet-client.key",
+      "sha256": "a5a8a48301ffc169924a0dc880e6b9b920d57b44e01dc7b44e66735681a83b5b",
+      "uid": 0
+    },
+    {
+      "bytes": 1302,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352503057070,
+      "path": "pki/apiserver.crt",
+      "sha256": "48768149e66559e04a241e41a5ca3e910f84c0af0be08033d9f2f8070b1011f3",
+      "uid": 0
+    },
+    {
+      "bytes": 1679,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352502037318,
+      "path": "pki/apiserver.key",
+      "sha256": "001a94715f2f959f8e1edabf4e1033a16907df616c060212a60442cb6ef53f11",
+      "uid": 0
+    },
+    {
+      "bytes": 1107,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352482037597,
+      "path": "pki/ca.crt",
+      "sha256": "5e4462b48b67aa3c452119f02578feb5b2ace358782c9b050ba0ad2ea951a49c",
+      "uid": 0
+    },
+    {
+      "bytes": 1679,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352482248785,
+      "path": "pki/ca.key",
+      "sha256": "36533705e2f1ce350b0c0dcf6383746f65dc65e305eeac77e3f5e12dfe842378",
+      "uid": 0
+    },
+    {
+      "gid": 0,
+      "kind": "directory",
+      "mode": 493,
+      "mtime_ns": 1788958352788087187,
+      "path": "pki/etcd",
+      "uid": 0
+    },
+    {
+      "bytes": 1123,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352481037611,
+      "path": "pki/front-proxy-ca.crt",
+      "sha256": "957a2cf6888707ae0cca835db7492816bb0c228ff0cf0ea74ae894884ae1e057",
+      "uid": 0
+    },
+    {
+      "bytes": 1675,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352481744725,
+      "path": "pki/front-proxy-ca.key",
+      "sha256": "a292e5634ecd9e73b3306f6d3c5fd0d198364340155f19ff6e3925e488854a65",
+      "uid": 0
+    },
+    {
+      "bytes": 1119,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352555030118,
+      "path": "pki/front-proxy-client.crt",
+      "sha256": "630912625032fa68ea85c7610ac56237d1208dc5f33322652d4194d54519480b",
+      "uid": 0
+    },
+    {
+      "bytes": 1679,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352554036594,
+      "path": "pki/front-proxy-client.key",
+      "sha256": "1dbeac4d97bdc84480efae2029eb716912dc9c8da158f86cc3b1de760681dcfa",
+      "uid": 0
+    },
+    {
+      "bytes": 1679,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352481894946,
+      "path": "pki/sa.key",
+      "sha256": "2c6426f315ee025a0e486e5328deb24d398812fe1d1cbbb9d937ca33db7b1f4b",
+      "uid": 0
+    },
+    {
+      "bytes": 451,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352481777291,
+      "path": "pki/sa.pub",
+      "sha256": "f039d7f42bd5a88d9a125504513441256538805506162e67f573d0f84416b3d1",
+      "uid": 0
+    },
+    {
+      "bytes": 1094,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352481943821,
+      "path": "pki/etcd/ca.crt",
+      "sha256": "825de601433f9b1b574bafc7b85375d980d7bab03b7659ef082335e2c02b6a87",
+      "uid": 0
+    },
+    {
+      "bytes": 1675,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352482037597,
+      "path": "pki/etcd/ca.key",
+      "sha256": "e985539a8c815d8b4a4601a1f51f358b269dcfe9e39cefc7865baba20121d3a6",
+      "uid": 0
+    },
+    {
+      "bytes": 1123,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352629331740,
+      "path": "pki/etcd/healthcheck-client.crt",
+      "sha256": "c187e62dc164a7747ed9b334c6a2a6d94771d85d4cbb04095a7afffa76c08298",
+      "uid": 0
+    },
+    {
+      "bytes": 1675,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352629035549,
+      "path": "pki/etcd/healthcheck-client.key",
+      "sha256": "e1c1030c23efa04c0f519bfd4ae82e3efbb2b981a641353ac5e907709bf6de73",
+      "uid": 0
+    },
+    {
+      "bytes": 1212,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352788087187,
+      "path": "pki/etcd/peer.crt",
+      "sha256": "cfdd2c36d9f79c9c309d90db66204c8046caa41d05041d41fc41bf7747d85cdc",
+      "uid": 0
+    },
+    {
+      "bytes": 1679,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352787033347,
+      "path": "pki/etcd/peer.key",
+      "sha256": "3b87829a38ecf27afb70ab3462e3eb2778622987537eab7968c418ef68b93df7",
+      "uid": 0
+    },
+    {
+      "bytes": 1212,
+      "gid": 0,
+      "kind": "file",
+      "mode": 420,
+      "mtime_ns": 1788958352707034461,
+      "path": "pki/etcd/server.crt",
+      "sha256": "b9f5e68192cc8c823e992e7a2ed69fb5b9e78e2933a127d7c2ce08d59d899fe8",
+      "uid": 0
+    },
+    {
+      "bytes": 1675,
+      "gid": 0,
+      "kind": "file",
+      "mode": 384,
+      "mtime_ns": 1788958352706034476,
+      "path": "pki/etcd/server.key",
+      "sha256": "c37351207a1633362e523349723efaacce10ada4987cf67aa282e79df594d7b1",
+      "uid": 0
+    }
+  ],
+  "cleanup": "KNOWN_THREE_MANIFESTS_QUARANTINED",
+  "configuration_mutation": true,
+  "created_at": "2026-09-18T03:30:53.161555+00:00",
+  "ip": "10.1.93.103",
+  "job_id": "16219c68779b3d13",
+  "join_attempted": false,
+  "node": "k8s-control02",
+  "schema": "fds.cp-join-node-candidate.v1",
+  "state": "PREPARED",
+  "status": "PREPARED",
+  "updated_at": "2026-09-18T03:30:53.179809+00:00",
+  "versions": {
+    "containerd": "v2.3.5",
+    "kubeadm": "v1.36.4",
+    "kubelet": "v1.36.4"
+  }
+}
