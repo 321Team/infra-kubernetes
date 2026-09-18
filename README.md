@@ -27,13 +27,13 @@
 ## 변경 검토 및 승인
 
 1. Lead는 `p1-k8s-01/<작업명>` 브랜치에서 작업하고 `main` 대상으로 PR을 작성한다. 연계 티켓·Gate, 변경 이유·영향, 검증 결과·증적, 복구 절차와 검토 대상 전체 HEAD SHA를 기록한다.
-2. 작성자와 다른 Reviewer가 해당 HEAD를 검토하고 자신의 계정으로 **PASS 또는 HOLD**, 판단 근거와 잔여 조치를 남긴다. AI가 작성한 검토 초안이나 Bot 승인만으로 독립 기술 검토를 완료하지 않는다.
+2. 코드·실행 설정·혼합 PR은 작성자와 다른 Reviewer가 해당 HEAD를 검토하고 자신의 계정으로 **PASS 또는 HOLD**, 판단 근거와 잔여 조치를 남긴다. AI가 작성한 검토 초안이나 Bot 승인만으로 독립 기술 검토를 완료하지 않는다.
 3. 새 커밋이 추가되면 변경 영향과 관련 회귀 결과를 확인하고 **새 HEAD에 대한 판정**을 기록한다. 이전 HEAD의 PASS를 새 HEAD 승인으로 전용하지 않으며, 변경과 관계없는 검증을 일률적으로 반복하지 않는다.
-4. 최종 승인자 **이권욱**은 동일 HEAD의 독립 검토·검증·잔여 조치를 확인하고 **APPROVED 또는 HOLD**를 기록한다. 명시적 최종 승인 전에는 병합하지 않는다.
+4. 최종 병합 담당 **이권욱**은 동일 HEAD의 필수 검증·잔여 조치 및 코드/혼합 PR의 독립 검토를 확인해 판단한다. 문서·증적만 변경하면 책임 Lead 검토로 처리하고 자기 GitHub APPROVE를 요구하지 않는다. 명시적 최종 승인 전에는 병합하지 않는다.
 5. 병합 직전에 HEAD 일치를 확인하고 승인된 절차에 따라 이권욱이 병합한다. PR, 승인 HEAD와 병합 커밋을 기록한다.
-6. 실서버 반영은 대상·순서·영향·중단 조건·복구 절차·고정 커밋이 명시된 Runbook과 별도 실행 승인에 따른다. PR 병합이나 Gate 0 PASS를 실행 승인으로 전용하지 않는다.
+6. 실서버 반영·결과 수용·인수·종결은 책임 Lead가 대상·순서·영향·중단 조건·복구 절차·고정 커밋·필수 AC와 실제 증적에 따라 판단한다. PR 병합이나 Gate 0 PASS를 실행 승인으로 전용하지 않는다.
 
-`main` 직접 push와 force push는 변경 관리 절차에서 금지한다. GitHub에서 README를 포함해 새 저장소를 생성하는 초기화 이후, 이 초기 관리 문서도 작업 브랜치와 PR로 편입한다.
+[리뷰·Lead 정책](docs/REVIEW_POLICY.md)에 따라 코드 외 단계에서 반복 독립 승인을 요구하지 않는다. fds-project-evidence의 모든 PR은 독립 리뷰를 유지한다. `main` 직접 push·force push·자동 병합은 변경 관리 절차에서 금지한다. GitHub에서 README를 포함해 새 저장소를 생성하는 초기화 이후, 이 초기 관리 문서도 작업 브랜치와 PR로 편입한다.
 
 현재 프로젝트의 GitHub Free 조직·Private 운영 기준에서는 브랜치 보호와 Ruleset을 통한 필수 리뷰 강제를 전제로 하지 않는다. 위 절차는 사람이 확인하는 운영 통제이며, 실제 설정 완료나 기술적 강제 상태로 표시하지 않는다. `Write` 역할에는 push와 병합 권한이 있으므로 최종 병합 담당자 제한도 운영 규칙으로 준수한다. [브랜치 보호 지원 범위](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches), [Ruleset 지원 범위](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [역할별 권한](https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization).
 

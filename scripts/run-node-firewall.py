@@ -287,17 +287,24 @@ def validate_cp1_receipt(wrapper):
 
 
 def validate_cp1_acceptance(data, receipt, receipt_input_sha256):
-    node.need(data.get("schema") == "fds.cp1-runtime-acceptance.v1" and data.get("decision") == "ACCEPTED",
-              "CP1 Runtime acceptance absent")
+    schema = data.get("schema")
+    node.need(schema in ("fds.cp1-runtime-acceptance.v1", "fds.cp1-runtime-acceptance.v2")
+              and data.get("decision") == "ACCEPTED", "CP1 Runtime acceptance absent")
     for key in node.CP1_CONTRACT:
         node.need(data.get(key) == receipt[key], "CP1 acceptance source/plan differs: " + key)
     node.need(data.get("run_id") == receipt["run_id"] and data.get("receipt_sha256") == node.fingerprint(receipt)
               and data.get("receipt_input_sha256") == receipt_input_sha256, "CP1 acceptance receipt differs")
-    node.need(data.get("independent_reviewer") == "hayeounglee" and data.get("review_decision") == "APPROVED",
-              "CP1 independent acceptance review absent")
-    node.need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/2#(?:pullrequestreview|issuecomment)-[0-9]+",
-                          data.get("review_url") or ""), "CP1 acceptance review URL absent")
-    reviewed = node.instant(data["reviewed_at"])
+    if schema == "fds.cp1-runtime-acceptance.v1":
+        # Preserve historical independent acceptance without rewriting its author.
+        node.need(data.get("independent_reviewer") == "hayeounglee" and data.get("review_decision") == "APPROVED",
+                  "CP1 independent acceptance review absent")
+        node.need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/2#(?:pullrequestreview|issuecomment)-[0-9]+",
+                              data.get("review_url") or ""), "CP1 acceptance review URL absent")
+        reviewed = node.instant(data["reviewed_at"])
+    else:
+        node.need(not any(key in data for key in ("independent_reviewer", "review_decision", "review_url", "reviewed_at")),
+                  "legacy and Lead acceptance records must not be mixed")
+        reviewed = node.validate_lead_decision(data.get("lead_decision"), "ACCEPTED", node.instant(receipt["ended_at"]))
     node.need(node.instant(receipt["ended_at"]) <= reviewed <= dt.datetime.now(dt.timezone.utc),
               "CP1 acceptance predates Runtime result or is in future")
     checks = data.get("checks", {})

@@ -1,0 +1,34 @@
+{
+  "checks": {
+    "negative": {
+      "evidence_sha256": null,
+      "status": "NOT_VERIFIED"
+    },
+    "positive": {
+      "evidence_sha256": null,
+      "status": "NOT_VERIFIED"
+    },
+    "regression": {
+      "evidence_sha256": null,
+      "status": "NOT_VERIFIED"
+    }
+  },
+  "decision": null,
+  "execution_plan_sha256": "a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04",
+  "plan_sha256": "2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7",
+  "receipt_input_sha256": null,
+  "receipt_sha256": null,
+  "run_id": null,
+  "schema": "fds.cp1-runtime-acceptance.v2",
+  "source_commit": "264b273ab8ad79209bc0fec4a85c4497c946dbe3",
+  "source_sha256": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc",
+  "lead_decision": {
+    "schema": "fds.icr-lead-decision.v1",
+    "policy_commit": "b2e4612cf2e417b10e7f145c5b1e5f58dbe1b948",
+    "scope": "ICR-D-NET-01-01",
+    "lead": "GWONUK",
+    "decision": null,
+    "decision_url": null,
+    "decided_at": null
+  }
+}

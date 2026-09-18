@@ -29,6 +29,9 @@ COMMAND_STATE = {"count": 0, "timeouts": 0, "budget_exhausted": False, "deadline
 # Do not obtain them from the same untrusted JSON that they are meant to constrain.
 EXPECTED_OPERATOR = "GWONUK"
 EXPECTED_REVIEWER = "hayeounglee"
+# ICR-D-NET-01-01 Lead; this does not reassign P1-K8S-01's Lead.
+EXPECTED_LEAD = "GWONUK"
+REVIEW_AUTHORITY_POLICY = "b2e4612cf2e417b10e7f145c5b1e5f58dbe1b948"
 # Receipt compatibility stays pinned to the approved producer even after main merges.
 # Integration tests execute scripts/cp-canary-node.py and verify its locked bytes.
 CP1_CONTRACT = {
@@ -90,23 +93,64 @@ def validate_zone_controls(snapshot, controls):
                  "initial zone control differs from reviewed value: " + plane + "/" + key)
 
 
+def validate_lead_decision(record, decision, earliest=None):
+    """Bind a Lead's recorded decision; offline JSON is not authentication."""
+    need(isinstance(record, dict), "Lead decision record absent")
+    need(record.get("schema") == "fds.icr-lead-decision.v1" and
+         record.get("policy_commit") == REVIEW_AUTHORITY_POLICY and
+         record.get("scope") == "ICR-D-NET-01-01", "Lead policy/scope differs")
+    need(record.get("lead") == EXPECTED_LEAD and record.get("decision") == decision,
+         "responsible Lead decision absent")
+    need(re.fullmatch(r"https://github\.com/321Team/(?:fds-project-baseline/issues/14|infra-kubernetes/pull/[1-9][0-9]*)#issuecomment-[1-9][0-9]*",
+                      record.get("decision_url") or ""), "Lead decision URL absent")
+    decided = instant(record["decided_at"])
+    need(decided <= dt.datetime.now(dt.timezone.utc) and (earliest is None or earliest <= decided),
+         "Lead decision predates evidence or is in future")
+    return decided
+
+
+def validate_source_review(record, commit):
+    """A code approval is reusable at its exact SHA, not a Runtime sign-off."""
+    need(isinstance(record, dict), "source review record absent")
+    need(record.get("scope") == "CODE" and record.get("source_commit") == commit and
+         record.get("author") == EXPECTED_OPERATOR and
+         record.get("reviewer") == EXPECTED_REVIEWER and
+         record.get("reviewer") != record.get("author") and record.get("decision") == "APPROVED",
+         "independent source review absent or for another commit")
+    need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/[1-9][0-9]*#pullrequestreview-[1-9][0-9]*",
+                      record.get("review_url") or ""), "source review URL absent")
+    reviewed = instant(record["reviewed_at"])
+    need(reviewed <= dt.datetime.now(dt.timezone.utc), "source review is in future")
+    return reviewed
+
+
 def validate_authorization_record(data, commit, target, mode):
     """Check consistency of a human-reviewed record; this is not authentication.
 
-    An editor of the JSON can assert these names and booleans. The operator and
-    independent reviewer must verify the actual GitHub decision and evidence
-    before execution; SSH/sudo provide the separate host access boundary.
+    An editor of the JSON can assert these names and booleans. The operator
+    must verify the actual source approval and the Lead's execution decision.
+    Source review remains independent; Runtime acceptance belongs to the Lead.
+    SSH/sudo provide the separate host access boundary.
     See docs/runbooks/NODE_AUTHORIZATION_MODEL.md for the trust model.
     """
-    need(data.get("schema") == "fds.node-firewall-authorization.v2" and data.get("phase") == "runtime",
-         "authorization schema/phase differs")
+    schema = data.get("schema")
+    need(schema in ("fds.node-firewall-authorization.v2", "fds.node-firewall-authorization.v3")
+         and data.get("phase") == "runtime", "authorization schema/phase differs")
     need(data.get("source_commit") == commit and data.get("target") == target and data.get("mode") == mode,
          "authorization is not for this commit/target/mode")
-    need(data.get("operator") == EXPECTED_OPERATOR and data.get("independent_reviewer") == EXPECTED_REVIEWER,
-         "designated independent review record absent")
-    need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/4#(?:pullrequestreview|issuecomment)-[0-9]+",
-                      data.get("review_url") or ""), "PR4 review URL absent")
-    need(data.get("review_decision") == "APPROVED", "review approval absent")
+    if schema == "fds.node-firewall-authorization.v2":
+        # Historical records retain their original contract.
+        need(data.get("operator") == EXPECTED_OPERATOR and data.get("independent_reviewer") == EXPECTED_REVIEWER,
+             "designated independent review record absent")
+        need(re.fullmatch(r"https://github\.com/321Team/infra-kubernetes/pull/4#(?:pullrequestreview|issuecomment)-[0-9]+",
+                          data.get("review_url") or ""), "PR4 review URL absent")
+        need(data.get("review_decision") == "APPROVED", "review approval absent")
+    else:
+        need(data.get("operator") == EXPECTED_OPERATOR, "designated operator differs")
+        need(not any(key in data for key in ("independent_reviewer", "review_decision", "review_url")),
+             "legacy and Lead authority records must not be mixed")
+        reviewed = validate_source_review(data.get("source_review"), commit)
+        validate_lead_decision(data.get("lead_decision"), "EXECUTE", reviewed)
     for field in ("maintenance_freeze", "console_recovery_available", "backup_verified", "protection_reviewed",
                   "rollback_runbook_reviewed", "runtime_only_acknowledged", "target_state_reviewed"):
         need(data.get(field) is True, "required execution decision absent: " + field)
