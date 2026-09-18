@@ -17,7 +17,8 @@ import subprocess
 import uuid
 
 HOSTS = {"edge01": "10.1.93.50", "harbor01": "10.1.93.54", "db01": "10.1.93.55"}
-DEV, DEST, VIA = "ens160", "10.250.10.0/24", "10.1.93.58"
+DEVICES = {"edge01": "ens160", "harbor01": "ens160", "db01": "ens192"}
+DEST, VIA = "10.250.10.0/24", "10.1.93.58"
 NETWORK = ipaddress.ip_network(DEST)
 PROPERTIES = ("connection.uuid", "connection.type", "connection.interface-name",
               "connection.autoconnect", "ipv4.method", "ipv4.addresses", "ipv4.gateway",
@@ -82,23 +83,25 @@ def parse_routes(raw):
 def collect(run, hostname=None):
     host = hostname or socket.gethostname().split(".")[0]
     require(host in HOSTS, "Host outside edge01/harbor01/db01")
-    addresses = json.loads(run("ip", "-j", "-4", "address", "show", "dev", DEV))
+    device = DEVICES[host]
+    addresses = json.loads(run("ip", "-j", "-4", "address", "show", "dev", device))
     require(len(addresses) == 1, "Expected one interface")
     info = addresses[0]
+    require(info.get("ifname") == device, "Unexpected interface in address query")
     pairs = sorted((a.get("local"), a.get("prefixlen")) for a in info.get("addr_info", []))
     require(pairs == [(HOSTS[host], 24)] and "UP" in info.get("flags", []),
-            "Expected single host IPv4 /24 on UP ens160")
-    managed = run("nmcli", "-g", "GENERAL.NM-MANAGED", "device", "show", DEV)
-    state = run("nmcli", "-g", "GENERAL.STATE", "device", "show", DEV)
+            "Expected single host IPv4 /24 on UP " + device)
+    managed = run("nmcli", "-g", "GENERAL.NM-MANAGED", "device", "show", device)
+    state = run("nmcli", "-g", "GENERAL.STATE", "device", "show", device)
     require(managed == "yes" and state.startswith("100 "), "Interface not NM-managed/connected")
     active = run("nmcli", "-t", "-f", "UUID,DEVICE", "connection", "show", "--active")
-    matches = [line.split(":")[0] for line in active.splitlines() if line.endswith(":" + DEV)]
+    matches = [line.split(":")[0] for line in active.splitlines() if line.endswith(":" + device)]
     require(len(matches) == 1, "Ambiguous active profile")
     profile = str(uuid.UUID(matches[0]))
     props = {p: run("nmcli", "-g", p, "connection", "show", "uuid", profile) for p in PROPERTIES}
     require(props["connection.uuid"] == profile, "UUID mismatch")
-    require(props["connection.type"] == "802-3-ethernet" and props["connection.interface-name"] == DEV,
-            "Profile must explicitly bind ethernet ens160")
+    require(props["connection.type"] == "802-3-ethernet" and props["connection.interface-name"] == device,
+            "Profile must explicitly bind ethernet " + device)
     require(props["ipv4.method"] == "manual" and props["ipv4.addresses"] == HOSTS[host] + "/24",
             "Static profile identity mismatch")
     require(props["connection.autoconnect"] == "yes", "Profile does not autoconnect")
@@ -114,19 +117,23 @@ def collect(run, hostname=None):
         interface = run("nmcli", "-g", "connection.interface-name", "connection", "show", "uuid", identity)
         require(interface not in EMPTY or identity == profile, "Unbound ethernet profile is ambiguous")
         bindings[identity] = interface
-    require([key for key, value in bindings.items() if value == DEV] == [profile],
-            "Multiple profiles bind ens160")
+    require([key for key, value in bindings.items() if value == device] == [profile],
+            "Multiple profiles bind " + device)
     kernel = json.loads(run("ip", "-j", "-4", "route", "show", "table", "all"))
     rules = json.loads(run("ip", "-j", "-4", "rule", "show"))
     expected_rules = [(0, "all", "local"), (32766, "all", "main"), (32767, "all", "default")]
     require([(r.get("priority"), r.get("src"), r.get("table")) for r in rules] == expected_rules,
             "Non-default routing rules require review")
     persistent = parse_routes(run("nmcli", "-g", "ipv4.routes", "connection", "show", "uuid", profile))
-    return {"host": host, "ip": HOSTS[host], "device": DEV, "addresses": pairs,
+    return {"host": host, "ip": HOSTS[host], "device": device, "addresses": pairs,
             "profile": profile, "properties": props, "bindings": bindings,
             "kernel": sorted(kernel, key=canonical), "persistent": persistent, "rules": rules}
 
 def target_routes(state):
+    host = state.get("host")
+    require(host in HOSTS and state.get("ip") == HOSTS[host]
+            and state.get("device") == DEVICES[host], "Host/IP/device binding mismatch")
+    device = DEVICES[host]
     runtime, saved = [], []
     for route in state["kernel"]:
         dest = route.get("dst", "default")
@@ -136,7 +143,7 @@ def target_routes(state):
         if not net.overlaps(NETWORK):
             continue
         require(dest == DEST, "Overlapping runtime route requires review")
-        require(route.get("gateway") == VIA and route.get("dev") == DEV
+        require(route.get("gateway") == VIA and route.get("dev") == device
                 and route.get("table", "main") in ("main", 254)
                 and route.get("type", "unicast") == "unicast"
                 and not route.get("nexthops") and not route.get("flags")
@@ -170,7 +177,7 @@ def plan(state):
     if runtime and saved and "mt" in saved[0]:
         require(metric == int(saved[0]["mt"]), "Runtime/persistent metric mismatch")
     return {"schema": "fds.if16-route-plan.v1", "host": state["host"],
-            "before_sha256": digest(state), "metric": metric,
+            "device": state["device"], "before_sha256": digest(state), "metric": metric,
             "add_runtime": not runtime, "add_persistent": not saved,
             "ac": "ICR-AC-13", "reboot_persistence": "NOT_TESTED",
             "packet_source_preservation": "NOT_TESTED", "whole_ac_pass": False}
@@ -198,8 +205,8 @@ def expected_state(before, current, owned, metric):
             else:
                 require(new[0].get("table") == "254", "Owned persistent route table changed")
 
-def runtime_args(action, metric):
-    return ("ip", "-4", "route", action, DEST, "via", VIA, "dev", DEV,
+def runtime_args(action, metric, device):
+    return ("ip", "-4", "route", action, DEST, "via", VIA, "dev", device,
             "proto", "static", "metric", str(metric), "table", "main")
 
 def profile_args(action, profile, metric):
@@ -222,7 +229,7 @@ def apply(run, snapshot, write, probe):
             expected_state(before, snapshot(), owned, metric)
             record["events"].append({"intent": "add_" + kind})
             write(record)
-            argv = runtime_args("add", metric) if kind == "runtime" else profile_args("+", before["profile"], metric)
+            argv = runtime_args("add", metric, before["device"]) if kind == "runtime" else profile_args("+", before["profile"], metric)
             run(*argv)
             owned[kind] = True
             record["events"].append({"completed": "add_" + kind, "rc": 0})
@@ -231,7 +238,7 @@ def apply(run, snapshot, write, probe):
         current = snapshot()
         expected_state(before, current, owned, metric)
         route = probe()
-        require(len(route) == 1 and route[0].get("gateway") == VIA and route[0].get("dev") == DEV
+        require(len(route) == 1 and route[0].get("gateway") == VIA and route[0].get("dev") == before["device"]
                 and route[0].get("prefsrc", route[0].get("src")) == before["ip"], "Post route-get mismatch")
         record.update(status="APPLIED" if any(owned.values()) else "ALREADY_CORRECT",
                       after=current, route_get=route, mutation_confirmed=any(owned.values()),
@@ -257,7 +264,7 @@ def apply(run, snapshot, write, probe):
                     write(record)
                 except OSError:
                     record["journal_write_failed"] = True
-                argv = profile_args("-", before["profile"], metric) if kind == "persistent" else runtime_args("del", metric)
+                argv = profile_args("-", before["profile"], metric) if kind == "persistent" else runtime_args("del", metric, before["device"])
                 run(*argv)
                 owned[kind] = False
                 record["events"].append({"completed": "remove_own_" + kind, "rc": 0})
