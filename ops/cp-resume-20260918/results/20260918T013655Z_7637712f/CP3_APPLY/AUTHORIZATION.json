@@ -1,0 +1,50 @@
+{
+  "backup_verified": true,
+  "before_sha256": "cea2747dde1e2d8718ec3aaea74fac4de28f74f4f0bce09f24726f8e507337c8",
+  "console_recovery_available": true,
+  "cp1_canary_accepted": false,
+  "cp1_continuation_authorized": true,
+  "cp1_continuation_sha256": "22a7cc8a41a43eaf3bdd56a5833918c7a16d8417ce56913e0aa34785932002c8",
+  "cp1_receipt_input_sha256": "7fd8ccb787c6abb6a1e81def57c4cf22b6f4e00d0b752f73096b1d6bd70ecbf3",
+  "cp1_session_job": "c564ae97530dfe80",
+  "cp1_state_sha256": "69624e6f3802fdb97b33c0a7222267b61dc7a2af343722df45c3d81242b63154",
+  "cp2_result_sha256": "1e43af9bd0645e114a5b90e3194f480e01d15e2d6ed86e9f744f3a5ff6290cab",
+  "independent_acceptance": "PENDING",
+  "independent_reviewer": "hayeounglee",
+  "inspection_sha256": "add30f5a31619032811c6cf072d2297f421396426c2fafda01ee606cb709d9c4",
+  "join_authorized": false,
+  "maintenance_freeze": true,
+  "mode": "apply",
+  "operator": "GWONUK",
+  "operator_decided_at": "2026-09-18T01:08:34Z",
+  "operator_decision_url": "https://github.com/321Team/infra-kubernetes/pull/14#issuecomment-5723463564",
+  "phase": "runtime",
+  "plan_sha256": "7bdf19474c07c21013a803f0e7517216dcbd9dbf972935511d6ab992a5386bbb",
+  "policy_sha256": "7624989f489d983e44a9754d5c9baeeaa665ab80cfed9c8c189791b9578b5021",
+  "protection_reviewed": true,
+  "residual_metadata_sha256": "ba2efc211f70fef1c748d557416f8008fc9a8c60f0ca839ae25bd4e7443c3a38",
+  "review_decision": "APPROVED",
+  "review_scope": "SOURCE_AND_SESSION_DELEGATION",
+  "review_url": "https://github.com/321Team/infra-kubernetes/pull/14#issuecomment-5723302935",
+  "reviewed_at": "2026-09-18T00:48:11Z",
+  "rollback_runbook_reviewed": true,
+  "runtime_only_acknowledged": true,
+  "schema": "fds.node-firewall-authorization.v3",
+  "session_policy": "fds.cp-session-policy.v1",
+  "source_commit": "06286f31735a80982e50e5f94fd0e1f4a027eb8d",
+  "source_sha256": "ea3b15454120431f7b7120829068e846f8991e32d2cd2e06056f9a4ab7110cd2",
+  "target": "k8s-control03",
+  "target_state_validated": true,
+  "window_end": "2026-09-18T03:38:55.956291+00:00",
+  "window_start": "2026-09-18T01:38:55.956291+00:00",
+  "zone_controls": {
+    "permanent": {
+      "forward": "yes",
+      "masquerade": "no"
+    },
+    "runtime": {
+      "forward": "yes",
+      "masquerade": "no"
+    }
+  }
+}

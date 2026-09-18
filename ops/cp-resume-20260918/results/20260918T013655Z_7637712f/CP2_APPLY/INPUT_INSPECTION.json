@@ -1,0 +1,344 @@
+{
+  "before_sha256": "f7f8531742e11b6b131fec6e89cdf65b0c3f1952a89263884dc365f11fd042ea",
+  "cp1_state": {
+    "firewall": {
+      "active_policies": {
+        "active_output": "allow-host-ipv6\n  ingress-zones: ANY\n  egress-zones: HOST\nfds-cp1-egress\n  ingress-zones: fds-cp1-min\n  egress-zones: ANY\nfds-cp1-local\n  ingress-zones: fds-cp1-min\n  egress-zones: fds-cp1-min",
+        "configurations": {
+          "permanent": {
+            "allow-host-ipv6": "allow-host-ipv6\n  disable: no\n  priority: -15000\n  target: CONTINUE\n  ingress-zones: ANY\n  egress-zones: HOST\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv6\" icmp-type name=\"mld-listener-done\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-query\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld2-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-advertisement\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-solicitation\" accept\n\trule family=\"ipv6\" icmp-type name=\"redirect\" accept\n\trule family=\"ipv6\" icmp-type name=\"router-advertisement\" accept",
+            "gateway-dmz-to-HOST": "gateway-dmz-to-HOST\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: dmz\n  egress-zones: HOST\n  services: dhcp dns\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-lan-to-HOST": "gateway-lan-to-HOST\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: internal home trusted\n  egress-zones: HOST\n  services: dhcp dns ssh\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-lan-to-work": "gateway-lan-to-work\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: work\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-lan-to-world": "gateway-lan-to-world\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: external public\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-world-to-HOST": "gateway-world-to-HOST\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: external public\n  egress-zones: HOST\n  services: dhcpv6-client\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:"
+          },
+          "runtime": {
+            "allow-host-ipv6": "allow-host-ipv6 (active)\n  disable: no\n  priority: -15000\n  target: CONTINUE\n  ingress-zones: ANY\n  egress-zones: HOST\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv6\" icmp-type name=\"mld-listener-done\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-query\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld2-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-advertisement\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-solicitation\" accept\n\trule family=\"ipv6\" icmp-type name=\"redirect\" accept\n\trule family=\"ipv6\" icmp-type name=\"router-advertisement\" accept",
+            "fds-cp1-egress": "fds-cp1-egress (active)\n  disable: no\n  priority: -1\n  target: CONTINUE\n  ingress-zones: fds-cp1-min\n  egress-zones: ANY\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" destination ipset=\"fds-cp1-out4\" accept\n\trule family=\"ipv6\" destination ipset=\"fds-cp1-out6\" accept",
+            "fds-cp1-local": "fds-cp1-local (active)\n  disable: no\n  priority: -2\n  target: CONTINUE\n  ingress-zones: fds-cp1-min\n  egress-zones: fds-cp1-min\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" source address=\"10.244.246.64/26\" destination address=\"10.244.246.64/26\" accept",
+            "gateway-dmz-to-HOST": "gateway-dmz-to-HOST (disabled)\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: dmz\n  egress-zones: HOST\n  services: dhcp dns\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-lan-to-HOST": "gateway-lan-to-HOST (disabled)\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: internal home trusted\n  egress-zones: HOST\n  services: dhcp dns ssh\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-lan-to-work": "gateway-lan-to-work (disabled)\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: work\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-lan-to-world": "gateway-lan-to-world (disabled)\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: external public\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+            "gateway-world-to-HOST": "gateway-world-to-HOST (disabled)\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: external public\n  egress-zones: HOST\n  services: dhcpv6-client\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:"
+          }
+        }
+      },
+      "active_zone": "public",
+      "default_zone": "public",
+      "direct_permanent": "",
+      "direct_runtime": "",
+      "hostname": "k8s-control01",
+      "ip": "10.1.93.102",
+      "nm_uuid": "2403bbcc-41f3-4439-81f7-4a3b6a3f582e",
+      "nm_zone": "",
+      "planes": {
+        "permanent": {
+          "fields": {
+            "egress-priority": "0",
+            "forward": "yes",
+            "forward-ports": "",
+            "icmp-block-inversion": "no",
+            "icmp-blocks": "",
+            "ingress-priority": "0",
+            "interfaces": "",
+            "masquerade": "no",
+            "ports": "",
+            "protocols": "",
+            "services": "dhcpv6-client ssh",
+            "source-ports": "",
+            "sources": "",
+            "target": "default"
+          },
+          "rules": [
+            "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+          ]
+        },
+        "runtime": {
+          "fields": {
+            "egress-priority": "0",
+            "forward": "yes",
+            "forward-ports": "",
+            "icmp-block-inversion": "no",
+            "icmp-blocks": "",
+            "ingress-priority": "0",
+            "interfaces": "ens160",
+            "masquerade": "no",
+            "ports": "",
+            "protocols": "",
+            "services": "dhcpv6-client ssh",
+            "source-ports": "",
+            "sources": "",
+            "target": "default"
+          },
+          "rules": [
+            "rule family=ipv4 source address=10.1.93.102/32 port port=10250 protocol=tcp accept",
+            "rule family=ipv4 source address=10.1.93.102/32 port port=2379-2380 protocol=tcp accept",
+            "rule family=ipv4 source address=10.1.93.103/32 port port=10250 protocol=tcp accept",
+            "rule family=ipv4 source address=10.1.93.103/32 port port=2379-2380 protocol=tcp accept",
+            "rule family=ipv4 source address=10.1.93.104/32 port port=10250 protocol=tcp accept",
+            "rule family=ipv4 source address=10.1.93.104/32 port port=2379-2380 protocol=tcp accept",
+            "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+          ]
+        }
+      },
+      "selinux": "Enforcing"
+    },
+    "protection": {
+      "calico_nodes": [
+        {
+          "containers": [
+            {
+              "imageID": "quay.io/calico/node@sha256:c061070a27292f8152ae6a0582078eb9059d1b6ed5e57c2052e5c22534734240",
+              "name": "calico-node",
+              "ready": true,
+              "restartCount": 4
+            }
+          ],
+          "name": "calico-node-bqzx2",
+          "node": "k8s-control01",
+          "phase": "Running",
+          "uid": "68fc6cf1-5b8e-488c-87b1-49640827e4e0"
+        }
+      ],
+      "felix_configurations": [
+        {
+          "name": "default",
+          "spec": {
+            "bpfConnectTimeLoadBalancing": "TCP",
+            "bpfHostNetworkedNATWithoutCTLB": "Enabled",
+            "bpfLogLevel": "",
+            "floatingIPs": "Disabled",
+            "logSeverityScreen": "Info",
+            "nftablesMode": "Auto",
+            "reportingInterval": "0s"
+          },
+          "uid": "c4a70cfb-198d-47df-a666-1abc28c8476b"
+        }
+      ],
+      "global_network_policies": [],
+      "host_endpoints": [],
+      "ip_pools": [
+        {
+          "name": "default-ipv4-ippool",
+          "spec": {
+            "allowedUses": [
+              "Workload",
+              "Tunnel"
+            ],
+            "assignmentMode": "Automatic",
+            "blockSize": 26,
+            "cidr": "10.244.0.0/16",
+            "ipipMode": "Never",
+            "natOutgoing": true,
+            "nodeSelector": "all()",
+            "vxlanMode": "CrossSubnet"
+          },
+          "uid": "7b3dc8cf-e03a-4cb1-aff7-9db1d8810e85"
+        }
+      ]
+    }
+  },
+  "cp1_state_sha256": "69624e6f3802fdb97b33c0a7222267b61dc7a2af343722df45c3d81242b63154",
+  "created_at": "2026-09-18T01:37:03.330704+00:00",
+  "hostname": "k8s-control02",
+  "phase": "runtime",
+  "plan_sha256": "6db3ab87e21b438c3554829c86305fbfd20de033288ba670e340360394726138",
+  "policy_sha256": "7624989f489d983e44a9754d5c9baeeaa665ab80cfed9c8c189791b9578b5021",
+  "residual_metadata_sha256": "d6980ee8ce88a598adb3c1e96ffe6b8f0dfba935e9398378a3ce262b72aba4b8",
+  "schema": "fds.node-firewall-input.v2",
+  "snapshot": {
+    "active_policies": {
+      "active_output": "allow-host-ipv6\n  ingress-zones: ANY\n  egress-zones: HOST",
+      "configurations": {
+        "permanent": {
+          "allow-host-ipv6": "allow-host-ipv6\n  disable: no\n  priority: -15000\n  target: CONTINUE\n  ingress-zones: ANY\n  egress-zones: HOST\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv6\" icmp-type name=\"mld-listener-done\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-query\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld2-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-advertisement\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-solicitation\" accept\n\trule family=\"ipv6\" icmp-type name=\"redirect\" accept\n\trule family=\"ipv6\" icmp-type name=\"router-advertisement\" accept",
+          "gateway-dmz-to-HOST": "gateway-dmz-to-HOST\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: dmz\n  egress-zones: HOST\n  services: dhcp dns\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-lan-to-HOST": "gateway-lan-to-HOST\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: internal home trusted\n  egress-zones: HOST\n  services: dhcp dns ssh\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-lan-to-work": "gateway-lan-to-work\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: work\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-lan-to-world": "gateway-lan-to-world\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: external public\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-world-to-HOST": "gateway-world-to-HOST\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: external public\n  egress-zones: HOST\n  services: dhcpv6-client\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:"
+        },
+        "runtime": {
+          "allow-host-ipv6": "allow-host-ipv6 (active)\n  disable: no\n  priority: -15000\n  target: CONTINUE\n  ingress-zones: ANY\n  egress-zones: HOST\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv6\" icmp-type name=\"mld-listener-done\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-query\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"mld2-listener-report\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-advertisement\" accept\n\trule family=\"ipv6\" icmp-type name=\"neighbour-solicitation\" accept\n\trule family=\"ipv6\" icmp-type name=\"redirect\" accept\n\trule family=\"ipv6\" icmp-type name=\"router-advertisement\" accept",
+          "gateway-dmz-to-HOST": "gateway-dmz-to-HOST (disabled)\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: dmz\n  egress-zones: HOST\n  services: dhcp dns\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-lan-to-HOST": "gateway-lan-to-HOST (disabled)\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: internal home trusted\n  egress-zones: HOST\n  services: dhcp dns ssh\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-lan-to-work": "gateway-lan-to-work (disabled)\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: work\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-lan-to-world": "gateway-lan-to-world (disabled)\n  disable: yes\n  priority: 1000\n  target: ACCEPT\n  ingress-zones: internal home trusted\n  egress-zones: external public\n  services: ftp tftp\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+          "gateway-world-to-HOST": "gateway-world-to-HOST (disabled)\n  disable: yes\n  priority: 1000\n  target: CONTINUE\n  ingress-zones: external public\n  egress-zones: HOST\n  services: dhcpv6-client\n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:"
+        }
+      }
+    },
+    "active_zone": "public",
+    "active_zones": "public (default)\n  interfaces: ens160",
+    "default_zone": "public",
+    "direct_permanent": "",
+    "direct_runtime": "",
+    "hostname": "k8s-control02",
+    "ip": "10.1.93.103",
+    "nm_uuid": "8914aee6-bdb7-4d97-a0ae-0640143ff9c5",
+    "nm_zone": "",
+    "other_zones": {
+      "permanent": {
+        "block": "block\n  target: %%REJECT%%\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "dmz": "dmz\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "drop": "drop\n  target: DROP\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "external": "external\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: yes\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "home": "home\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: cockpit dhcpv6-client mdns samba-client ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "internal": "internal\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: cockpit dhcpv6-client mdns samba-client ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "nm-shared": "nm-shared\n  target: ACCEPT\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: dhcp dns ssh\n  ports: \n  protocols: icmp ipv6-icmp\n  forward: no\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule priority=\"32767\" reject",
+        "trusted": "trusted\n  target: ACCEPT\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "work": "work\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: cockpit dhcpv6-client ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:"
+      },
+      "runtime": {
+        "block": "block\n  target: %%REJECT%%\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "dmz": "dmz\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "drop": "drop\n  target: DROP\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "external": "external\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: yes\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "home": "home\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: cockpit dhcpv6-client mdns samba-client ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "internal": "internal\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: cockpit dhcpv6-client mdns samba-client ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "nm-shared": "nm-shared\n  target: ACCEPT\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: dhcp dns ssh\n  ports: \n  protocols: icmp ipv6-icmp\n  forward: no\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule priority=\"32767\" reject",
+        "trusted": "trusted\n  target: ACCEPT\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: \n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:",
+        "work": "work\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: cockpit dhcpv6-client ssh\n  ports: \n  protocols: \n  forward: yes\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules:"
+      }
+    },
+    "passthrough": {
+      "permanent": "",
+      "runtime": ""
+    },
+    "planes": {
+      "permanent": {
+        "fields": {
+          "egress-priority": "0",
+          "forward": "yes",
+          "forward-ports": "",
+          "icmp-block-inversion": "no",
+          "icmp-blocks": "",
+          "ingress-priority": "0",
+          "interfaces": "",
+          "masquerade": "no",
+          "ports": "",
+          "protocols": "",
+          "services": "dhcpv6-client ssh",
+          "source-ports": "",
+          "sources": "",
+          "target": "default"
+        },
+        "rules": [
+          "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+        ]
+      },
+      "runtime": {
+        "fields": {
+          "egress-priority": "0",
+          "forward": "yes",
+          "forward-ports": "",
+          "icmp-block-inversion": "no",
+          "icmp-blocks": "",
+          "ingress-priority": "0",
+          "interfaces": "ens160",
+          "masquerade": "no",
+          "ports": "",
+          "protocols": "",
+          "services": "dhcpv6-client ssh",
+          "source-ports": "",
+          "sources": "",
+          "target": "default"
+        },
+        "rules": [
+          "rule family=ipv4 source address=10.1.93.109/32 port port=6443 protocol=tcp accept"
+        ]
+      }
+    },
+    "residual_metadata": [
+      {
+        "exists": false,
+        "path": "/var/lib/kubelet/config.yaml"
+      },
+      {
+        "exists": false,
+        "path": "/var/lib/kubelet/kubeadm-flags.env"
+      },
+      {
+        "exists": false,
+        "path": "/etc/kubernetes/kubelet.conf"
+      },
+      {
+        "exists": false,
+        "path": "/etc/kubernetes/bootstrap-kubelet.conf"
+      },
+      {
+        "exists": false,
+        "path": "/var/lib/etcd"
+      },
+      {
+        "exists": false,
+        "path": "/var/lib/etcd/member"
+      },
+      {
+        "exists": false,
+        "path": "/etc/kubernetes/manifests/etcd.yaml"
+      },
+      {
+        "exists": true,
+        "mode": "0o100600",
+        "mtime_ns": 1788958352896031827,
+        "path": "/etc/kubernetes/manifests/kube-apiserver.yaml",
+        "size": 3659,
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "mode": "0o100600",
+        "mtime_ns": 1788958352897031813,
+        "path": "/etc/kubernetes/manifests/kube-controller-manager.yaml",
+        "size": 2939,
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "mode": "0o100600",
+        "mtime_ns": 1788958352898021473,
+        "path": "/etc/kubernetes/manifests/kube-scheduler.yaml",
+        "size": 1726,
+        "uid": 0
+      }
+    ],
+    "selinux": "Enforcing",
+    "services": {
+      "permanent": {
+        "dhcpv6-client": "dhcpv6-client\n  ports: 546/udp\n  protocols: \n  source-ports: \n  modules: \n  destination: ipv6:fe80::/64\n  includes: \n  helpers:",
+        "ssh": "ssh\n  ports: 22/tcp\n  protocols: \n  source-ports: \n  modules: \n  destination: \n  includes: \n  helpers:"
+      },
+      "runtime": {
+        "dhcpv6-client": "dhcpv6-client\n  ports: 546/udp\n  protocols: \n  source-ports: \n  modules: \n  destination: ipv6:fe80::/64\n  includes: \n  helpers:",
+        "ssh": "ssh\n  ports: 22/tcp\n  protocols: \n  source-ports: \n  modules: \n  destination: \n  includes: \n  helpers:"
+      }
+    }
+  },
+  "source_commit": "06286f31735a80982e50e5f94fd0e1f4a027eb8d",
+  "source_sha256": "ea3b15454120431f7b7120829068e846f8991e32d2cd2e06056f9a4ab7110cd2",
+  "topology": {
+    "members": [
+      {
+        "clientURLs": [
+          "https://10.1.93.102:2379"
+        ],
+        "id": "1755679419291778130",
+        "isLearner": false,
+        "name": "k8s-control01",
+        "peerURLs": [
+          "https://10.1.93.102:2380"
+        ]
+      }
+    ],
+    "nodes": [
+      [
+        "k8s-control01",
+        "75735bd5-937a-463f-a93f-a8e7e51fa7a1"
+      ]
+    ]
+  },
+  "topology_sha256": "b4eb4932d00f53396e2fd55e704eb4246ce6a3d4a963d1029472f16c43e0c4af"
+}

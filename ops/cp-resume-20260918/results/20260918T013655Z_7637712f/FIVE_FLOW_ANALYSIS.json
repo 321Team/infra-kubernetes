@@ -1,0 +1,25 @@
+{
+  "authorizes_cp2_change": false,
+  "authorizes_join": false,
+  "cp1_accepted": false,
+  "expected_flows": 5,
+  "firewall_after_sha256": "29ad8bd95338305bde1069c639ca1da966ef3fce17ab5a5c274bada753c8354b",
+  "firewall_changed_paths": [],
+  "flows": {
+    "a_dns": "PASS",
+    "a_to_b_pod": "PASS",
+    "a_to_service": "PASS",
+    "b_dns": "PASS",
+    "b_to_a_pod": "PASS"
+  },
+  "health_after_sha256": "999895f1a76a2815ba3b31fd320c058a4df6a50834e60000e294f6060acee3f1",
+  "health_changed_paths": [],
+  "issue_details": {},
+  "issues": [],
+  "legacy_receipt_after_matches": null,
+  "mode": "OFFLINE_EVIDENCE_REVIEW",
+  "passed_flows": 5,
+  "production_consumer_connected": false,
+  "schema": "fds.cp1-cni-trial-analysis.v1",
+  "status": "FIVE_FLOWS_REVIEW_REQUIRED"
+}

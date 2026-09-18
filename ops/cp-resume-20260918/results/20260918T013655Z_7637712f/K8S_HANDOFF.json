@@ -1,0 +1,19 @@
+{
+  "cp1_accepted": false,
+  "cp1_handoff_sha256": "c3cf97941c147146183b5c5342d98ada706611725f12a899f417d08f5bf51417",
+  "cp1_job": "c564ae97530dfe80",
+  "cross_node_packets": "NOT_TESTED",
+  "independent_acceptance": "PENDING",
+  "join_executed": false,
+  "join_readiness": "NOT_VERIFIED",
+  "nodes": {
+    "k8s-control02": "RUNTIME_APPLIED_REVIEW_REQUIRED",
+    "k8s-control03": "RUNTIME_APPLIED_REVIEW_REQUIRED"
+  },
+  "permanent_promotion": "NOT_EXECUTED",
+  "reboot_persistence": "NOT_TESTED",
+  "schema": "fds.cp-firewall-handoff.v1",
+  "session_decision_sha256": "22a7cc8a41a43eaf3bdd56a5833918c7a16d8417ce56913e0aa34785932002c8",
+  "source_commit": "06286f31735a80982e50e5f94fd0e1f4a027eb8d",
+  "valid_before": "2026-09-18T15:15:00+09:00"
+}

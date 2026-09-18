@@ -1,0 +1,32 @@
+{
+  "checks": {
+    "negative": {
+      "evidence_sha256": "28927d03e1d02d42c831f06a3d4eb30c5c20b6ae40e4685b19d51550d60a42d3",
+      "status": "PASS"
+    },
+    "positive": {
+      "evidence_sha256": "108bdfa62ad2fb27de7fcf2a2667d68d16f0fa97fc42406c635bf403370efebd",
+      "status": "PASS"
+    },
+    "regression": {
+      "evidence_sha256": "65f7f519fcb28e6898b4cfc807f6ada54f27c974dab783924a75642a65ca1a75",
+      "status": "PASS"
+    }
+  },
+  "cp1_accepted": false,
+  "decided_at": "2026-09-18T01:11:37.994967+00:00",
+  "decision": "CONTINUE_UNDER_DELEGATION",
+  "expires_at": "2026-09-18T15:15:00+09:00",
+  "handoff_sha256": "c3cf97941c147146183b5c5342d98ada706611725f12a899f417d08f5bf51417",
+  "independent_acceptance": "PENDING",
+  "job_id": "c564ae97530dfe80",
+  "join_authorized": false,
+  "operator": "GWONUK",
+  "operator_decision_url": "https://github.com/321Team/infra-kubernetes/pull/14#issuecomment-5723463564",
+  "schema": "fds.cp-session-continuation.v1",
+  "source_bundle_sha256": "d229b8ba40716ffb4baeacf9ea80a009dc28c8155a9d38f4f84961fa4da28a41",
+  "targets": [
+    "k8s-control02",
+    "k8s-control03"
+  ]
+}

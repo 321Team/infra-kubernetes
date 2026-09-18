@@ -1,0 +1,22 @@
+{
+  "cp1_accepted": false,
+  "ended_at": "2026-09-18T01:40:26.711297+00:00",
+  "hostname": "k8s-control03",
+  "independent_acceptance": "PENDING",
+  "mode": "apply",
+  "permanent_applied": "not_attempted",
+  "phase": "runtime",
+  "policy_sha256": "7624989f489d983e44a9754d5c9baeeaa665ab80cfed9c8c189791b9578b5021",
+  "preflight": {
+    "controller_source_ip": "10.250.10.10",
+    "inventory_commit": "5cbf3b657014b32a20cb5816d90d3ea5fe4951ab",
+    "remote_user": "svc_ansible",
+    "ssh_key_fingerprint": "SHA256:VPGV/RGA8TrwO/3FC4YPxGzRNhBWuB+9hCzPV5plkws"
+  },
+  "run_id": "20260918T013856Z-c4f2fac548fb",
+  "runtime_applied": "applied",
+  "schema": "fds.node-firewall-controller.v2",
+  "source_commit": "06286f31735a80982e50e5f94fd0e1f4a027eb8d",
+  "started_at": "2026-09-18T01:38:56.011054+00:00",
+  "status": "RUNTIME_APPLIED_REVIEW_REQUIRED"
+}

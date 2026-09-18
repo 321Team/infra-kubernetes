@@ -1,0 +1,11 @@
+{
+  "controller_source_commit": "06286f31735a80982e50e5f94fd0e1f4a027eb8d",
+  "cp1_source_bundle_sha256": "d229b8ba40716ffb4baeacf9ea80a009dc28c8155a9d38f4f84961fa4da28a41",
+  "entry_code_covered_by_controller_source_review": false,
+  "entry_sha256": "dc5f55bf5284860ba218e78e95fb0103cd2d0f834e72060c9aafa6d6d8502165",
+  "job_id": "c564ae97530dfe80",
+  "original_cp1_source_commit": "cfae027fad62a36ee228da3217011fa0787c7486",
+  "prior_evidence_sha256": "7b0799cf8117a10371204e8265db8dc31e9bf325bb984f4dac1080d510ec3aed",
+  "resume_package_manifest_sha256": "5b43d898e140d4708c818c31360467d6ffb24b8e200825f6f3a37af6eca63097",
+  "schema": "fds.cp-resume-entry.v1"
+}
