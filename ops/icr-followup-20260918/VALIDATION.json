@@ -1,0 +1,27 @@
+{
+  "schema": "fds.icr-next-validation.v1",
+  "runner_sha256": "0660b90a364e14461ee551b919d05aefac5e9acf24c9e23aef2bc9a8e066db42",
+  "ac_definition_comparison": "20/20 identical v18-v19",
+  "tests": {
+    "command": "python3 -m unittest -v test_icr_next.py",
+    "passed": 9,
+    "failed": 0,
+    "environment": "LOCAL_STATIC_MOCK",
+    "cases": [
+      "exact six identities and Ready; duplicates/role/IP mismatch reject",
+      "three CP does not imply six nodes",
+      "identity/auth failures remain unknown",
+      "host mismatch stops node queries",
+      "unsafe kubeconfig prevents API requests",
+      "TLS flags enforced; anonymous identity rejected",
+      "error output cannot disclose secret strings",
+      "absent optional Calico namespace handled without false 404 failure",
+      "one node unavailable does not skip remaining nodes; complete checksums retained"
+    ]
+  },
+  "default_plan": "PASS; no remote requests",
+  "cross_review": "No critical issue found by a separate code review; not independent operational acceptance",
+  "live_collection_executed": false,
+  "worker_join_executed": false,
+  "icr_full_acceptance": false
+}

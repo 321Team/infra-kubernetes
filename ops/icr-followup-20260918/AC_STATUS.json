@@ -1,0 +1,139 @@
+{
+  "schema": "fds.icr-ac-review.v1",
+  "reviewed_at": "2026-09-18T03:52:00+00:00",
+  "baseline_tag": "docs-v3.1.19",
+  "baseline_commit": "966fc5365874b1d259a9810fc876b57c3bfa0e08",
+  "ac_conditions_unchanged_from_v18": true,
+  "complete": 0,
+  "total": 20,
+  "partial": 5,
+  "not_verified": 13,
+  "blocked": 1,
+  "last_observed_fail": 1,
+  "cp_implementation": "THREE_CP_READY_RUNTIME_RETAINED_REVIEW_REQUIRED",
+  "latest_runtime_job": "16219c68779b3d13",
+  "evidence_url": "https://github.com/321Team/infra-kubernetes/blob/5e9e09e7a1820c230bb5724ce05897c7689ef065/ops/cp-join-20260918/results/20260918T033022Z_16219c68779b3d13/README.md",
+  "server_commands_in_this_review": false,
+  "rows": [
+    {
+      "id": "ICR-AC-01",
+      "condition": "6개 Node 변경 전 firewall/listener/route 설정과 SHA Evidence를 확보한다.",
+      "status": "PARTIAL",
+      "assessment": "기존 6대 방화벽·리스너와 Worker 3대 route 증거 재사용. 확인한 CP2/3 resume·Join 증적에는 route 수집이 없어 최초 변경 전 CP route 원본 연결이 남음. 새 조회를 과거 증거로 대체하지 않음."
+    },
+    {
+      "id": "ICR-AC-02",
+      "condition": "firewalld가 disabled/inactive이고 Calico Pod/Node 통신이 정상이다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "CP1 최신 5/5 흐름 및 HOST/외부 회귀 PASS, CP2/3 Runtime·Join 성공. firewalld는 유지 중이며 6대 최종 HEP/GNP 전환과 전체 Calico 통신 인수는 미완료. 과거 3/5 실패를 현재 결과로 사용하지 않음."
+    },
+    {
+      "id": "ICR-AC-03",
+      "condition": "named HEP/`expectedIPs`/Bootstrap Allow가 승인안과 일치한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "named HEP/expectedIPs/Bootstrap Allow 최종 적용·보호 인계 미실시. 6/6 Ready 후의 기존 실행 조건 유지."
+    },
+    {
+      "id": "ICR-AC-04",
+      "condition": "`.50 → Worker:30080`은 허용되고 비승인 Source는 차단된다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "승인 Source .50의 30080 허용 및 비승인 Source 차단 증거 필요."
+    },
+    {
+      "id": "ICR-AC-05",
+      "condition": "Prometheus에서 Worker node-exporter 9100 Target이 `UP`이다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "Prometheus에서 Worker 3대 node-exporter Target UP 증거 필요."
+    },
+    {
+      "id": "ICR-AC-06",
+      "condition": "Prometheus에서 Worker kubelet 10250을 CA+SA로 인증한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "Prometheus의 CA+SA 인증과 Worker 3대 kubelet 접근 증거 필요."
+    },
+    {
+      "id": "ICR-AC-07",
+      "condition": "비승인 Workload의 9100/10250 접근이 차단된다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "비승인 Workload의 9100/10250 차단 시험 필요."
+    },
+    {
+      "id": "ICR-AC-08",
+      "condition": "Control Plane의 logs/exec/port-forward가 정상이다.",
+      "status": "PARTIAL",
+      "assessment": "기존 CP1 logs/exec/port-forward 성공 증거 재사용. 이번 API Ready·etcd health는 전체 CP의 해당 기능 회귀를 대체하지 않음."
+    },
+    {
+      "id": "ICR-AC-09",
+      "condition": "Worker에서 Harbor `.54:443` Pull과 Pod 시작이 성공한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "Worker 3대 Harbor Pull과 실제 Pod 시작 증거 필요."
+    },
+    {
+      "id": "ICR-AC-10",
+      "condition": "Cockpit 9090이 노출되지 않는다.",
+      "status": "PARTIAL",
+      "assessment": "기존 Worker 3대 Cockpit masked/inactive·9090 listener 부재 재사용. 전체 범위 비노출 인수와 잔여 허용 정리 미완료."
+    },
+    {
+      "id": "ICR-AC-11",
+      "condition": "monitor01에서 Cluster Workload로 신규 Ingress를 시작할 수 없다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "monitor01의 Cluster Workload 신규 Ingress 차단 증거 필요."
+    },
+    {
+      "id": "ICR-AC-12",
+      "condition": "IF-06B Remote Write의 TLS/Auth/Payload Allowlist가 충족되고 비승인 Egress가 차단된다.",
+      "status": "BLOCKED",
+      "assessment": "IF-06B Receiver/TLS/Auth/Payload Allowlist·비승인 Egress 및 실제 Source/Return Path 인수 미완료."
+    },
+    {
+      "id": "ICR-AC-13",
+      "condition": "edge/harbor/db에 `10.250.10.0/24 via .58`가 적용되고 `.30` route-get이 통과한다.",
+      "status": "FAIL_LAST_OBSERVED_DRIFT",
+      "assessment": "마지막 확인은 edge/harbor/db route DRIFT. 신규 시정 증거가 없어 해소로 올리지 않음. 현시각 서버를 재조회한 결과는 아님."
+    },
+    {
+      "id": "ICR-AC-14",
+      "condition": "Worker 3대에서 동일 경로 조회 회귀가 통과한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "기존 Worker route 수집은 재사용하고, 실제 관련 경로 변경 후의 회귀 증거만 추가."
+    },
+    {
+      "id": "ICR-AC-15",
+      "condition": "mgmt-gw IP Forward/Zone/Policy/NAT가 승인안과 일치하고 내부 SNAT가 없다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "mgmt-gw Forward/Zone/Policy/NAT와 내부 Source 보존 인수 필요."
+    },
+    {
+      "id": "ICR-AC-16",
+      "condition": "monitor01 `.30:443` Receiver/Protocol/TLS/Auth가 정본과 일치한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "monitor01 Receiver/Protocol/TLS/Auth 실제 구성 및 인수 필요."
+    },
+    {
+      "id": "ICR-AC-17",
+      "condition": "패킷 관찰의 실제 Source와 양방향 Return Path가 정본과 일치한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "실제 허용 흐름의 패킷 Source와 양방향 반환 경로 확인 필요."
+    },
+    {
+      "id": "ICR-AC-18",
+      "condition": "Reboot 후 정책이 유지되고 재시험이 통과한다.",
+      "status": "NOT_VERIFIED",
+      "assessment": "최종 보호·경로 정책의 Reboot 지속성 미검증. 현재 CP Runtime 유지나 백업 준비 중 재기동은 대체 증거가 아님."
+    },
+    {
+      "id": "ICR-AC-19",
+      "condition": "Rollback을 재현할 수 있다.",
+      "status": "PARTIAL",
+      "assessment": "기존 CP1 실제 Runtime rollback·baseline 복구 증거 재사용. 최신 Join은 성공하여 rollback 호출 없음. 전체 ICR 변경의 복구 재현성은 남음. 90분 제한은 이 AC의 요구가 아님."
+    },
+    {
+      "id": "ICR-AC-20",
+      "condition": "Evidence에 평문 비밀정보가 없다.",
+      "status": "PARTIAL",
+      "assessment": "기존 마스킹 보완과 제출본별 검증 재사용. 최신 Join archive 외부 SHA·내부15/15·승인 실행 소스 일치 및 공유본 비밀정보 검사 완료. 전체 최종 Evidence 종결은 미완료."
+    }
+  ]
+}
