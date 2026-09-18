@@ -1,0 +1,209 @@
+{
+  "directories": {
+    "/etc/cni/net.d": {
+      "metadata": {
+        "available": true,
+        "bytes": 57,
+        "exists": true,
+        "mode": "0o755",
+        "type": "directory",
+        "uid": 0
+      },
+      "names": [
+        "10-calico.conflist",
+        "calico-kubeconfig"
+      ],
+      "truncated": false
+    },
+    "/etc/kubernetes/manifests": {
+      "metadata": {
+        "available": true,
+        "bytes": 6,
+        "exists": true,
+        "mode": "0o755",
+        "type": "directory",
+        "uid": 0
+      },
+      "names": [],
+      "truncated": false
+    }
+  },
+  "ended_at": "2026-09-18T06:56:16.243918+00:00",
+  "expected_node": "k8s-worker03",
+  "files": {
+    "/etc/kubernetes/bootstrap-kubelet.conf": {
+      "available": true,
+      "exists": false
+    },
+    "/etc/kubernetes/kubelet.conf": {
+      "available": true,
+      "bytes": 1944,
+      "exists": true,
+      "mode": "0o600",
+      "type": "file",
+      "uid": 0
+    },
+    "/etc/kubernetes/pki/apiserver.crt": {
+      "available": true,
+      "exists": false
+    },
+    "/etc/kubernetes/pki/ca.crt": {
+      "available": true,
+      "bytes": 1107,
+      "exists": true,
+      "mode": "0o644",
+      "type": "file",
+      "uid": 0
+    },
+    "/var/lib/kubelet/config.yaml": {
+      "available": true,
+      "bytes": 1118,
+      "exists": true,
+      "mode": "0o644",
+      "type": "file",
+      "uid": 0
+    },
+    "/var/lib/kubelet/kubeadm-flags.env": {
+      "available": true,
+      "bytes": 24,
+      "exists": true,
+      "mode": "0o644",
+      "type": "file",
+      "uid": 0
+    }
+  },
+  "hostname": "k8s-worker03",
+  "identity_verified": true,
+  "mutation_attempted": false,
+  "queries": {
+    "identity_ipv4": {
+      "argv": [
+        "ip",
+        "-j",
+        "-4",
+        "address",
+        "show"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.180229+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.178882+00:00"
+    },
+    "route_to_lb": {
+      "argv": [
+        "ip",
+        "-j",
+        "-4",
+        "route",
+        "get",
+        "10.1.93.109"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.181275+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.180238+00:00"
+    },
+    "route_to_monitor01": {
+      "argv": [
+        "ip",
+        "-j",
+        "-4",
+        "route",
+        "get",
+        "10.250.10.30"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.182299+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.181282+00:00"
+    },
+    "service_containerd": {
+      "argv": [
+        "systemctl",
+        "show",
+        "containerd.service",
+        "--property=LoadState,ActiveState,SubState"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.243662+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.238901+00:00"
+    },
+    "service_kubelet": {
+      "argv": [
+        "systemctl",
+        "show",
+        "kubelet.service",
+        "--property=LoadState,ActiveState,SubState"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.238887+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.233220+00:00"
+    },
+    "version_containerd": {
+      "argv": [
+        "containerd",
+        "--version"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.233198+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.223114+00:00"
+    },
+    "version_kubeadm": {
+      "argv": [
+        "kubeadm",
+        "version",
+        "-o",
+        "short"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.196357+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.182307+00:00"
+    },
+    "version_kubelet": {
+      "argv": [
+        "kubelet",
+        "--version"
+      ],
+      "available": true,
+      "ended_at": "2026-09-18T06:56:16.223091+00:00",
+      "rc": 0,
+      "started_at": "2026-09-18T06:56:16.196503+00:00"
+    }
+  },
+  "route_to_lb": {
+    "device": "ens160",
+    "expected_source": true,
+    "source": "10.1.93.108"
+  },
+  "route_to_monitor01": {
+    "available": true,
+    "device": "ens160",
+    "gateway": "10.1.93.58",
+    "source": "10.1.93.108",
+    "via_10_1_93_58": true
+  },
+  "schema": "fds.icr-next-node.v1",
+  "services": {
+    "containerd": {
+      "ActiveState": "active",
+      "LoadState": "loaded",
+      "SubState": "running"
+    },
+    "kubelet": {
+      "ActiveState": "active",
+      "LoadState": "loaded",
+      "SubState": "running"
+    }
+  },
+  "started_at": "2026-09-18T06:56:16.178875+00:00",
+  "status": "COLLECTED",
+  "versions": {
+    "containerd": "v2.3.5",
+    "kubeadm": "v1.36.4",
+    "kubelet": "v1.36.4"
+  }
+}

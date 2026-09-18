@@ -1,6 +1,8 @@
+> 최신: [2026-09-18 15:56 KST 실측](results/20260918T065614Z_zzi65aal/README.md)에서 **3CP+3Worker 6/6 Ready** 확인. 같은 조회·Worker Join 반복은 필요 없습니다. LB backend3/3·failover는 이번 수집 범위 밖입니다. 아래 13:04 기록은 이전 이력입니다.
+
 > 2026-09-18 13:04 KST 현장 조회 완료. [검증 결과](results/20260918T040403Z_zgby6ckp/README.md)가 후속 입력이며 같은 상태의 반복 수집은 필요 없습니다.
 
-> 후속 역할은 [담당 분리·Worker 인계](WORKER_HANDOFF.md)를 따릅니다. Worker Join·K8S 검증은 #10 오너 이하영님의 기존 절차로 진행하고, 이권욱은 ICR 방화벽·경로 및 LB를 담당합니다. 우리 측 별도 Worker Join 실행기 개발은 중단했으며 담당자의 실행 선행조건이 아닙니다.
+> 후속 역할은 [담당 분리·Worker 인계](WORKER_HANDOFF.md)를 따릅니다. Worker 가입은 6/6 Ready로 확인됐으며 남은 K8S·SEC 검증은 #10·#19 오너 이하영님의 기존 절차로 진행하고, 이권욱은 ICR 방화벽·경로 및 LB를 담당합니다. 우리 측 별도 Worker Join 실행기 개발은 중단했으며 담당자의 실행 선행조건이 아닙니다.
 
 # ICR 다음 단계 현재 상태 확인
 

@@ -1,6 +1,12 @@
 # ICR AC 대조 및 3CP 이후 실행 인계 — 2026-09-18
 
-검토 기준: 2026-09-18 13:04 KST 추가 현장 수집본과 GitHub 기록 대조. 검토자는 제출 증적을 검증했으며 별도 서버 재시험을 실행하지 않았다.
+검토 기준: 2026-09-18 15:56 KST 추가 현장 수집본과 GitHub 기록 대조. 검토자는 제출 증적을 검증했으며 별도 서버 재시험을 실행하지 않았다.
+
+## 최신 6노드 상태 — 15:56 KST
+
+[새 결과](results/20260918T065614Z_zzi65aal/README.md): 3CP+3Worker 6/6 Ready, Calico-node6개+controller1개 Ready, Worker3 kubelet/containerd running, CP1→LB 인증 Node GET 성공. 기존 CP UID 유지·Worker route via.58 유지. Worker 미가입 상태는 해소됐으며 가입을 반복하지 않는다. 6/6 선행 상태 확보와 HEP/firewalld 전환·CNI 실제 통신·ICR 최종 인수는 구분한다. 13:04 미가입 상태는 당시 이력이며 현재 후속은 K8S 검증/공동 보호 전환 준비와 우리 LB·경로 작업이다. AC 충족 수는 **1/20 유지**다.
+
+코드 외 현재 업무 결과·최종 인수 판단은 중앙 권한 정책에 따라 해당 Lead가 수행하며, 증적 저장소 PR 독립 검토와 과거 실행 계약의 기록은 별도로 보존한다.
 
 ## 적용 기준과 실제 완료
 
@@ -18,30 +24,30 @@
 
 ## AC별 판정
 
-현재 증거로 조건 충족을 확인한 AC는 1/20(AC-14 Runtime PASS)이며 PARTIAL 5, NOT_VERIFIED 12, BLOCKED 1, 마지막 확인 FAIL/DRIFT 1이다. 전체 독립 인수 완료를 뜻하지 않는다. 이는 ICR 최종 인수조건의 수이며 구축 공수나 3CP 구현 진행률이 아니다. 이번 3CP 성공을 완료 실적으로 따로 기록한다.
+현재 증거로 조건 충족을 확인한 AC는 1/20(AC-14 Runtime PASS)이며 PARTIAL 5, NOT_VERIFIED 12, BLOCKED 1, 마지막 확인 FAIL/DRIFT 1이다. 전체 ICR 최종 인수 완료를 뜻하지 않는다. 이는 ICR 최종 인수조건의 수이며 구축 공수나 3CP 구현 진행률이 아니다. 3CP Join 성공과 6/6 Ready 확보를 완료 실적으로 따로 기록한다.
 
 | AC | 정본 조건 | 현재 판정·남은 증거 |
 |---|---|---|
 | ICR-AC-01 | 6개 Node 변경 전 firewall/listener/route 설정과 SHA Evidence를 확보한다. | **PARTIAL** — 기존 6대 방화벽·리스너와 Worker 3대 route 증거 재사용. 확인한 CP2/3 resume·Join 증적에는 route 수집이 없어 최초 변경 전 CP route 원본 연결이 남음. 새 조회를 과거 증거로 대체하지 않음. |
-| ICR-AC-02 | firewalld가 disabled/inactive이고 Calico Pod/Node 통신이 정상이다. | **NOT_VERIFIED** — CP1 최신 5/5 흐름 및 HOST/외부 회귀 PASS, CP2/3 Runtime·Join 성공. firewalld는 유지 중이며 6대 최종 HEP/GNP 전환과 전체 Calico 통신 인수는 미완료. 과거 3/5 실패를 현재 결과로 사용하지 않음. |
-| ICR-AC-03 | named HEP/`expectedIPs`/Bootstrap Allow가 승인안과 일치한다. | **NOT_VERIFIED** — named HEP/expectedIPs/Bootstrap Allow 최종 적용·보호 인계 미실시. 6/6 Ready 후의 기존 실행 조건 유지. |
+| ICR-AC-02 | firewalld가 disabled/inactive이고 Calico Pod/Node 통신이 정상이다. | **NOT_VERIFIED** — 15:56 6/6 Node Ready와 Calico-node6+controller1 Ready 확인. 이번 수집은 firewalld disabled/inactive·HEP/GNP 전환·실제 Pod/Node 통신을 조회하지 않아 조건 충족 미확인. |
+| ICR-AC-03 | named HEP/`expectedIPs`/Bootstrap Allow가 승인안과 일치한다. | **NOT_VERIFIED** — 15:56 6/6 Ready 선행 상태 확보. named HEP/expectedIPs/Bootstrap Allow 실제 적용·보호 전환은 이번 수집에 없어 미확인. |
 | ICR-AC-04 | `.50 → Worker:30080`은 허용되고 비승인 Source는 차단된다. | **NOT_VERIFIED** — 승인 Source .50의 30080 허용 및 비승인 Source 차단 증거 필요. |
 | ICR-AC-05 | Prometheus에서 Worker node-exporter 9100 Target이 `UP`이다. | **NOT_VERIFIED** — Prometheus에서 Worker 3대 node-exporter Target UP 증거 필요. |
 | ICR-AC-06 | Prometheus에서 Worker kubelet 10250을 CA+SA로 인증한다. | **NOT_VERIFIED** — Prometheus의 CA+SA 인증과 Worker 3대 kubelet 접근 증거 필요. |
 | ICR-AC-07 | 비승인 Workload의 9100/10250 접근이 차단된다. | **NOT_VERIFIED** — 비승인 Workload의 9100/10250 차단 시험 필요. |
-| ICR-AC-08 | Control Plane의 logs/exec/port-forward가 정상이다. | **PARTIAL** — 기존 CP1 logs/exec/port-forward 성공 증거 재사용. 이번 API Ready·etcd health는 전체 CP의 해당 기능 회귀를 대체하지 않음. |
+| ICR-AC-08 | Control Plane의 logs/exec/port-forward가 정상이다. | **PARTIAL** — 기존 CP1 logs/exec/port-forward 성공 증거 재사용. 기존 12:33 API Ready·etcd health와 15:56 Node Ready는 전체 CP의 해당 기능 회귀를 대체하지 않음. |
 | ICR-AC-09 | Worker에서 Harbor `.54:443` Pull과 Pod 시작이 성공한다. | **NOT_VERIFIED** — Worker 3대 Harbor Pull과 실제 Pod 시작 증거 필요. |
 | ICR-AC-10 | Cockpit 9090이 노출되지 않는다. | **PARTIAL** — 기존 Worker 3대 Cockpit masked/inactive·9090 listener 부재 재사용. 전체 범위 비노출 인수와 잔여 허용 정리 미완료. |
 | ICR-AC-11 | monitor01에서 Cluster Workload로 신규 Ingress를 시작할 수 없다. | **NOT_VERIFIED** — monitor01의 Cluster Workload 신규 Ingress 차단 증거 필요. |
 | ICR-AC-12 | IF-06B Remote Write의 TLS/Auth/Payload Allowlist가 충족되고 비승인 Egress가 차단된다. | **BLOCKED** — IF-06B Receiver/TLS/Auth/Payload Allowlist·비승인 Egress 및 실제 Source/Return Path 인수 미완료. |
 | ICR-AC-13 | edge/harbor/db에 `10.250.10.0/24 via .58`가 적용되고 `.30` route-get이 통과한다. | **FAIL_LAST_OBSERVED_DRIFT** — 마지막 확인은 edge/harbor/db route DRIFT. 신규 시정 증거가 없어 해소로 올리지 않음. 현시각 서버를 재조회한 결과는 아님. |
-| ICR-AC-14 | Worker 3대에서 동일 경로 조회 회귀가 통과한다. | **RUNTIME_PASS** — 2026-09-18 13:04 KST Worker01/02/03에서 monitor01(.30) route-get rc0, source .105/.107/.108 및 gateway .58 일치. AC 원문 범위 충족. 최종 보호 전환 후에만 인정한다는 추가 조건을 제거. 이후 관련 변경의 회귀와 전체 독립 인수는 별도. |
+| ICR-AC-14 | Worker 3대에서 동일 경로 조회 회귀가 통과한다. | **RUNTIME_PASS** — 13:04 및 15:56 KST Worker3의 monitor01(.30) route-get rc0/source .105/.107/.108/gateway .58 일치. Runtime PASS 유지. 다른 AC 및 전체 인수로 확대하지 않음. |
 | ICR-AC-15 | mgmt-gw IP Forward/Zone/Policy/NAT가 승인안과 일치하고 내부 SNAT가 없다. | **NOT_VERIFIED** — mgmt-gw Forward/Zone/Policy/NAT와 내부 Source 보존 인수 필요. |
 | ICR-AC-16 | monitor01 `.30:443` Receiver/Protocol/TLS/Auth가 정본과 일치한다. | **NOT_VERIFIED** — monitor01 Receiver/Protocol/TLS/Auth 실제 구성 및 인수 필요. |
 | ICR-AC-17 | 패킷 관찰의 실제 Source와 양방향 Return Path가 정본과 일치한다. | **NOT_VERIFIED** — 실제 허용 흐름의 패킷 Source와 양방향 반환 경로 확인 필요. |
 | ICR-AC-18 | Reboot 후 정책이 유지되고 재시험이 통과한다. | **NOT_VERIFIED** — 최종 보호·경로 정책의 Reboot 지속성 미검증. 현재 CP Runtime 유지나 백업 준비 중 재기동은 대체 증거가 아님. |
 | ICR-AC-19 | Rollback을 재현할 수 있다. | **PARTIAL** — 기존 CP1 실제 Runtime rollback·baseline 복구 증거 재사용. 최신 Join은 성공하여 rollback 호출 없음. 전체 ICR 변경의 복구 재현성은 남음. 90분 제한은 이 AC의 요구가 아님. |
-| ICR-AC-20 | Evidence에 평문 비밀정보가 없다. | **PARTIAL** — 기존 마스킹 보완과 제출본별 검증 재사용. 최신 Join archive 외부 SHA·내부15/15·승인 실행 소스 일치 및 공유본 비밀정보 검사 완료. 전체 최종 Evidence 종결은 미완료. |
+| ICR-AC-20 | Evidence에 평문 비밀정보가 없다. | **PARTIAL** — 기존 마스킹 보완과 제출본별 검증 재사용. 12:33 Join archive 외부 SHA·내부15/15·승인 소스 일치, 15:56 수집 archive 외부 SHA·내부6/6·배포 수집기 일치와 공유 JSON의 private-key/JWT 형태 검사 완료. 전체 최종 Evidence 종결은 미완료. |
 
 AC-01의 미확인 과거 route 원본은 이미 제출한 자료에서 연결할 항목이다. CP2/3 resume 및 최신 Join BEFORE를 확인했으나 route 자료는 없었다. 모든 기존 저장소 자료에 원본이 없다고 단정하지 않으며, 현재 route 조회를 최초 변경 전 자료로 소급하지 않는다.
 
@@ -58,13 +64,13 @@ AC-01의 미확인 과거 route 원본은 이미 제출한 자료에서 연결�
 
 | 작업 묶음 | 담당·진입 조건 | 실행과 종료 판단 |
 |---|---|---|
-| Worker 후속 | K8S #10 이하영. 3CP 완료·13:04 상태 증거 재사용 | 기존 K8S 절차로 필요한 preflight→Worker 3대 Join→6/6·Calico·Pod/Service 검증→임시 인증정보 회수. 이권욱은 확인된 호스트 통신 차단만 보완. 별도 우리 측 Worker 실행기 개발·승인은 선행조건이 아님 |
+| K8S 가입 후 검증 | K8S #10 이하영. 15:56 6/6·Calico Ready 증거 재사용 | 기존 Join·임시 인증정보 회수 기록 연결, 남은 CoreDNS·Pod/Service·스토리지 검증. Worker 재가입·같은 상태 재수집 없음. 이권욱은 확인된 호스트 통신 차단만 보완 |
 | LB 후속 | LB #9 이권욱. Worker 작업과 병행 | 기존 CP1→LB TLS 인증·Node GET 증거 재사용. backend 3/3·장애복구는 LB 기존 Stage B 절차로 인수 |
 | ICR 경로 후속 | ICR #14, Worker 작업과 병행 | IF-16 edge/harbor/db route DRIFT의 현재 구성·소유자·변경 범위를 연결하여 시정. IF-06B Receiver/TLS/Auth/Source 입력을 Monitoring 담당과 연결 |
 | 최종 보호 전환·통신 시험 | [기존 Lead 결정](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5697547621)의 3CP+3Worker Ready / 6/6 이후 | 이하영은 Calico/SEC manifest 적용, 이권욱은 호스트 firewalld·관리 경로 전환을 담당하는 공동 작업창 한 번으로 진행. 적용 순서·허용/거부·실패 시 회수 기준을 함께 맞추고 공통 증거 재사용 |
-| ICR 종결 | 해당 변경 증거가 모인 뒤 | 최종 지속성·복구·비밀정보 검사·Evidence Index를 남은 범위에만 보완하고 통합 독립 인수 및 Lead 최종 판정 |
+| ICR 종결 | 해당 변경 증거가 모인 뒤 | 최종 지속성·복구·비밀정보 검사·Evidence Index를 남은 범위에만 보완하고 담당 Lead가 최종 판정. 증적 저장소 PR의 독립 리뷰는 별도 유지 |
 
-현재 PR #7 HEP/GNP/SEC 보완과 NTP upstream 입력은 각 기존 검토 범위로 남긴다. 이를 Worker 준비의 새 선행조건으로 추가하지 않는다. 구 Worker 실행기는 과거 CP1 receipt/인수 계약을 사용하므로 현재 Runtime에 그대로 재실행하지 않는다.
+현재 PR #7 HEP/GNP/SEC 보완과 NTP upstream 입력은 각 기존 검토 범위로 남긴다. 6/6 가입 조건은 충족됐으며 남은 정책 수정은 보호 전환 범위에서 처리한다. [SEC-06 현재 소스 대조](WORKER_HANDOFF.md#sec-06-현재-소스-확인)를 참조한다. 구 Worker 실행기는 과거 CP1 receipt/인수 계약을 사용하므로 현재 Runtime에 그대로 재실행하지 않는다.
 
 [담당 분리·Worker 인계](WORKER_HANDOFF.md)는 기존 티켓 오너에 맞춘 운영 정리안이다. CP 정리·Join은 한정 지원이었으며 K8S 오너 변경을 뜻하지 않는다. 우리 측 별도 Worker Join 실행기 준비는 중단하고, 이하영님의 기존 절차와 중복 실행하지 않는다. 새로운 담당자 합의·승인을 받은 것으로 간주하지 않는다.
 
@@ -72,7 +78,7 @@ AC-01의 미확인 과거 route 원본은 이미 제출한 자료에서 연결�
 
 [RUN_ICR_NEXT.py](RUN_ICR_NEXT.py)는 위 첫 작업의 미확인 현재 상태를 한 번 묶는 운영 보조 파일이다. CP1과 Worker 3대 조회 및 기존 CP1 자격증명을 통한 LB API 조회만 수행한다. Node 구성 변경, Join/reset, 방화벽·HEP·서비스·타이머·NTP 변경 기능은 없다.
 
-이 파일은 PR #16 승인 실행 소스를 변경하거나 그 코드 승인 범위에 포함됐다고 주장하지 않는다. 코드의 정적/로컬 검증 결과와 현장 실행 결과를 분리한다. 현장 제출본에서 조회4대 완료, Worker3 미가입과 LB 인증 성공을 확인했다. [13:04 실측과 AC-14 판정](results/20260918T040403Z_zgby6ckp/README.md)을 후속 입력으로 사용한다. 이 환경에는 현장 SSH 키가 없으며 Worker 변경·Join은 실행하지 않았다.
+이 파일은 PR #16 승인 실행 소스를 변경하거나 그 코드 승인 범위에 포함됐다고 주장하지 않는다. 코드의 정적/로컬 검증 결과와 현장 실행 결과를 분리한다. 13:04 제출본에서는 Worker3 미가입이었으나 [15:56 제출본](results/20260918T065614Z_zzi65aal/README.md)에서 6/6 Ready·LB 인증 성공을 확인했다. 최신 관측과 AC-14 PASS를 후속 입력으로 사용한다. 이 환경에는 현장 SSH 키가 없으며 Worker 변경·Join은 실행하지 않았다.
 
 
 ## AC-14 판정 정정

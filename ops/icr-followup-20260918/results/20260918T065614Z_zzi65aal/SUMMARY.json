@@ -1,0 +1,44 @@
+{
+  "collection": {
+    "k8s-control01": "COLLECTED",
+    "k8s-worker01": "COLLECTED",
+    "k8s-worker02": "COLLECTED",
+    "k8s-worker03": "COLLECTED"
+  },
+  "completed_at": "2026-09-18T06:56:16.251476+00:00",
+  "duplicate_node_names": false,
+  "expected_nodes": [
+    "k8s-control01",
+    "k8s-control02",
+    "k8s-control03",
+    "k8s-worker01",
+    "k8s-worker02",
+    "k8s-worker03"
+  ],
+  "hep_runtime_approval": "NOT_GRANTED_BY_COLLECTION",
+  "icr_full_acceptance": "NOT_DETERMINED",
+  "join_executed": false,
+  "lb_backend_3_of_3": "NOT_TESTED",
+  "lb_failover": "NOT_TESTED",
+  "missing_workers": [],
+  "node_observation_available": true,
+  "observed_nodes": [
+    "k8s-control01",
+    "k8s-control02",
+    "k8s-control03",
+    "k8s-worker01",
+    "k8s-worker02",
+    "k8s-worker03"
+  ],
+  "ready_expected_nodes": [
+    "k8s-control01",
+    "k8s-control02",
+    "k8s-control03",
+    "k8s-worker01",
+    "k8s-worker02",
+    "k8s-worker03"
+  ],
+  "schema": "fds.icr-next-summary.v1",
+  "six_of_six_ready": true,
+  "three_cp_ready": true
+}
