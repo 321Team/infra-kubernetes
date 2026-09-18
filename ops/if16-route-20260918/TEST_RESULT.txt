@@ -1,3 +1,15 @@
+test_collect_db_profile_bound_to_storage_is_rejected (test_if16_route.DeviceBindingTests.test_collect_db_profile_bound_to_storage_is_rejected) ... ok
+test_collect_db_selects_ens192_profile_with_storage_ens160_present (test_if16_route.DeviceBindingTests.test_collect_db_selects_ens192_profile_with_storage_ens160_present) ... ok
+test_collect_db_wrong_address_stops_before_mutation (test_if16_route.DeviceBindingTests.test_collect_db_wrong_address_stops_before_mutation) ... ok
+test_collect_db_wrong_nic_output_stops_before_mutation (test_if16_route.DeviceBindingTests.test_collect_db_wrong_nic_output_stops_before_mutation) ... ok
+test_db_compensation_removes_only_own_ens192_addition (test_if16_route.DeviceBindingTests.test_db_compensation_removes_only_own_ens192_addition) ... ok
+test_db_existing_ens192_route_unchanged (test_if16_route.DeviceBindingTests.test_db_existing_ens192_route_unchanged) ... ok
+test_db_existing_implicit_table_remains_blocked (test_if16_route.DeviceBindingTests.test_db_existing_implicit_table_remains_blocked) ... ok
+test_db_existing_runtime_only_updates_selected_profile (test_if16_route.DeviceBindingTests.test_db_existing_runtime_only_updates_selected_profile) ... ok
+test_db_missing_runtime_uses_ens192_and_saved_metric (test_if16_route.DeviceBindingTests.test_db_missing_runtime_uses_ens192_and_saved_metric) ... ok
+test_db_probe_on_wrong_device_does_not_pass (test_if16_route.DeviceBindingTests.test_db_probe_on_wrong_device_does_not_pass) ... ok
+test_db_unexpected_device_binding_stops_before_mutation (test_if16_route.DeviceBindingTests.test_db_unexpected_device_binding_stops_before_mutation) ... ok
+test_edge_and_harbor_still_use_ens160 (test_if16_route.DeviceBindingTests.test_edge_and_harbor_still_use_ens160) ... ok
 test_already_correct_does_not_mutate (test_if16_route.TransactionTests.test_already_correct_does_not_mutate) ... ok
 test_drift_before_first_change_prevents_mutation (test_if16_route.TransactionTests.test_drift_before_first_change_prevents_mutation) ... ok
 test_drift_refuses_rollback (test_if16_route.TransactionTests.test_drift_refuses_rollback) ... ok
@@ -20,6 +32,8 @@ test_owned_runtime_source_drift_is_rejected (test_if16_route.ValidationTests.tes
 test_unrecognized_nm_output_is_rejected (test_if16_route.ValidationTests.test_unrecognized_nm_output_is_rejected) ... ok
 
 ----------------------------------------------------------------------
-Ran 20 tests in 0.007s
+Ran 32 tests in 0.012s
 
 OK
+
+ORIGINAL_DB01_REPRODUCTION={"fixture_ipv4_by_nic": {"ens160": "10.250.40.20", "ens192": "10.1.93.55"}, "read_only_commands": [["ip", "-j", "-4", "address", "show", "dev", "ens160"]], "result": "STOP_BEFORE_ROUTE_MUTATION", "route_mutation_commands": [], "runtime_executed": false, "source_pr_head": "11cfd36cff489fe1351afc4f5c5dd97eb3a111e4", "source_sha256": "4c4190e0711b9ecad29959471ef3de587f9f7d3ccea4e8399733f7b92842c8ec", "stage": "STATIC_MOCK", "stop_reason": "Expected single host IPv4 /24 on UP ens160", "transaction_records": 0}

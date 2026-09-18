@@ -42,7 +42,7 @@ class Machine:
         metric = int(argv[argv.index("metric") + 1]) if kind == "runtime" else int(argv[-1].split()[2])
         if kind == "runtime":
             if action == "add":
-                self.state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": m.DEV, "protocol": "static", "metric": metric})
+                self.state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": argv[argv.index("dev") + 1], "protocol": "static", "metric": metric})
             else:
                 self.state["kernel"] = [r for r in self.state["kernel"] if r.get("dst") != m.DEST]
         elif action == "+":
@@ -55,7 +55,7 @@ class Machine:
             raise m.Stop("Injected timeout after side effect")
         return ""
     def probe(self):
-        return [{"gateway": "10.1.93.254" if self.probe_bad else m.VIA, "dev": m.DEV, "prefsrc": "10.1.93.50"}]
+        return [{"gateway": "10.1.93.254" if self.probe_bad else m.VIA, "dev": self.state["device"], "prefsrc": self.state["ip"]}]
     def apply(self):
         return m.apply(self, self.snapshot, self.write, self.probe)
 
@@ -89,7 +89,7 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(machine.calls[-1][3], "del")
     def test_failure_preserves_preexisting_runtime(self):
         machine = Machine()
-        machine.state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": m.DEV, "protocol": "static", "metric": 50})
+        machine.state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": "ens160", "protocol": "static", "metric": 50})
         before = machine.snapshot()
         machine.fail = "persistent:+"
         self.assertEqual(machine.apply()["status"], "FAILED_RESTORED")
@@ -97,7 +97,7 @@ class TransactionTests(unittest.TestCase):
         self.assertFalse(any(x[0] == "ip" for x in machine.calls))
     def test_probe_failure_rolls_back_only_added_persistent(self):
         machine = Machine()
-        machine.state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": m.DEV, "protocol": "static", "metric": 50})
+        machine.state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": "ens160", "protocol": "static", "metric": 50})
         before = machine.snapshot()
         machine.probe_bad = True
         self.assertEqual(machine.apply()["status"], "FAILED_RESTORED")
@@ -150,7 +150,7 @@ class TransactionTests(unittest.TestCase):
 class ValidationTests(unittest.TestCase):
     def test_conflicting_route_is_not_replaced(self):
         state = fixture()
-        state["kernel"].append({"dst": m.DEST, "gateway": "10.1.93.254", "dev": m.DEV})
+        state["kernel"].append({"dst": m.DEST, "gateway": "10.1.93.254", "dev": "ens160"})
         with self.assertRaises(m.Stop):
             m.plan(state)
     def test_duplicate_exact_route_is_rejected(self):
@@ -160,7 +160,7 @@ class ValidationTests(unittest.TestCase):
             m.plan(state)
     def test_more_specific_route_is_rejected(self):
         state = fixture()
-        state["kernel"].append({"dst": "10.250.10.30/32", "gateway": m.VIA, "dev": m.DEV})
+        state["kernel"].append({"dst": "10.250.10.30/32", "gateway": m.VIA, "dev": "ens160"})
         with self.assertRaises(m.Stop):
             m.plan(state)
     def test_nm_parser_preserves_unrelated_attributes(self):
@@ -186,7 +186,7 @@ class ValidationTests(unittest.TestCase):
     def test_owned_runtime_source_drift_is_rejected(self):
         before = fixture()
         after = copy.deepcopy(before)
-        after["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": m.DEV, "protocol": "static", "metric": 100, "prefsrc": "10.1.93.99"})
+        after["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": "ens160", "protocol": "static", "metric": 100, "prefsrc": "10.1.93.99"})
         with self.assertRaises(m.Stop):
             m.expected_state(before, after, {"runtime": True, "persistent": False}, 100)
     def test_command_timeout_and_stderr_not_exposed(self):
@@ -197,6 +197,157 @@ class ValidationTests(unittest.TestCase):
             with self.assertRaises(m.Stop) as cm:
                 m.Commands()("ip", "-j", "route")
             self.assertNotIn("SECRET", str(cm.exception))
+
+
+STORAGE_UUID = "22345678-1234-1234-1234-123456789abc"
+
+def db_fixture(runtime=True, persistent=True):
+    state = fixture()
+    state.update(host="db01", ip="10.1.93.55", device="ens192", addresses=[("10.1.93.55", 24)],
+                 bindings={UUID: "ens192", STORAGE_UUID: "ens160"})
+    state["kernel"] = [
+        {"dst": "default", "gateway": "10.1.93.254", "dev": "ens192", "protocol": "static", "metric": 101},
+        {"dst": "10.1.93.0/24", "dev": "ens192", "protocol": "kernel", "scope": "link", "prefsrc": "10.1.93.55", "metric": 101},
+        {"dst": "10.250.40.0/24", "dev": "ens160", "protocol": "kernel", "scope": "link", "prefsrc": "10.250.40.20", "metric": 100},
+    ]
+    if runtime:
+        state["kernel"].append({"dst": m.DEST, "gateway": m.VIA, "dev": "ens192", "protocol": "static", "metric": 101})
+    if persistent:
+        state["persistent"].append({"ip": m.DEST, "nh": m.VIA, "mt": "101", "table": "254"})
+    return state
+
+class DbReadOnlyCommands:
+    """Two active NICs with distinct profiles; reject every unmodelled command."""
+    def __init__(self):
+        self.calls = []
+        self.state = db_fixture()
+        self.addresses = [dict(ifname="ens192", flags=["UP"],
+                               addr_info=[dict(local="10.1.93.55", prefixlen=24)])]
+        self.props = {p: "--" for p in m.PROPERTIES}
+        self.props.update({"connection.uuid": UUID, "connection.type": "802-3-ethernet",
+                           "connection.interface-name": "ens192", "connection.autoconnect": "yes",
+                           "ipv4.method": "manual", "ipv4.addresses": "10.1.93.55/24",
+                           "ipv4.gateway": "10.1.93.254", "ipv4.route-table": "254"})
+    def __call__(self, *argv):
+        self.calls.append(argv)
+        if argv == ("ip", "-j", "-4", "address", "show", "dev", "ens192"):
+            return json.dumps(self.addresses)
+        if argv == ("ip", "-j", "-4", "route", "show", "table", "all"):
+            return json.dumps(self.state["kernel"])
+        if argv == ("ip", "-j", "-4", "rule", "show"):
+            return json.dumps([dict(priority=p, src="all", table=t)
+                               for p,t in [(0,"local"),(32766,"main"),(32767,"default")]])
+        if argv == ("nmcli", "-g", "GENERAL.NM-MANAGED", "device", "show", "ens192"):
+            return "yes"
+        if argv == ("nmcli", "-g", "GENERAL.STATE", "device", "show", "ens192"):
+            return "100 (connected)"
+        if argv == ("nmcli", "-t", "-f", "UUID,DEVICE", "connection", "show", "--active"):
+            return STORAGE_UUID + ":ens160\n" + UUID + ":ens192"
+        if argv == ("nmcli", "-g", "UUID", "connection", "show"):
+            return STORAGE_UUID + "\n" + UUID
+        if len(argv) == 7 and argv[:2] == ("nmcli", "-g") and argv[3:6] == ("connection", "show", "uuid"):
+            prop, identity = argv[2], argv[6]
+            if identity == STORAGE_UUID:
+                return {"connection.type": "802-3-ethernet", "connection.interface-name": "ens160"}[prop]
+            if identity == UUID:
+                if prop == "ipv4.routes":
+                    return "10.250.10.0/24 10.1.93.58 101 table=254"
+                return self.props[prop]
+        raise AssertionError("Unexpected command: " + str(argv))
+
+class DeviceBindingTests(unittest.TestCase):
+    def test_collect_db_selects_ens192_profile_with_storage_ens160_present(self):
+        commands = DbReadOnlyCommands()
+        state = m.collect(commands, "db01")
+        self.assertEqual(state["profile"], UUID)
+        self.assertEqual(state["device"], "ens192")
+        self.assertEqual(state["bindings"], {UUID: "ens192", STORAGE_UUID: "ens160"})
+        self.assertEqual(state["addresses"], [("10.1.93.55", 24)])
+        self.assertIn({"dst": "10.250.40.0/24", "dev": "ens160", "protocol": "kernel", "scope": "link", "prefsrc": "10.250.40.20", "metric": 100}, state["kernel"])
+        self.assertFalse(m.plan(state)["add_runtime"])
+        self.assertFalse(m.plan(state)["add_persistent"])
+    def test_collect_db_wrong_nic_output_stops_before_mutation(self):
+        commands = DbReadOnlyCommands()
+        commands.addresses[0].update(ifname="ens160", addr_info=[dict(local="10.250.40.20", prefixlen=24)])
+        with self.assertRaisesRegex(m.Stop, "Unexpected interface"):
+            m.collect(commands, "db01")
+        self.assertEqual(len(commands.calls), 1)
+    def test_collect_db_wrong_address_stops_before_mutation(self):
+        commands = DbReadOnlyCommands()
+        commands.addresses[0]["addr_info"][0]["local"] = "10.250.40.20"
+        with self.assertRaisesRegex(m.Stop, "Expected single host IPv4"):
+            m.collect(commands, "db01")
+        self.assertEqual(len(commands.calls), 1)
+    def test_collect_db_profile_bound_to_storage_is_rejected(self):
+        commands = DbReadOnlyCommands()
+        commands.props["connection.interface-name"] = "ens160"
+        with self.assertRaisesRegex(m.Stop, "explicitly bind ethernet ens192"):
+            m.collect(commands, "db01")
+        self.assertFalse(any("modify" in call for call in commands.calls))
+    def test_db_existing_ens192_route_unchanged(self):
+        machine = Machine(db_fixture())
+        before = machine.snapshot()
+        result = machine.apply()
+        self.assertEqual(result["status"], "ALREADY_CORRECT")
+        self.assertEqual(result["plan"]["device"], "ens192")
+        self.assertEqual(machine.state, before)
+        self.assertEqual(machine.calls, [])
+    def test_db_existing_runtime_only_updates_selected_profile(self):
+        machine = Machine(db_fixture(persistent=False))
+        before = machine.snapshot()
+        self.assertEqual(machine.apply()["status"], "APPLIED")
+        self.assertEqual(machine.state["kernel"], before["kernel"])
+        self.assertEqual(len(machine.calls), 1)
+        self.assertEqual(machine.calls[0], m.profile_args("+", UUID, 101))
+    def test_db_missing_runtime_uses_ens192_and_saved_metric(self):
+        machine = Machine(db_fixture(runtime=False))
+        before = machine.snapshot()
+        self.assertEqual(machine.apply()["status"], "APPLIED")
+        self.assertEqual(machine.calls, [("ip", "-4", "route", "add", "10.250.10.0/24", "via", "10.1.93.58", "dev", "ens192", "proto", "static", "metric", "101", "table", "main")])
+        self.assertEqual(machine.state["persistent"], before["persistent"])
+        self.assertEqual(m.without_target(machine.state), m.without_target(before))
+    def test_db_compensation_removes_only_own_ens192_addition(self):
+        machine = Machine(db_fixture(runtime=False, persistent=False))
+        before = machine.snapshot()
+        machine.fail = "persistent:+"
+        self.assertEqual(machine.apply()["status"], "FAILED_RESTORED")
+        self.assertEqual(machine.state, before)
+        runtime_calls = [c for c in machine.calls if c[0] == "ip"]
+        self.assertEqual([c[3] for c in runtime_calls], ["add", "del"])
+        self.assertTrue(all(c[c.index("dev") + 1] == "ens192" for c in runtime_calls))
+        self.assertTrue(all(c[c.index("metric") + 1] == "100" for c in runtime_calls))
+    def test_db_probe_on_wrong_device_does_not_pass(self):
+        machine = Machine(db_fixture(runtime=False, persistent=False))
+        before = machine.snapshot()
+        def wrong_probe():
+            return [{"gateway": m.VIA, "dev": "ens160", "prefsrc": "10.1.93.55"}]
+        result = m.apply(machine, machine.snapshot, machine.write, wrong_probe)
+        self.assertEqual(result["status"], "FAILED_RESTORED")
+        self.assertEqual(machine.state, before)
+        self.assertEqual([c[0] for c in machine.calls], ["ip", "nmcli", "nmcli", "ip"])
+    def test_db_unexpected_device_binding_stops_before_mutation(self):
+        machine = Machine(db_fixture(runtime=False, persistent=False))
+        machine.state["device"] = "ens160"
+        with self.assertRaisesRegex(m.Stop, "Host/IP/device binding mismatch"):
+            machine.apply()
+        self.assertEqual(machine.calls, [])
+        self.assertEqual(machine.records, [])
+    def test_db_existing_implicit_table_remains_blocked(self):
+        machine = Machine(db_fixture())
+        machine.state["persistent"][-1].pop("table")
+        with self.assertRaisesRegex(m.Stop, "implicit persistent table"):
+            machine.apply()
+        self.assertEqual(machine.calls, [])
+    def test_edge_and_harbor_still_use_ens160(self):
+        for host, ip in (("edge01", "10.1.93.50"), ("harbor01", "10.1.93.54")):
+            with self.subTest(host=host):
+                state = fixture()
+                state.update(host=host, ip=ip, addresses=[(ip, 24)])
+                machine = Machine(state)
+                result = machine.apply()
+                self.assertEqual(result["status"], "APPLIED")
+                self.assertEqual(result["plan"]["device"], "ens160")
+                self.assertEqual(machine.calls[0][machine.calls[0].index("dev") + 1], "ens160")
 
 if __name__ == "__main__":
     unittest.main()
