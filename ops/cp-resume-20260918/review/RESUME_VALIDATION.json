@@ -1,0 +1,15 @@
+{
+  "schema": "fds.cp-resume-validation.v1",
+  "entry_sha256": "dc5f55bf5284860ba218e78e95fb0103cd2d0f834e72060c9aafa6d6d8502165",
+  "controller_source_commit": "06286f31735a80982e50e5f94fd0e1f4a027eb8d",
+  "resume_manifest_sha256": "5b43d898e140d4708c818c31360467d6ffb24b8e200825f6f3a37af6eca63097",
+  "source_bundle_sha256": "d229b8ba40716ffb4baeacf9ea80a009dc28c8155a9d38f4f84961fa4da28a41",
+  "prior_evidence_sha256": "7b0799cf8117a10371204e8265db8dc31e9bf325bb984f4dac1080d510ec3aed",
+  "static_mock_tests": 28,
+  "result": "PASS",
+  "cp1_replay": false,
+  "runtime_executed": false,
+  "independent_acceptance": "PENDING",
+  "entry_code_covered_by_controller_source_review": false,
+  "validated_at": "2026-09-18T01:32:09.486144+00:00"
+}

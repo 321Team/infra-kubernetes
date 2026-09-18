@@ -1,0 +1,33 @@
+test_dismissed_approval_is_not_a_valid_source_decision (test_resume.ReviewAuthorityTests.test_dismissed_approval_is_not_a_valid_source_decision) ... ok
+test_empty_body_exact_source_review_is_sufficient (test_resume.ReviewAuthorityTests.test_empty_body_exact_source_review_is_sufficient) ... ok
+test_future_review_cannot_authorize_current_run (test_resume.ReviewAuthorityTests.test_future_review_cannot_authorize_current_run) ... ok
+test_later_changes_requested_revokes_approval (test_resume.ReviewAuthorityTests.test_later_changes_requested_revokes_approval) ... ok
+test_latest_approval_of_other_commit_not_inherited (test_resume.ReviewAuthorityTests.test_latest_approval_of_other_commit_not_inherited) ... ok
+test_new_pr_head_invalidates_old_review (test_resume.ReviewAuthorityTests.test_new_pr_head_invalidates_old_review) ... ok
+test_review_api_record_for_different_pr_rejected (test_resume.ReviewAuthorityTests.test_review_api_record_for_different_pr_rejected) ... ok
+test_review_url_for_different_pr_rejected (test_resume.ReviewAuthorityTests.test_review_url_for_different_pr_rejected) ... ok
+test_same_pr_number_in_wrong_repository_rejected (test_resume.ReviewAuthorityTests.test_same_pr_number_in_wrong_repository_rejected) ... ok
+test_wrong_person_cannot_supply_fix_approval (test_resume.ReviewAuthorityTests.test_wrong_person_cannot_supply_fix_approval) ... ok
+test_followup_failure_does_not_auto_retry_any_workflow (test_resume.SingleAttemptTests.test_followup_failure_does_not_auto_retry_any_workflow) ... ok
+test_resume_dispatch_does_not_reapply_cp1_or_recommit_session (test_resume.SingleAttemptTests.test_resume_dispatch_does_not_reapply_cp1_or_recommit_session) ... ok
+test_second_attempt_fails_and_preserves_original_marker (test_resume.SingleAttemptTests.test_second_attempt_fails_and_preserves_original_marker) ... ok
+test_actual_pinned_archive_loads (test_resume.SubmittedEvidenceTests.test_actual_pinned_archive_loads) ... ok
+test_altered_archive_rejected_before_reuse (test_resume.SubmittedEvidenceTests.test_altered_archive_rejected_before_reuse) ... ok
+test_altered_regression_bytes_rejected (test_resume.SubmittedEvidenceTests.test_altered_regression_bytes_rejected) ... ok
+test_different_cp1_job_disqualifies_pinned_resume (test_resume.SubmittedEvidenceTests.test_different_cp1_job_disqualifies_pinned_resume) ... ok
+test_extending_original_decision_deadline_rejected (test_resume.SubmittedEvidenceTests.test_extending_original_decision_deadline_rejected) ... ok
+test_join_authority_cannot_be_added_to_continuation (test_resume.SubmittedEvidenceTests.test_join_authority_cannot_be_added_to_continuation) ... ok
+test_original_lower_level_no_mutation_proof_accepted (test_resume.SubmittedEvidenceTests.test_original_lower_level_no_mutation_proof_accepted) ... ok
+test_permanent_mutation_disqualifies_narrow_resume (test_resume.SubmittedEvidenceTests.test_permanent_mutation_disqualifies_narrow_resume) ... ok
+test_prior_cp3_execution_disqualifies_cp2_first_resume (test_resume.SubmittedEvidenceTests.test_prior_cp3_execution_disqualifies_cp2_first_resume) ... ok
+test_real_trial_handoff_decision_and_regression_validate (test_resume.SubmittedEvidenceTests.test_real_trial_handoff_decision_and_regression_validate) ... ok
+test_request_written_at_mutation_boundary_disqualifies_resume (test_resume.SubmittedEvidenceTests.test_request_written_at_mutation_boundary_disqualifies_resume) ... ok
+test_retired_work_window_cannot_be_resumed (test_resume.SubmittedEvidenceTests.test_retired_work_window_cannot_be_resumed) ... ok
+test_target_response_disqualifies_no_mutation_assumption (test_resume.SubmittedEvidenceTests.test_target_response_disqualifies_no_mutation_assumption) ... ok
+test_uncertain_runtime_outcome_cannot_be_replayed (test_resume.SubmittedEvidenceTests.test_uncertain_runtime_outcome_cannot_be_replayed) ... ok
+test_uncommitted_session_cannot_be_reused (test_resume.SubmittedEvidenceTests.test_uncommitted_session_cannot_be_reused) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 0.243s
+
+OK
