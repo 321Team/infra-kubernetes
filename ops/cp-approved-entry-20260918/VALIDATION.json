@@ -1,0 +1,14 @@
+{
+  "schema": "fds.cp-approved-entry-validation.v1",
+  "entry_version": "fds.cp-approved-comment-entry.v1",
+  "entry_sha256": "b235f5ad91b700d09a06fc1746e0d191ba241cdf495a1b0fe92694660f772471",
+  "validated_at": "2026-09-18T01:01:45.745776+00:00",
+  "targeted_tests_passed": 23,
+  "test_mode": "STATIC_MOCK",
+  "real_github_authority": "VERIFIED_SOURCE_REVIEW_PLUS_DELEGATION_COMMENT",
+  "runtime_package_manifest_sha256": "ef3d209589d4d47e448ffbbf151b7ed1ea9ba9318bd1dbcd92f64cdbdd694821",
+  "runtime_source_commit": "cfae027fad62a36ee228da3217011fa0787c7486",
+  "runtime_package_files_unchanged": 30,
+  "runtime_executed": false,
+  "entry_code_covered_by_source_review": false
+}
