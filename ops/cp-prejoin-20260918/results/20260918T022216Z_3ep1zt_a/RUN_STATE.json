@@ -1,0 +1,22 @@
+{
+  "collector_sha256": "4ae9c5f63ab317bc4c287d5837ed461ad000a89441f2aa1a96f0f8515bdf3e6b",
+  "completed_at": "2026-09-18T02:22:25.764398+00:00",
+  "configuration_mutation": false,
+  "cp1_reads_complete": true,
+  "join_executed": false,
+  "join_readiness": "NOT_ASSESSED",
+  "nodes": {
+    "k8s-control02": {
+      "collected": true,
+      "join_readiness": "NOT_ASSESSED"
+    },
+    "k8s-control03": {
+      "collected": true,
+      "join_readiness": "NOT_ASSESSED"
+    }
+  },
+  "prior_cp1_job": "c564ae97530dfe80",
+  "schema": "fds.cp-prejoin-collection.v1",
+  "started_at": "2026-09-18T02:22:16.310392+00:00",
+  "status": "OBSERVATIONS_COLLECTED_REVIEW_REQUIRED"
+}

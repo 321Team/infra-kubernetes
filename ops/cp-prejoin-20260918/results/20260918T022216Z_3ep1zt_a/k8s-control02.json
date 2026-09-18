@@ -1,0 +1,677 @@
+{
+  "candidate_manifest_directories": [],
+  "completed_at": "2026-09-18T02:22:25.312832+00:00",
+  "configuration_mutation": false,
+  "containers": {
+    "endpoint": "unix:///run/containerd/containerd.sock",
+    "error": "FileNotFoundError",
+    "other_runtime_endpoints": "NOT_INSPECTED",
+    "parse": "INCOMPLETE",
+    "rc": null,
+    "selected": []
+  },
+  "effective_kubelet_configuration": "NOT_FULLY_RESOLVED_SYSTEMD_ENVIRONMENT_MAY_OVERRIDE",
+  "hostname": "k8s-control02",
+  "ip": "10.1.93.103",
+  "join_readiness": "NOT_ASSESSED",
+  "known_paths": [
+    {
+      "exists": false,
+      "path": "/var/lib/kubelet/config.yaml"
+    },
+    {
+      "exists": false,
+      "path": "/var/lib/kubelet/kubeadm-flags.env"
+    },
+    {
+      "exists": false,
+      "path": "/etc/kubernetes/kubelet.conf"
+    },
+    {
+      "exists": false,
+      "path": "/etc/kubernetes/bootstrap-kubelet.conf"
+    },
+    {
+      "exists": false,
+      "path": "/var/lib/etcd"
+    },
+    {
+      "exists": false,
+      "path": "/var/lib/etcd/member"
+    },
+    {
+      "exists": false,
+      "path": "/etc/kubernetes/manifests/etcd.yaml"
+    }
+  ],
+  "kubelet_config_paths": [
+    {
+      "exists": false,
+      "path": "/var/lib/kubelet/config.yaml"
+    }
+  ],
+  "kubelet_flag_files": [
+    {
+      "exists": false,
+      "path": "/var/lib/kubelet/kubeadm-flags.env"
+    },
+    {
+      "exists": true,
+      "flags": [],
+      "gid": 0,
+      "kind": "file",
+      "mode": "0o644",
+      "mtime_ns": 1787196547000000000,
+      "path": "/etc/sysconfig/kubelet",
+      "sha256": "2737f011e1fc6995aeeb6a2071e268e37b1437481bbdb205f5075939f40d7ae7",
+      "size": 20,
+      "uid": 0
+    }
+  ],
+  "lb_tcp": {
+    "api_tls_auth_backend_health": "NOT_TESTED",
+    "connect": "PASS",
+    "source_ip": "10.1.93.103",
+    "target": "10.1.93.109:6443"
+  },
+  "listeners": {
+    "rc": 0,
+    "selected": [],
+    "stderr_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "manifests": {
+    "directory": {
+      "exists": true,
+      "gid": 0,
+      "kind": "directory",
+      "mode": "0o755",
+      "mtime_ns": 1788958352898021473,
+      "path": "/etc/kubernetes/manifests",
+      "size": 96,
+      "uid": 0
+    },
+    "files": [
+      {
+        "dotfile": false,
+        "exists": true,
+        "flags": [
+          {
+            "flag": "advertise-address",
+            "parse": "ALLOWLISTED",
+            "value": "10.1.93.103"
+          },
+          {
+            "flag": "etcd-servers",
+            "parse": "ALLOWLISTED",
+            "value": [
+              {
+                "ip": "127.0.0.1",
+                "port": 2379,
+                "scheme": "https"
+              }
+            ]
+          },
+          {
+            "flag": "secure-port",
+            "parse": "ALLOWLISTED",
+            "value": 6443
+          }
+        ],
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o600",
+        "mtime_ns": 1788958352896031827,
+        "path": "/etc/kubernetes/manifests/kube-apiserver.yaml",
+        "path_scalars": [
+          "/etc/kubernetes/pki",
+          "/etc/pki/ca-trust",
+          "/etc/pki/tls/certs",
+          "/etc/ssl/certs",
+          "/livez",
+          "/readyz"
+        ],
+        "sha256": "9c6c75d7ee5981c39386c7fde8039a8b9cb9bdcd88f6951c1e4e3815593a09c4",
+        "size": 3659,
+        "uid": 0
+      },
+      {
+        "dotfile": false,
+        "exists": true,
+        "flags": [
+          {
+            "flag": "bind-address",
+            "parse": "ALLOWLISTED",
+            "value": "127.0.0.1"
+          },
+          {
+            "flag": "kubeconfig",
+            "parse": "ALLOWLISTED",
+            "value": "/etc/kubernetes/controller-manager.conf"
+          }
+        ],
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o600",
+        "mtime_ns": 1788958352897031813,
+        "path": "/etc/kubernetes/manifests/kube-controller-manager.yaml",
+        "path_scalars": [
+          "/etc/kubernetes/controller-manager.conf",
+          "/etc/kubernetes/pki",
+          "/etc/pki/ca-trust",
+          "/etc/pki/tls/certs",
+          "/etc/ssl/certs",
+          "/healthz"
+        ],
+        "sha256": "8acf707b42c2b28f9ea7481082315b63174fb9abf09ba3ecde1b4c7d59978bd6",
+        "size": 2939,
+        "uid": 0
+      },
+      {
+        "dotfile": false,
+        "exists": true,
+        "flags": [
+          {
+            "flag": "bind-address",
+            "parse": "ALLOWLISTED",
+            "value": "127.0.0.1"
+          },
+          {
+            "flag": "kubeconfig",
+            "parse": "ALLOWLISTED",
+            "value": "/etc/kubernetes/scheduler.conf"
+          }
+        ],
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o600",
+        "mtime_ns": 1788958352898021473,
+        "path": "/etc/kubernetes/manifests/kube-scheduler.yaml",
+        "path_scalars": [
+          "/etc/kubernetes/scheduler.conf",
+          "/livez",
+          "/readyz"
+        ],
+        "sha256": "22a0cf186029c3d93743f6e9838a75b2becc6c937024727d42b2da995147f035",
+        "size": 1726,
+        "uid": 0
+      }
+    ],
+    "text_parse": "ALLOWLISTED_TEXT_ONLY"
+  },
+  "observed_at": "2026-09-18T02:22:25.181592+00:00",
+  "schema": "fds.cp-prejoin-observation.v1",
+  "services": {
+    "containerd": {
+      "ActiveState": "active",
+      "LoadState": "loaded",
+      "SubState": "running",
+      "exec_allowlisted_flags": [],
+      "rc": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "kubelet": {
+      "ActiveState": "activating",
+      "LoadState": "loaded",
+      "SubState": "auto-restart",
+      "exec_allowlisted_flags": [],
+      "rc": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "v4_package_provenance": {
+    "bytes_budgeted": 131279,
+    "bytes_read": 131279,
+    "files": [
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001131096815,
+        "path": "/opt/fds/P1-K8S-01-v4/ICR_ADDENDUM.md",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "053c006bae497a848461bdc96c8438ee933559a38e25a3ee45e7486e6a5e78f0",
+        "size": 2902,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001135096758,
+        "path": "/opt/fds/P1-K8S-01-v4/README.md",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "fa635c102974bf0e512e41fc510376dcabb2cf8966e69311a565669c1767cd61",
+        "size": 3681,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001143096644,
+        "path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3",
+        "size": 32483,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "FOUND_IN_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001163096359,
+        "path": "/opt/fds/P1-K8S-01-v4/TEST_MATRIX.md",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "df3dfe9dedff8541345d201db034f5659d428aea28771eb8bdba31fded5c95d2",
+        "size": 9247,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001167096302,
+        "path": "/opt/fds/P1-K8S-01-v4/TRACEABILITY.md",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "bc151b5ef9ccf952355f5c495c7de57a0564ada8edefcabc98934cadd673f34e",
+        "size": 3665,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001171096245,
+        "path": "/opt/fds/P1-K8S-01-v4/VALIDATION.md",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "7e70ade511226dd98f1a9cee971ca07b52f9efe899c032118a92dada4b897a25",
+        "size": 4759,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001177096160,
+        "path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "75ea9962b84c064ad04a301a8086ecc7ab21c201ec86749a888715cf45a8a80b",
+        "size": 7382,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001181096103,
+        "path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "87cbbeca62afab4132c13fd51e34573558471eb14dc759cb255d43cbd06ce12e",
+        "size": 12356,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001185096046,
+        "path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+        "role": "SCRIPT_TEXT",
+        "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1",
+        "size": 1384,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001188096004,
+        "path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "12e38e4405ff54406228f48e18d9ecbcd0518916bf328dea7cce70c382cc8487",
+        "size": 5672,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001193095932,
+        "path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9",
+        "size": 2847,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001197095875,
+        "path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c",
+        "size": 4159,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001201095819,
+        "path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d",
+        "size": 4610,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001205095762,
+        "path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "fe0a99f364f7eaca6f726a4d280c8ff38c7a06652db809edaf3e8499adb5b71b",
+        "size": 11129,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001235095335,
+        "path": "/opt/fds/P1-K8S-01-v4/config/calico-image-lock.json",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "7bb6b493c67aea05c3bf7047c0e8770745b1027432e346f9ae84b1a225579cfe",
+        "size": 131,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001239095278,
+        "path": "/opt/fds/P1-K8S-01-v4/config/protection-receipt.example.json",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "57e8d75f3a84de48df380285815b7a21196a7cf5e7bc8e7d3dc1668d8c761423",
+        "size": 191,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001243095221,
+        "path": "/opt/fds/P1-K8S-01-v4/config/runtime-input.json",
+        "role": "CONFIG_OR_DOCUMENT_TEXT",
+        "sha256": "64e430ef9015eca04383963e2a565188a5f23ce4780cd7c73e7dbf4b3ab555e5",
+        "size": 5789,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001154096487,
+        "path": "/opt/fds/P1-K8S-01-v4/tests/check-crd.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "3e84b949bd91dba4573bd9e89b1ead25b607792d159c80f08847aa4987167063",
+        "size": 4921,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      },
+      {
+        "exists": true,
+        "gid": 0,
+        "kind": "file",
+        "mode": "0o750",
+        "mtime_ns": 1788953001158096430,
+        "path": "/opt/fds/P1-K8S-01-v4/tests/validate.py",
+        "role": "SCRIPT_TEXT",
+        "sha256": "099e2894130998879d7f9f860d9ab49dc17d77decd5330261161fc5b80e8ef70",
+        "size": 13971,
+        "text_markers": {
+          "control_plane_manifest_name": "NOT_FOUND_IN_SCANNED_TEXT",
+          "control_plane_prepare": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_init": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_join": "NOT_FOUND_IN_SCANNED_TEXT",
+          "kubeadm_reset": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_manifest_directory": "NOT_FOUND_IN_SCANNED_TEXT",
+          "static_pod_path_setting": "NOT_FOUND_IN_SCANNED_TEXT"
+        },
+        "uid": 0
+      }
+    ],
+    "limitations": [],
+    "markers_are_execution_history": false,
+    "negative_marker_result_proves_no_relationship": false,
+    "relationship_to_static_manifests": "NOT_ESTABLISHED",
+    "root": {
+      "exists": true,
+      "gid": 0,
+      "kind": "directory",
+      "mode": "0o750",
+      "mtime_ns": 1788952662589913466,
+      "path": "/opt/fds/P1-K8S-01-v4",
+      "size": 4096,
+      "uid": 0
+    },
+    "scan_limits": {
+      "depth": 4,
+      "files": 128,
+      "total_bytes": 4194304
+    }
+  },
+  "versions": {
+    "containerd": {
+      "parse": "VERSION_OBSERVED",
+      "rc": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versions": [
+        "v2.3.5"
+      ]
+    },
+    "kubeadm": {
+      "parse": "VERSION_OBSERVED",
+      "rc": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versions": [
+        "v1.36.4"
+      ]
+    },
+    "kubelet": {
+      "parse": "VERSION_OBSERVED",
+      "rc": 0,
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "versions": [
+        "v1.36.4"
+      ]
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "status": {
+    "change_receipt_sha256": "27c75c6e9f606800a2cc49ee271ea3d8a91a2dffd1550ed81286e57e9e824585",
+    "cp1_accepted": false,
+    "handoff_sha256": "c3cf97941c147146183b5c5342d98ada706611725f12a899f417d08f5bf51417",
+    "independent_acceptance": "PENDING",
+    "job_id": "c564ae97530dfe80",
+    "observed_at": "2026-09-18T02:22:24.807307+00:00",
+    "ok": true,
+    "recovery_armed": true,
+    "session_decision_sha256": "22a7cc8a41a43eaf3bdd56a5833918c7a16d8417ce56913e0aa34785932002c8",
+    "source_bundle_sha256": "d229b8ba40716ffb4baeacf9ea80a009dc28c8155a9d38f4f84961fa4da28a41",
+    "status": "CP_SESSION_ACTIVE_REVIEW_PENDING",
+    "withdraw_at": "2026-09-18T15:15:00+09:00"
+  },
+  "topology": {
+    "api_readyz_passed": true,
+    "observed_at": "2026-09-18T02:22:16.999430+00:00",
+    "ok": true,
+    "sha256": "b4eb4932d00f53396e2fd55e704eb4246ce6a3d4a963d1029472f16c43e0c4af",
+    "status": "TOPOLOGY_REVIEW_REQUIRED",
+    "topology": {
+      "members": [
+        {
+          "clientURLs": [
+            "https://10.1.93.102:2379"
+          ],
+          "id": "1755679419291778130",
+          "isLearner": false,
+          "name": "k8s-control01",
+          "peerURLs": [
+            "https://10.1.93.102:2380"
+          ]
+        }
+      ],
+      "nodes": [
+        [
+          "k8s-control01",
+          "75735bd5-937a-463f-a93f-a8e7e51fa7a1"
+        ]
+      ]
+    }
+  }
+}
