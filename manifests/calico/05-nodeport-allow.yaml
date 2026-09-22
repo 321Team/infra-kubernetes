@@ -1,12 +1,20 @@
 # SEC-06 2차 수정 — NodePort preDNAT 규칙. Worker 3대(02~04) 전체가 안정화된 뒤에만 적용.
 # edge01(.50) -> Worker:30080만 preDNAT 허용, 그 외는 명시적 Deny.
+#
+# [DRIFT SYNC — 2026-09-22] 이 GNP는 실제 클러스터에 저장소 리뷰 절차를 거치지 않고
+# out-of-band로 직접 적용되어 있다(재환 독립 리뷰: infra-kubernetes#7 pullrequestreview-5274034835).
+# 확인된 값만 아래 order에 반영했다: order 100 -> 50 (preDNAT: true, applyOnForward: true는
+# 클러스터 적용값과 일치한다고 보고됨). selector 실측 라벨 값은 이 리뷰 코멘트에 원문으로
+# 남아있지 않아 이 커밋에서 임의로 바꾸지 않았다 — 아래 selector는 검증되지 않은 값이다.
+# 재배포(p1-k8s-01-v4) 전 반드시 `kubectl get globalnetworkpolicy nodeport-30080-allow -o yaml`로
+# 실제 selector를 대조하고 이 파일을 갱신할 것. 관련: fds-project-baseline#90, #19.
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
   name: nodeport-30080-allow
 spec:
-  selector: role == 'k8s-worker'
-  order: 100
+  selector: role == 'k8s-worker'  # UNVERIFIED — 클러스터 실측 라벨과 대조 필요, 위 주석 참조
+  order: 50  # 2026-09-22 드리프트 동기화: 클러스터 실측값(재환 리뷰) 반영, 기존 100에서 변경
   applyOnForward: true
   preDNAT: true
   types: ["Ingress"]
