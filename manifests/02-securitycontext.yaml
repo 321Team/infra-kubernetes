@@ -17,6 +17,13 @@
 # 모니터링 5개 워크로드(prometheus/alertmanager/grafana/kube-state-metrics/node-exporter)는
 # 이미지 버전이 아직 미확정이라 UID/GID/버전 placeholder를 그대로 둔다.
 #
+# 2026-09-22 실배포 발견: transaction-api는 `DATABASE_URL` 환경변수가 없으면
+# app/db.py에서 KeyError로 즉시 크래시한다(fds-msa 저장소 실측, CrashLoopBackOff로
+# 발견). Secret(transaction-api-db-credentials, key DATABASE_URL)을 참조하는 env를
+# 추가했다. 이 파일은 그 Secret을 만들지 않는다 — DB 비밀번호는 P1-DB-01 담당이
+# 별도 채널로 관리하며 여기 하드코딩하지 않는다. fds-engine은 DB에 직접 접근하지
+# 않아(NetworkPolicy상 Deny 유지) 이 문제가 없었다.
+#
 # 범위 정정 (GWONUK 재검토 SEC-04, issuecomment-5644891728):
 # 이 파일은 "독립 apply 가능한 완성 Manifest"가 아니라 P1-APP-01/P1-MON-01 원본
 # Deployment에 적용할 SecurityContext/RBAC/Probe 관련 patch 참고자료다. SA/PVC/
@@ -69,6 +76,15 @@ spec:
       containers:
         - name: transaction-api
           image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
+          env:
+            # app/db.py가 기동 시 DATABASE_URL 필수(없으면 KeyError로 즉시 크래시,
+            # 2026-09-22 실배포 시 CrashLoopBackOff로 발견). Secret은 이 파일이 만들지
+            # 않으며, DB 비밀번호는 P1-DB-01 담당(이권욱)이 별도 채널로 관리한다.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: transaction-api-db-credentials
+                  key: DATABASE_URL
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
