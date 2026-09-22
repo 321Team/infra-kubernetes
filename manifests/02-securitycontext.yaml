@@ -9,6 +9,14 @@
 # <실제-버전>, <확인된-UID>, <확인된-GID>, <approved-digest> 등은 사전확인(§3) 완료 후
 # 실측값으로 교체한다. Placeholder 상태로 적용하지 않는다 (baseline P1-SEC-01 원칙).
 #
+# 2026-09-22 확정 (transaction-api/fds-engine만): Harbor(10.1.93.54)에서 admin 계정으로
+# 각 이미지를 실측 pull 후 `getent passwd/group fdsuser`로 확인.
+# UID=10001(Dockerfile `useradd -r -u 10001 fdsuser`), GID=999(useradd가 자동 생성한
+# fdsuser 전용 그룹의 실제 GID, Dockerfile만으로는 알 수 없어 이미지 내부를 직접 확인함).
+# approved-digest는 두 이미지의 Harbor `latest`/`254b822` 태그(2026-09-16 12:42 Push) 기준.
+# 모니터링 5개 워크로드(prometheus/alertmanager/grafana/kube-state-metrics/node-exporter)는
+# 이미지 버전이 아직 미확정이라 UID/GID/버전 placeholder를 그대로 둔다.
+#
 # 범위 정정 (GWONUK 재검토 SEC-04, issuecomment-5644891728):
 # 이 파일은 "독립 apply 가능한 완성 Manifest"가 아니라 P1-APP-01/P1-MON-01 원본
 # Deployment에 적용할 SecurityContext/RBAC/Probe 관련 patch 참고자료다. SA/PVC/
@@ -52,15 +60,15 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
+        runAsUser: 10001
+        runAsGroup: 999
         seccompProfile:
           type: RuntimeDefault
       imagePullSecrets:
         - name: harbor-pull-secret
       containers:
         - name: transaction-api
-          image: 10.1.93.54/fds/transaction-api@sha256:<approved-digest>
+          image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
@@ -135,15 +143,15 @@ spec:
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: <확인된-UID>
-        runAsGroup: <확인된-GID>
+        runAsUser: 10001
+        runAsGroup: 999
         seccompProfile:
           type: RuntimeDefault
       imagePullSecrets:
         - name: harbor-pull-secret
       containers:
         - name: fds-engine
-          image: 10.1.93.54/fds/fds-engine@sha256:<approved-digest>
+          image: 10.1.93.54/fds/fds-engine@sha256:5e2a081cd51a957c3fad038b3eab07884c446ea3c2a814a905e3f41c24f67369
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
