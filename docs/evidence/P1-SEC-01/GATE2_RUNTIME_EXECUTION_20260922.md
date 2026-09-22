@@ -161,6 +161,64 @@ spec:
 재배포·드리프트 복구를 수행할 때 이 GNP가 유실될 수 있다. 배포 주체 확인 및
 저장소 반영(파일로 정식화) 여부는 별도 결정 필요.
 
+## 후속 — Harbor 연동 확인 및 transaction-api/fds-engine 실배포 (2026-09-22)
+
+P1-HBR-01(Harbor·Trivy) 확인과 SEC-04 나머지 항목(UID/GID/approved-digest) 확정을
+이어서 진행했다.
+
+**Harbor 상태 확인 (control01에서)**:
+- `https://10.1.93.54/api/v2.0/health` HTTP 200, `systeminfo`로 Harbor v2.13.1 확인
+- TLS: Private CA(`FDS Project Root CA 2026`) 발급, SAN에 `IP Address:10.1.93.54` 포함 확인
+- `fds` Private Project 존재, `self_registration: false`(익명 미허용) 확인
+- Robot Account 3개 확인: `robot$fds-ci`(pull+push), `robot$push`(pull+push, Python
+  base 이미지용), `robot$worker`(**pull-only**, 설명에 "D-SEC-01/D19에 따라 Runner와
+  자격증명 분리, TTL 30일" 명시) — README가 요구한 "Runner/Worker Robot 분리" 설계와
+  일치함을 실측 확인. `robot$fds-ci`의 `duration`이 60일로 다른 두 Robot(30일)과
+  달라 TTL 정책과 어긋나는 점을 발견했으나 이번 작업 범위 밖이라 별도 확인 필요로
+  남긴다.
+- `fds/transaction-api`(artifact 4, pull_count 7), `fds/fds-engine`(artifact 5,
+  pull_count 5) 리포지토리에 이미 여러 차례 Push/Pull 이력 존재
+
+**UID/GID/approved-digest 실측 (worker01에서)**:
+- 두 이미지의 최신(`latest`/`254b822`, 2026-09-16 12:42 Push) digest를 admin 계정으로
+  `ctr images pull` 후 `ctr run ... getent passwd/group fdsuser`로 직접 확인
+- 결과: UID=10001(Dockerfile `useradd -r -u 10001 fdsuser`로 명시), GID=999(useradd가
+  자동 생성한 fdsuser 전용 그룹의 실제 GID — Dockerfile에 `-g` 옵션이 없어 값을
+  Dockerfile만으로는 알 수 없었고, 이미지 내부를 직접 열어 확인했음)
+- 두 이미지 동일 값으로 확인, `manifests/02-securitycontext.yaml`에 반영
+
+**harbor-pull-secret 생성**:
+- Harbor v2.13은 secret 재발급이 `POST /robots/{id}/refresh`가 아니라 `PATCH
+  /robots/{id}`로 직접 새 secret 값을 지정하는 방식임을 실측으로 확인(전자는 404)
+- worker01에서 32자 랜덤 문자열을 생성해 `robot$worker`(id=2)에 admin 계정으로
+  PATCH 등록, 그 값으로 dockerconfigjson을 만들어 control01로 옮긴 뒤
+  `harbor-pull-secret`(fds-app ns, `kubernetes.io/dockerconfigjson`)으로 생성
+- CP-Worker 간 SSH가 ansible01 단일 경로로 제한돼 있어(SEC-06) `scp`로 직접
+  전송하지 못함 — dockerconfigjson 내용을 수동으로 옮겨 처리함. 임시 파일은
+  양쪽에서 `shred -u`로 폐기
+
+**transaction-api/fds-engine 실배포**:
+- `manifests/02-securitycontext.yaml`의 두 Deployment+Service만 분리 적용 (모니터링
+  5개는 이미지 버전 미확정이라 제외)
+- `fds-engine`은 즉시 `2/2 Running`
+- `transaction-api`는 `CrashLoopBackOff` — 로그 확인 결과 `DATABASE_URL` 환경변수
+  부재로 `app/db.py`에서 `KeyError` 발생(fds-msa 저장소 코드가 이 환경변수를
+  필수로 요구함, `postgresql+asyncpg://<user>:<pass>@10.1.93.55:5432/fdsdb` 형식)
+- DB 계정 정보를 확인해 `transaction-api-db-credentials` Secret(key `DATABASE_URL`)을
+  생성하고 Deployment에 `env.valueFrom.secretKeyRef`로 연결, 재기동 후
+  `transaction-api` 2/2 `Running`으로 전환 확인
+- **주의**: 이 과정에서 DB 비밀번호가 세션 대화 텍스트에 평문으로 노출됐다. DB
+  Secret은 Pull-only Robot 토큰보다 파급력이 크므로(전체 DB 접근), 이 세션 종료
+  전 담당자(P1-DB-01 Lead)에게 로테이션을 요청할 것을 권고한다. 이 문서와
+  `manifests/02-securitycontext.yaml`에는 실제 비밀번호 값을 기록하지 않았다.
+
+**남은 것**:
+- 모니터링 5개 워크로드(이미지 버전 미확정)
+- `robot$fds-ci`의 TTL 60일 vs 정책 30일 불일치 확인
+- DB 비밀번호 로테이션 여부 확인
+- worker01에 admin 계정으로 임시 pull한 이미지 2개는 그대로 두거나 정리 가능(운영에
+  지장 없음, 정식 Robot 계정으로 재pull되면 자연히 갱신됨)
+
 ## 적용하지 않은 항목과 이유
 
 - `manifests/02-securitycontext.yaml` (SEC-04): `<확인된-UID>`, `<확인된-GID>`,
