@@ -98,6 +98,26 @@
 - ~~`<Worker-Node-CIDR>`~~ — baseline §6.2에서 개별 IP(10.1.93.105/107/108)로 확정, 반영 완료 (2차 수정)
 - `<PVC용량의-80%>` — Prometheus PVC 실제 용량 확정 후 계산
 
+## Out-of-band 클러스터 Drift — NodePort 30080 GNP (2026-09-22)
+
+> 출처: 재환 독립 리뷰 [pullrequestreview-5274034835](https://github.com/321Team/infra-kubernetes/pull/7#pullrequestreview-5274034835) 경미 지적 4번,
+> baseline 보류 이슈 [fds-project-baseline#90](https://github.com/321Team/fds-project-baseline/issues/90) (Closed, 이 PR로 이관).
+
+- `nodeport-30080-allow` GlobalNetworkPolicy가 이 저장소의 리뷰·병합 절차를 거치지 않고
+  **클러스터에 직접(out-of-band) 적용**되어 있는 것으로 보고됨: `preDNAT: true`, `order: 50`.
+  저장소 파일은 `order: 100`이었다 — 이 PR에서 `50`으로 동기화했다.
+- **selector 실측값은 미확인.** 위 리뷰는 "실측 라벨과 대조"가 필요하다고만 남겼고 정확한
+  selector 문자열은 기록되어 있지 않다. 이 PR은 selector를 임의로 바꾸지 않았다 — 저장소의
+  `role == 'k8s-worker'`는 UNVERIFIED로 표시만 해두었다.
+- **위험:** `p1-k8s-01-v4` 패키지가 이 저장소 파일 기준으로 재배포되면, 클러스터의 out-of-band
+  적용분(`order: 50`)이 저장소 값(과거 `100`)으로 덮여 실제 동작이 바뀔 수 있었다. 이번 동기화로
+  order 불일치는 해소했으나 selector 불일치 위험은 남아 있다.
+- **재개 조건(변경 없음):** `.50/32(edge01) → Worker:30080` preDNAT 허용의 Runtime
+  Positive/Negative 검증은 여전히 NOT VERIFIED이며, [P1-SEC-01 #19](https://github.com/321Team/fds-project-baseline/issues/19)의
+  정식 승인 없이는 edge01 마이그레이션 재개 판단을 내리지 않는다.
+- **다음 조치:** `kubectl get globalnetworkpolicy nodeport-30080-allow -o yaml`로 실측 selector를
+  확인해 이 파일에 반영하고, 확인 완료 후 이 표를 갱신할 것.
+
 ## Evidence
 
 이 PR 자체는 코드/스크립트 변경이며 Runtime 실행 증적을 포함하지 않는다. 실제 실행 결과는
