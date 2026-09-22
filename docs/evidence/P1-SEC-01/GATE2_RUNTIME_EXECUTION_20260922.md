@@ -99,6 +99,68 @@ b064b76b3adccc6dc4613ad7f27b63c289e2650601b8fb3b9114a73234b5a34a  logs/04-apiser
 
 이 문서 자체와 위 6개 로그 파일 어디에도 실제 secretbox 키 값은 포함돼 있지 않다.
 
+## 후속 — NodePort(30080) GNP selector 불일치 해결 (2026-09-22)
+
+`manifests/calico/05-nodeport-allow.yaml`의 selector(`role == 'k8s-worker'`)가 실제
+클러스터에 적용된 HEP 라벨(`fds.example/role: worker`, `p1-k8s-01-v4` 패키지)과 일치하지
+않아 그대로 적용해도 집행되지 않는 문제를 발견했다(위 "적용하지 않은 항목" 참조).
+
+**택하지 않은 방법**: 기존 `fds-k8s-host-k8s-worker0N` GNP(SSH/kubelet/VXLAN을 다루는
+노드별 범용 정책, `preDNAT` 미설정)에 30080 규칙만 끼워 넣는 방법. Calico의 `preDNAT`는
+GNP 전체에 걸리는 속성이라 규칙 단위로 섞을 수 없고, kube-proxy NodePort DNAT가
+이 GNP의 평가 시점보다 먼저 일어나므로 preDNAT 없이 추가한 목적지 포트 30080 규칙은
+실제 트래픽에 매칭되지 않는다(이미 DNAT로 목적지가 Pod IP:targetPort로 바뀐 뒤이기
+때문). 기존 GNP 전체를 preDNAT로 바꾸는 것은 이미 운영 중인 SSH/kubelet 보호를
+재검증 없이 흔드는 것이라 Runbook 원칙(회귀 확인 없는 기존 보호 변경 금지)에 위배된다.
+
+**실제 적용**: 기존 6개 GNP는 전혀 건드리지 않고, 별도의 전용 GNP
+`nodeport-30080-allow`를 신설해 실측 라벨로 selector를 맞췄다.
+
+```yaml
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: nodeport-30080-allow
+spec:
+  selector: fds.example/role == 'worker'
+  order: 50
+  applyOnForward: true
+  preDNAT: true
+  types: ["Ingress"]
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        nets: ["10.1.93.50/32"]  # edge01
+      destination:
+        ports: [30080]
+    - action: Deny
+      protocol: TCP
+      destination:
+        ports: [30080]
+```
+
+- 적용 전 worker01/02/03 HEP 라벨이 전부 `fds.example/role: worker`로 동일함을 실측
+  확인(`kubectl get hostendpoints ... -o jsonpath`).
+- order는 기존 GNP(100)와 일부러 다르게(50) 두었다. preDNAT 정책은 raw 체인에서
+  DNAT 이전에 별도로 평가되므로 non-preDNAT 정책(filter 체인, order 100)과 순서가
+  경쟁하지 않지만, 혼동 방지 목적으로 구분했다.
+- `kubectl apply --dry-run=server` → `kubectl apply` 순서로 적용, 결과가 요청한 spec과
+  정확히 일치함을 `-o yaml`로 확인.
+- 이 정책은 목적지 TCP 30080에만 걸리는 Ingress 전용 규칙이라 기존 GNP의 22/10250/4789
+  규칙과 구조적으로 겹치지 않는다. control01에서 worker01 SSH를 직접 테스트했으나
+  실패했는데, 이는 이 변경과 무관하다 — control01은 애초에 SSH 허용 source
+  (ansible01, 10.250.10.10)가 아니므로 이 GNP 적용 전부터 막혀 있었다. 실제 SSH 회귀
+  확인은 ansible01에서 수행해야 의미가 있으며, 이 세션에서는 수행하지 못했다.
+- NodePort 워크로드가 아직 없어 end-to-end 트래픽 검증(edge01 → Worker:30080 실제
+  요청)은 하지 못했다. Harbor/앱 배포 후 `scripts/verify-probe-failover.sh allow-flow`
+  재실행 필요.
+
+**남은 리스크**: 이 GNP는 저장소 파일이 아니라 클러스터에 직접 적용한 것이며,
+기존 6개 GNP(`p1-k8s-01-v4` 패키지)를 배포·관리하는 주체가 별도로 있다면 그 자동화가
+재배포·드리프트 복구를 수행할 때 이 GNP가 유실될 수 있다. 배포 주체 확인 및
+저장소 반영(파일로 정식화) 여부는 별도 결정 필요.
+
 ## 적용하지 않은 항목과 이유
 
 - `manifests/02-securitycontext.yaml` (SEC-04): `<확인된-UID>`, `<확인된-GID>`,
@@ -108,6 +170,6 @@ b064b76b3adccc6dc4613ad7f27b63c289e2650601b8fb3b9114a73234b5a34a  logs/04-apiser
   SELinux fcontext 사전 준비가 선행되지 않아 미적용.
 - `manifests/calico/*`: 클러스터에 이미 별도 패키지(`p1-k8s-01-v4`, `fds-k8s-host-*`
   GNP 6개)로 HEP/GNP가 적용돼 있어 이 저장소 파일을 적용하지 않았다. 두 산출물의
-  관계(대체·병합 여부)는 별도로 정리가 필요하다 — 특히 이 저장소의
-  `05-nodeport-allow.yaml` selector(`role == 'k8s-worker'`)가 실제 적용된 HEP 라벨
-  (`fds.example/role: worker`)과 일치하지 않아, 그대로 적용해도 집행되지 않는다.
+  관계(대체·병합 여부)는 별도로 정리가 필요하다. `05-nodeport-allow.yaml`의 selector
+  불일치 자체는 위 "후속 — NodePort(30080) GNP selector 불일치 해결" 절에서 클러스터에
+  직접 별도 GNP를 적용하는 방식으로 해소했으나, 저장소 파일 자체는 아직 수정하지 않았다.
