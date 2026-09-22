@@ -73,6 +73,32 @@
   이 클러스터의 실제 호스트명·계정·sudo 정책에 맞게 재작성해야 한다(SSH_USER=ansible,
   cp01/cp02/cp03, 무암호 sudo 가정이 실제 환경과 다름).
 
+## Evidence 파일 체크섬
+
+원본 로그(raw kubectl/grep 출력)는 이 저장소에 포함하지 않고 k8s-control01의
+`~/gate2-final-evidence/logs/`에 보관한다. 아래는 2026-09-22 수집 시점의 SHA-256이며,
+추후 이 값과 대조해 원본 로그가 변조되지 않았음을 확인할 수 있다.
+
+```
+f0cf80d520e667b18d2121b6bd9a75554dfe376b0eb7a2f2dc12bd45860d89ff  logs/01-namespace-applied.txt
+6071675a36f127fa253233c68b3947acb777931b379c27be4b694bbae60d80a4  logs/02-rbac-limitrange-applied.txt
+458a3bdc031f9cb5339da1e6eecc05c6a45df065068ed6d9ec0dc64f989c7658  logs/03-networkpolicy-applied.txt
+b064b76b3adccc6dc4613ad7f27b63c289e2650601b8fb3b9114a73234b5a34a  logs/04-apiserver-restart-status.txt
+7f21c23e55c526d3f93bc607fe87638ef5fa6b9f3213b8e660ef38942d5a9468  logs/05-apiserver-flag-control01.txt
+5f98cc4369bad73b5a938cf82fadeaaf05c7c66f852cfcdc0bf74bab4cd038d9  logs/06-history-cleanup-confirmed.txt
+```
+
+| 파일 | 내용 |
+|---|---|
+| `01-namespace-applied.txt` | `kubectl get ns --show-labels` — Namespace 4개 + PSA 라벨 적용 결과 |
+| `02-rbac-limitrange-applied.txt` | `kubectl get sa,limitrange -A` — ServiceAccount 8개, LimitRange 3개 |
+| `03-networkpolicy-applied.txt` | `kubectl get networkpolicy -A` — NetworkPolicy 12개 |
+| `04-apiserver-restart-status.txt` | CP 3대 kube-apiserver Pod 재시작 상태 (encryption-provider-config 적용 후) |
+| `05-apiserver-flag-control01.txt` | control01 kube-apiserver manifest의 `--encryption-provider-config`/`enc-config` 반영 확인 |
+| `06-history-cleanup-confirmed.txt` | control02/control03에서 secretbox 키가 포함된 bash history 항목을 파일 기반 필터링(`grep -v '^ENC_KEY="'`)으로 제거하고 잔여 건수 0 확인 |
+
+이 문서 자체와 위 6개 로그 파일 어디에도 실제 secretbox 키 값은 포함돼 있지 않다.
+
 ## 적용하지 않은 항목과 이유
 
 - `manifests/02-securitycontext.yaml` (SEC-04): `<확인된-UID>`, `<확인된-GID>`,
