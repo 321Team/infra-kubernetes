@@ -1,5 +1,39 @@
 # ICR scrape Source 사전점검
 
+## 2026-09-24 02:05 수신 후 수정
+
+`ICR_Scrape_Source_Q9M3kW`에서 전후 sender guard와 3개 인터페이스의 패킷 각64개를 확보했다.
+동일19연결/64 SYN을 대조해 PodIP10.244.39.219 → worker03 IP10.1.93.108 및 출발 포트
+변환, worker01 도착을 확인했다. 이 패킷은 재수집하지 않는다.
+
+구 수집기는 실행파일 신뢰 검증 후 symlink의 실제 경로를 실행해
+`iptables-save`를 `xtables-nft-multi`로 호출했다. 하위 명령 선택이 사라져 counter8조회가
+실패했다. 구 controller rc0은 전체 조회 성공을 뜻하지 않는다. 원 묶음은 PARTIAL로 보존한다.
+
+수정: 대상 파일의 root 소유·쓰기 권한 검증은 유지하고 호출에는 원래 명령명을 보존한다.
+불완전한 선택 조회는 `COLLECTED_PARTIAL`로 명시하고, 전후 guard까지 저장한 뒤
+controller rc3을 반환한다. 원 실행 로그/해시는 수정하지 않는다.
+
+**이번 보완 실행은 `--counters-only`다.** 기존 두 Worker의 IPv4 iptables 모든 기존 table을
+`iptables-save -c`로 20초 간격 두 번 읽는다. raw/mangle 경로도 함께 볼 수 있다.
+필터 테이블이 없거나 명령이 실패하면 STOP한다. tcpdump·새 probe·설치·권한/정책 변경·
+counter reset·trace 규칙 추가는 없다. sender와 인터페이스 신원만 다시 확인한다.
+새 counter 창은 과거02:05 창의 누락 카운터를 복원하지 않으며, counter 증가만으로
+개별 패킷의 drop 지점을 확정하지 않는다. native nft/eBPF 전체 보기는 이 조회와 별개다.
+
+```bash
+bash /가져온경로/run.sh "$PWD/inventory/hosts.yml" SOURCE_SHA --counters-only
+```
+
+동일 SHA의 `collect.py`, `collect.yml`, `counters.yml`, `stage.yml`, `run.sh`, `SHA256SUMS`를
+받아 검증한다. 반환물은 `ICR_Scrape_Counters_XXXXXX.tar.gz`와 sidecar다.
+
+수정 검증: symlink alias 실제 프로세스 호출·쓰기 가능한 대상 거부·부분 결과 표시·counter 전용
+범위/실패/빈 출력 검사와 기존7개 회귀, controller4경로 등17개 시험 PASS. AST4/YAML3/Bash PASS.
+로컬 Ansible은 없어 수정 playbook 실제 syntax-check는 현장 실행기에 맡긴다. 수정본 현장 실행은 NOT RUN.
+
+---
+
 책임: ICR-D-NET-01-01 Lead 이권욱. 2026-09-24 01:21 KST에 수신한
 [MON 사전점검](https://github.com/321Team/fds-project-evidence/pull/23)을 잇는다.
 운영 HEP/GNP에 9100 허용이 없고 10250은 CP3개만 허용된 상태에서, 실제 scrape 패킷의
@@ -30,7 +64,7 @@ Source와 양쪽 관측·기존 커널 규칙을 수집한다. 새 연결을 생
 ## 실행
 
 기존 `/home/server01_ansible/p1-ans-01` checkout에서 기존 env·ansible.cfg를 사용한다.
-동일 source SHA의 collect.py/collect.yml/stage.yml/run.sh/SHA256SUMS를 내려받아 해시 확인 후:
+동일 source SHA의 collect.py/collect.yml/counters.yml/stage.yml/run.sh/SHA256SUMS를 내려받아 해시 확인 후:
 
 ```bash
 bash /가져온경로/run.sh "$PWD/inventory/hosts.yml" SOURCE_SHA
