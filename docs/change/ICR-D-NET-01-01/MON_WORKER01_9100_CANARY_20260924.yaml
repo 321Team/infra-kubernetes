@@ -1,0 +1,26 @@
+# REVIEW CANDIDATE ONLY. Not authorized for runtime application.
+# Temporary diagnostic exception; see MON_SCRAPE_CANARY_20260924.md.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: icr-mon-worker03-to-worker01-9100-canary
+  annotations:
+    fds.example/purpose: "Temporary source-IP diagnostic exception; not Prometheus identity enforcement"
+spec:
+  tier: default
+  order: 90
+  selector: 'fds.example/bootstrap == "p1-k8s-01-v4" && fds.example/node == "k8s-worker01"'
+  applyOnForward: false
+  types:
+    - Ingress
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        nets:
+          - 10.1.93.108/32
+      destination:
+        nets:
+          - 10.1.93.105/32
+        ports:
+          - 9100
