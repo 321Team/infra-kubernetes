@@ -1,5 +1,17 @@
 # CP1 최소 CNI 변경 — 독립 리뷰용 실행 계약
 
+## 신규 v4 CP 세션 제안
+
+[CP 세션 정책](../change/ICR-D-NET-01-01/CP_SESSION_REVIEW_20260918.md)은 소스와 CP1→CP2→CP3 실행 위임을 한 번에 검토하고, 별도의 결과 리뷰 대기 회수 시각 없이 실제 유인 종료시각까지 한 세션으로 연결한다. [일괄 실행 도구](CP_SESSION.md)가 확인·검사·증적 취합을 처리한다. 새 독립 정책 승인 후 **신규 v4 Job에만** 적용되며 아래 v1/v2/v3 및 실행 중인 Job의 계약을 소급 변경하지 않는다.
+
+## 신규 v3 운영자 예외 제안
+
+담당자 부재 시 개별 Job의 독립 인수를 대기로 남긴 채 **CP1만 제한적으로 유지**하는 새 권한을 추가한다. [정책·권한·검증 범위](../change/ICR-D-NET-01-01/CP1_OPERATOR_EXCEPTION_REVIEW_20260918.md). 새 정책/소스의 독립 승인과 v3 authorization의 명시적 위임이 선행되어야 하며 기존 v1/v2 Job에는 소급 적용하지 않는다.
+
+`retain-by-exception --job ID --exception FILE --exception-sha256 SHA --trial ARCHIVE --trial-sha256 SHA --regression FILE --regression-sha256 SHA`는 기존 실제 5-flow·HOST/외부 결과와 GWONUK의 정확한 Job 결정을 연결한다. 예외 상태는 `PROVISIONAL_RETAINED_REVIEW_REQUIRED`, `cp1_accepted=false`, 독립 인수 `PENDING`이다. 현재 이미 예약된 최종 회수 시각을 바꾸지 않는다. 정상 인수 및 CP2/CP3 승인으로 사용하지 않는다.
+
+입력 양식은 [신규 실행 승인](../../policies/icr-d-net-01-01/cp1-operator-window-authorization.template.json), [운영자 예외 결정](../../policies/icr-d-net-01-01/cp1-operator-exception.template.json)이다. 승인 값은 기본적으로 비어 있거나 false이다. 실제 사후 리뷰는 기록으로 보존하되, 첫 deadline 뒤의 승인을 앞당겨 쓰거나 만료 Job을 되살리지 않는다.
+
 이 문서는 새 코드의 검토·실행 계약이다. 현재 CP1 적용이나 인수를 증명하지 않는다.
 `run-cp1-minimal-change.py`의 무인자 실행은 PLAN_ONLY이며, 실제 적용은 새 소스 리뷰와 명시된 작업창 입력이 필요하다.
 

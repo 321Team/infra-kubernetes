@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HOST, BLOCK = 'k8s-control01', '10.244.246.64/26'
 ZONE, LOCAL, EGRESS = 'fds-cp1-min', 'fds-cp1-local', 'fds-cp1-egress'
 SETS = ('fds-cp1-out4', 'fds-cp1-out6')
+EXCEPTION_POLICY = 'fds.cp1-operator-exception-policy.v1'
+PROVISIONAL = 'PROVISIONAL_RETAINED_REVIEW_REQUIRED'
 NAMES = {'ipsets': SETS, 'zones': (ZONE,), 'policies': (LOCAL, EGRESS)}
 PRESERVED_DISABLED_POLICIES = frozenset(('gateway-dmz-to-HOST', 'gateway-lan-to-HOST',
     'gateway-lan-to-work', 'gateway-lan-to-world', 'gateway-world-to-HOST'))
@@ -279,7 +281,10 @@ def validate_view(view, base, *, allow_missing_runtime=False,
 
 def check_authorization(auth, base, source_digest, clock=None):
     clock = clock or now()
-    need(auth.get('schema') in ('fds.cp1-minimal-authorization.v1', 'fds.cp1-minimal-authorization.v2') and auth.get('execution_approved') is True and
+    if auth.get('schema') == 'fds.cp1-minimal-authorization.v4':
+        return check_session_authorization(auth, base, source_digest, clock)
+    need(auth.get('schema') in ('fds.cp1-minimal-authorization.v1', 'fds.cp1-minimal-authorization.v2',
+                               'fds.cp1-minimal-authorization.v3') and auth.get('execution_approved') is True and
          auth.get('independent_reviewer') == 'hayeounglee' and auth.get('review_decision') == 'APPROVED', 'independent execution decision absent')
     need(auth.get('operator') == 'GWONUK' and all(auth.get(key) is True for key in
          ('maintenance_freeze', 'console_recovery_available', 'backup_verified', 'protection_reviewed',
@@ -288,13 +293,15 @@ def check_authorization(auth, base, source_digest, clock=None):
     url = auth.get('review_url', '').strip()
     if url.startswith('<') and url.endswith('>'):
         url = url[1:-1]
-    need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/11#(?:issuecomment|pullrequestreview)-[0-9]+', url), 'source review URL required')
+    review_pr = r'[1-9][0-9]*' if auth['schema'] == 'fds.cp1-minimal-authorization.v3' else '11'
+    need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/' + review_pr +
+                      r'#(?:issuecomment|pullrequestreview)-[0-9]+', url), 'source review URL required')
     need(auth.get('reviewed_bundle_sha256') == source_digest and auth.get('before_sha256') == fingerprint(base) and
          auth.get('scope') == {'hostname': HOST, 'pod_block': BLOCK, 'interfaces': 'cali+', 'l4': 'ALL', 'plane': 'runtime'}, 'reviewed scope/source/state differs')
     start, end, reviewed = (instant(auth[key]) for key in ('window_start', 'window_end', 'reviewed_at'))
     kst = dt.timezone(dt.timedelta(hours=9))
     need(start.astimezone(kst).weekday() < 5 and end.astimezone(kst).weekday() < 5, 'weekday work window required')
-    if auth['schema'] == 'fds.cp1-minimal-authorization.v2':
+    if auth['schema'] in ('fds.cp1-minimal-authorization.v2', 'fds.cp1-minimal-authorization.v3'):
         retained = instant(auth['retention_until'])
         margin = auth.get('recovery_margin_seconds')
         # A staffed educational workday, not a measured performance guarantee.
@@ -306,9 +313,19 @@ def check_authorization(auth, base, source_digest, clock=None):
         need(reviewed <= clock and start <= clock < end < retained and
              clock + dt.timedelta(seconds=margin + 420) < end,
              'work window expired/too short or retention order invalid')
-        return {'review_url': url, 'withdraw_at': (end - dt.timedelta(seconds=margin)).isoformat(),
-                'expires_at': end.isoformat(), 'retained_withdraw_at': (retained - dt.timedelta(seconds=margin)).isoformat(),
-                'retention_until': retained.isoformat(), 'recovery_margin_seconds': margin}
+        window = {'review_url': url, 'withdraw_at': (end - dt.timedelta(seconds=margin)).isoformat(),
+                  'expires_at': end.isoformat(), 'retained_withdraw_at': (retained - dt.timedelta(seconds=margin)).isoformat(),
+                  'retention_until': retained.isoformat(), 'recovery_margin_seconds': margin}
+        if auth['schema'] == 'fds.cp1-minimal-authorization.v3':
+            # The changed source/policy still requires an independent source
+            # review. Operator exception is an explicit, pre-reviewed grant for
+            # a NEW job, not authority inferred from a role or a boolean later.
+            need(auth.get('operator_exception_policy') == EXCEPTION_POLICY and
+                 auth.get('operator_exception_permitted') is True and
+                 auth.get('exception_operator') == 'GWONUK', 'new exception policy grant absent')
+            window.update(operator_exception_policy=EXCEPTION_POLICY,
+                          operator_exception_permitted=True, exception_operator='GWONUK')
+        return window
     need(reviewed <= clock and start <= clock < end and 0 < (end - start).total_seconds() <= 7200 and
          clock + dt.timedelta(seconds=600) < end, 'window expired/too short/unbounded')
     return {'review_url': url, 'withdraw_at': (end - dt.timedelta(seconds=180)).isoformat(), 'expires_at': end.isoformat()}
@@ -317,15 +334,18 @@ def check_authorization(auth, base, source_digest, clock=None):
 def apply(io, journal, original, auth, source_digest):
     base = io.snapshot(); validate_baseline(base, original)
     window = check_authorization(auth, base, source_digest, io.now())
-    version = 'v2' if auth['schema'] == 'fds.cp1-minimal-authorization.v2' else 'v1'
+    version = auth['schema'].rsplit('.', 1)[1]
     record = {'schema': 'fds.cp1-minimal-change.' + version, 'job_id': io.job_id, 'status': 'PREPARED',
               'source_bundle_sha256': source_digest, 'authorization_sha256': fingerprint(auth),
               'original_receipt_sha256': fingerprint(original), 'before': base, 'operations': [],
               'started_at': io.now().isoformat(), **window, 'cp1_accepted': False}
     journal.save(record)
-    if version == 'v2':
+    if version in ('v2', 'v3', 'v4'):
         try:
-            io.arm(window['withdraw_at'], window['retained_withdraw_at'])
+            if version == 'v4':
+                io.arm(window['withdraw_at'])
+            else:
+                io.arm(window['withdraw_at'], window['retained_withdraw_at'])
         except Exception as error:
             record.update(status='FAILED_REVIEW_REQUIRED', error=str(error))
             journal.save(record)
@@ -449,7 +469,7 @@ def validate_handoff(handoff, original, trial_request, trial_wrapper, reviewed_b
     rebuilt = receipt(handoff['change'], original, trial_request, trial_wrapper, reviewed_bundle,
                       instant(handoff['issued_at']))
     cutoff = handoff['change']['withdraw_at']
-    if acceptance is not None and acceptance.get('schema') == 'fds.cp1-minimal-acceptance.v2':
+    if acceptance is not None and acceptance.get('schema') in ('fds.cp1-minimal-acceptance.v2', 'fds.cp1-minimal-acceptance.v3'):
         validate_acceptance(acceptance, handoff, clock)
         cutoff = handoff['change']['retained_withdraw_at']
     need(handoff == rebuilt and instant(handoff['issued_at']) <= clock < instant(cutoff),
@@ -459,12 +479,14 @@ def validate_handoff(handoff, original, trial_request, trial_wrapper, reviewed_b
 
 def validate_acceptance(data, handoff, clock=None):
     clock = clock or now()
-    retained = data.get('schema') == 'fds.cp1-minimal-acceptance.v2'
-    need(data.get('schema') in ('fds.cp1-minimal-acceptance.v1', 'fds.cp1-minimal-acceptance.v2') and data.get('decision') == 'ACCEPTED' and
+    retained = data.get('schema') in ('fds.cp1-minimal-acceptance.v2', 'fds.cp1-minimal-acceptance.v3')
+    need(data.get('schema') in ('fds.cp1-minimal-acceptance.v1', 'fds.cp1-minimal-acceptance.v2',
+                               'fds.cp1-minimal-acceptance.v3') and data.get('decision') == 'ACCEPTED' and
          data.get('independent_reviewer') == 'hayeounglee' and data.get('review_decision') == 'APPROVED',
          'new independent CP1 acceptance absent')
     record = handoff['change']
-    need(retained == (record.get('schema') == 'fds.cp1-minimal-change.v2'), 'acceptance/change version mismatch')
+    need(data['schema'].rsplit('.', 1)[1] == record.get('schema', '').rsplit('.', 1)[-1],
+         'acceptance/change version mismatch')
     if retained:
         need(data.get('retention_approved') is True and
              instant(data['reviewed_at']) < instant(record['withdraw_at']), 'retention requires acceptance before the first deadline')
@@ -472,7 +494,8 @@ def validate_acceptance(data, handoff, clock=None):
     need(data.get('handoff_sha256') == fingerprint(handoff) and
          data.get('source_bundle_sha256') == handoff['change']['source_bundle_sha256'] and
          data.get('expires_at') == cutoff, 'acceptance binding/lifetime differs')
-    need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/11#(?:issuecomment|pullrequestreview)-[0-9]+',
+    review_pr = r'[1-9][0-9]*' if data['schema'] == 'fds.cp1-minimal-acceptance.v3' else '11'
+    need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/' + review_pr + r'#(?:issuecomment|pullrequestreview)-[0-9]+',
                       data.get('review_url', '')), 'acceptance review URL required')
     need(instant(handoff['issued_at']) <= instant(data['reviewed_at']) <= clock < instant(data['expires_at']),
          'acceptance timestamp invalid/expired')
@@ -486,7 +509,7 @@ def validate_acceptance(data, handoff, clock=None):
 
 def live_gate(status, record, minimum_seconds=0, clock=None, acceptance=None, required_until=None):
     clock = clock or now()
-    retained = acceptance is not None and acceptance.get('schema') == 'fds.cp1-minimal-acceptance.v2'
+    retained = acceptance is not None and acceptance.get('schema') in ('fds.cp1-minimal-acceptance.v2', 'fds.cp1-minimal-acceptance.v3')
     cutoff = record['retained_withdraw_at'] if retained else record['withdraw_at']
     if retained:
         need(status.get('acceptance_sha256') == fingerprint(acceptance) and
@@ -505,7 +528,7 @@ def live_gate(status, record, minimum_seconds=0, clock=None, acceptance=None, re
 def retention_proof(record, handoff, acceptance, clock=None):
     """Bind an already reviewed result; never infer GitHub approval from a hash."""
     clock = clock or now()
-    need(record.get('schema') == 'fds.cp1-minimal-change.v2' and
+    need(record.get('schema') in ('fds.cp1-minimal-change.v2', 'fds.cp1-minimal-change.v3') and
          record.get('status') == 'ACTIVE_REVIEW_REQUIRED' and record.get('recovery_armed') is True,
          'only a new active v2 job can enter retained state')
     need(handoff.get('schema') == 'fds.cp1-minimal-handoff.v1' and handoff.get('change') == record and
@@ -524,3 +547,176 @@ def validate_retention(proof, record, handoff, acceptance):
     need(proof == retention_proof(record, handoff, acceptance, instant(proof['accepted_at'])),
          'root retention proof differs')
     return proof
+
+
+def validate_operator_exception(data, handoff, clock=None):
+    """A source-reviewed operator grant is distinct from independent acceptance.
+
+    JSON does not authenticate GitHub authorship. The caller must verify the
+    actual GWONUK decision at authority_url before preparing this input.
+    """
+    clock = clock or now()
+    record = handoff['change']
+    need(record.get('schema') == 'fds.cp1-minimal-change.v3' and
+         record.get('operator_exception_policy') == EXCEPTION_POLICY and
+         record.get('operator_exception_permitted') is True and
+         record.get('exception_operator') == 'GWONUK', 'job has no reviewed operator exception grant')
+    need(data.get('schema') == 'fds.cp1-operator-exception.v1' and
+         data.get('decision') == 'OPERATOR_AUTHORIZED' and data.get('operator') == 'GWONUK' and
+         data.get('independent_review_status') == 'PENDING' and data.get('cp1_accepted') is False and
+         data.get('post_review_required') is True and data.get('reason_code') == 'REVIEWER_UNAVAILABLE',
+         'operator decision must remain pending independent review')
+    need('independent_reviewer' not in data and 'review_decision' not in data,
+         'operator exception cannot impersonate an independent reviewer')
+    need(isinstance(data.get('reason'), str) and 0 < len(data['reason'].strip()) <= 1000,
+         'specific reviewer-unavailability reason required')
+    need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/[1-9][0-9]*#issuecomment-[0-9]+',
+                      data.get('authority_url', '')), 'operator decision comment URL required')
+    need(data.get('job_id') == record['job_id'] and data.get('source_bundle_sha256') == record['source_bundle_sha256'] and
+         data.get('handoff_sha256') == fingerprint(handoff) and data.get('expires_at') == record['retained_withdraw_at'] and
+         data.get('scope') == {'hostname': HOST, 'action': 'retain-existing-cp1', 'plane': 'runtime',
+                              'pod_block': BLOCK, 'interfaces': 'cali+', 'l4': 'ALL'},
+         'operator exception scope/state/deadline differs')
+    need(instant(handoff['issued_at']) <= instant(data['authorized_at']) <= clock < instant(record['withdraw_at']),
+         'operator decision or commit outside first work window')
+    checks = data.get('checks', {})
+    need(set(checks) == {'positive', 'negative', 'regression'}, 'operator exception evidence incomplete')
+    for check in checks.values():
+        need(check.get('status') == 'PASS' and re.fullmatch('[0-9a-f]{64}', check.get('evidence_sha256', '')),
+             'operator exception check lacks evidence')
+    return data
+
+
+def exception_retention_proof(record, handoff, exception, clock=None):
+    clock = clock or now()
+    need(record.get('status') == 'ACTIVE_REVIEW_REQUIRED' and record.get('recovery_armed') is True and
+         handoff.get('change') == record and handoff.get('change_receipt_sha256') == fingerprint(record),
+         'operator exception requires the original active handoff')
+    validate_operator_exception(exception, handoff, clock)
+    return {'schema': 'fds.cp1-exception-retention.v1', 'job_id': record['job_id'],
+            'change_receipt_sha256': fingerprint(record), 'handoff_sha256': fingerprint(handoff),
+            'exception_sha256': fingerprint(exception), 'committed_at': clock.isoformat(),
+            'withdraw_at': record['retained_withdraw_at'], 'cp1_accepted': False,
+            'independent_review_status': 'PENDING'}
+
+
+def validate_exception_retention(proof, record, handoff, exception):
+    need(proof == exception_retention_proof(record, handoff, exception, instant(proof['committed_at'])),
+         'root operator exception proof differs')
+    return proof
+
+
+def live_exception_gate(status, record, proof, clock=None):
+    """CP1 maintenance only. Downstream live_gate never accepts this status."""
+    clock = clock or now()
+    need(status.get('status') == PROVISIONAL and status.get('cp1_accepted') is False and
+         status.get('independent_review_status') == 'PENDING' and status.get('recovery_armed') is True and
+         status.get('job_id') == record['job_id'] and status.get('source_bundle_sha256') == record['source_bundle_sha256'] and
+         status.get('change_receipt_sha256') == fingerprint(record) and
+         status.get('exception_sha256') == proof['exception_sha256'] and
+         status.get('handoff_sha256') == proof['handoff_sha256'] and
+         status.get('withdraw_at') == record['retained_withdraw_at'] and
+         status.get('current') == record['after'] and validate_view(status['current'], record['before']) and
+         clock < instant(record['retained_withdraw_at']), 'live provisional state differs/expired')
+
+
+SESSION_POLICY = 'fds.cp-session-policy.v1'
+SESSION_TARGETS = ['k8s-control02', 'k8s-control03']
+SESSION_ACTIVE = 'CP_SESSION_ACTIVE_REVIEW_PENDING'
+
+
+def check_session_authorization(auth, base, source_digest, clock):
+    """A NEW job under a real, independently approved source/policy delegation.
+
+    This record is not GitHub authentication. The session controller verifies
+    the policy decision and operator comment before any SSH mutation.
+    Result acceptance remains pending and is never inferred from that review.
+    """
+    need(auth.get('execution_approved') is True and auth.get('operator') == 'GWONUK' and
+         auth.get('independent_reviewer') == 'hayeounglee' and auth.get('review_decision') == 'APPROVED' and
+         auth.get('review_scope') == 'SOURCE_AND_SESSION_DELEGATION' and
+         auth.get('session_policy') == SESSION_POLICY and auth.get('delegated_targets') == SESSION_TARGETS and
+         auth.get('independent_acceptance') == 'PENDING', 'reviewed session delegation absent')
+    for key in ('maintenance_freeze', 'console_recovery_available', 'backup_verified', 'protection_reviewed',
+                'inert_permanent_staging_acknowledged', 'operator_present_until_end'):
+        need(auth.get(key) is True, 'session prerequisite absent: ' + key)
+    for key in ('review_url', 'operator_decision_url'):
+        suffix = '(?:issuecomment|pullrequestreview)' if key == 'review_url' else 'issuecomment'
+        need(re.fullmatch(r'https://github.com/321Team/infra-kubernetes/pull/[1-9][0-9]*#' + suffix + r'-[0-9]+',
+                          auth.get(key, '')), 'actual session authority URL required')
+    need(auth.get('reviewed_bundle_sha256') == source_digest and auth.get('before_sha256') == fingerprint(base) and
+         auth.get('scope') == {'hostname': HOST, 'pod_block': BLOCK, 'interfaces': 'cali+', 'l4': 'ALL', 'plane': 'runtime'},
+         'session scope/source/state differs')
+    start, end, reviewed, decided = (instant(auth[k]) for k in
+                                    ('window_start', 'window_end', 'reviewed_at', 'operator_decided_at'))
+    kst = dt.timezone(dt.timedelta(hours=9)); margin = auth.get('recovery_margin_seconds')
+    need(type(margin) is int and margin >= 180, 'explicit recovery margin must cover existing service budget')
+    need(start.astimezone(kst).weekday() < 5 and start.astimezone(kst).date() == end.astimezone(kst).date(),
+         'one staffed KST weekday required')
+    need(reviewed <= decided <= clock and start <= clock and clock + dt.timedelta(seconds=margin + 420) < end,
+         'session authority/window expired or too short')
+    return {'review_url': auth['review_url'], 'operator_decision_url': auth['operator_decision_url'],
+            'operator_decided_at': auth['operator_decided_at'], 'session_policy': SESSION_POLICY,
+            'delegated_targets': SESSION_TARGETS.copy(), 'independent_acceptance': 'PENDING',
+            'withdraw_at': (end - dt.timedelta(seconds=margin)).isoformat(), 'expires_at': end.isoformat(),
+            'recovery_margin_seconds': margin}
+
+
+def validate_session_decision(data, handoff, clock=None):
+    clock = clock or now(); record = handoff['change']
+    need(record.get('schema') == 'fds.cp1-minimal-change.v4' and
+         record.get('session_policy') == SESSION_POLICY and record.get('delegated_targets') == SESSION_TARGETS,
+         'job has no reviewed session delegation')
+    need(data.get('schema') == 'fds.cp-session-continuation.v1' and data.get('operator') == 'GWONUK' and
+         data.get('decision') == 'CONTINUE_UNDER_DELEGATION' and data.get('cp1_accepted') is False and
+         data.get('independent_acceptance') == 'PENDING' and data.get('targets') == SESSION_TARGETS and
+         data.get('join_authorized') is False, 'session decision scope or acceptance differs')
+    need('independent_reviewer' not in data and 'review_decision' not in data,
+         'continuation cannot impersonate result review')
+    need(data.get('operator_decision_url') == record['operator_decision_url'] and
+         data.get('job_id') == record['job_id'] and data.get('source_bundle_sha256') == record['source_bundle_sha256'] and
+         data.get('handoff_sha256') == fingerprint(handoff) and data.get('expires_at') == record['withdraw_at'],
+         'session continuation binding differs')
+    need(instant(record['operator_decided_at']) <= instant(handoff['issued_at']) <=
+         instant(data['decided_at']) <= clock < instant(record['withdraw_at']), 'session decision timestamp differs')
+    checks = data.get('checks', {})
+    need(set(checks) == {'positive', 'negative', 'regression'}, 'session evidence incomplete')
+    for check in checks.values():
+        need(check.get('status') == 'PASS' and re.fullmatch('[0-9a-f]{64}', check.get('evidence_sha256', '')),
+             'session evidence hash absent')
+    return data
+
+
+def session_proof(record, handoff, decision, clock=None):
+    clock = clock or now()
+    need(record.get('status') == 'ACTIVE_REVIEW_REQUIRED' and record.get('recovery_armed') is True and
+         handoff.get('change') == record and handoff.get('change_receipt_sha256') == fingerprint(record),
+         'session requires original active handoff')
+    validate_session_decision(decision, handoff, clock)
+    return {'schema': 'fds.cp-session-proof.v1', 'job_id': record['job_id'],
+            'change_receipt_sha256': fingerprint(record), 'handoff_sha256': fingerprint(handoff),
+            'decision_sha256': fingerprint(decision), 'committed_at': clock.isoformat(),
+            'withdraw_at': record['withdraw_at'], 'cp1_accepted': False, 'independent_acceptance': 'PENDING'}
+
+
+def validate_session_proof(proof, record, handoff, decision):
+    need(proof == session_proof(record, handoff, decision, instant(proof['committed_at'])),
+         'root session proof differs')
+    return proof
+
+
+def live_session_gate(status, record, decision, clock=None, required_until=None):
+    clock = clock or now()
+    need(record.get('schema') == 'fds.cp1-minimal-change.v4' and status.get('status') == SESSION_ACTIVE and
+         status.get('cp1_accepted') is False and status.get('independent_acceptance') == 'PENDING' and
+         status.get('recovery_armed') is True and status.get('job_id') == record['job_id'] and
+         status.get('source_bundle_sha256') == record['source_bundle_sha256'] and
+         status.get('change_receipt_sha256') == fingerprint(record) and
+         status.get('session_decision_sha256') == fingerprint(decision) and
+         status.get('handoff_sha256') == decision['handoff_sha256'] and
+         status.get('withdraw_at') == record['withdraw_at'] and status.get('current') == record['after'] and
+         validate_view(status['current'], record['before']) and clock < instant(record['withdraw_at']),
+         'live session state/source/authority/recovery differs')
+    if required_until is not None:
+        need(clock < instant(required_until) < instant(record['withdraw_at']),
+             'target work window must finish before session recovery')

@@ -1,0 +1,56 @@
+{
+  "active_v2_job_migration": false,
+  "candidate_status": "POLICY_AND_SOURCE_REVIEW_REQUIRED",
+  "created_at": "2026-09-17T16:27:22.265844+00:00",
+  "default_plan": "PASS_NO_SSH",
+  "files_sha256": {
+    "docs/change/ICR-D-NET-01-01/CP1_OPERATOR_EXCEPTION_REVIEW_20260918.md": "a96ce7b83c4ee707eb854deca5f3bdda7b030ea5f1242e9329b1222cd50fd649",
+    "docs/change/ICR-D-NET-01-01/CP1_OPERATOR_EXCEPTION_TEST_20260918.txt": "6f5fd8d414bd9a0b5dbd239aa51f77a31cd7090126892a2259466a1655e298e9",
+    "docs/runbooks/CP1_MINIMAL_CHANGE.md": "80f7dfc70f4d4c1eb6bced0a417dab2113b80e6f8727e144b92b2114ccd086ea",
+    "policies/icr-d-net-01-01/cp1-operator-exception.template.json": "ac9566a3d4bde24f088e807d41438228877080e8a52755e137490c3c19b7fa01",
+    "policies/icr-d-net-01-01/cp1-operator-window-authorization.template.json": "d445d905b0217043aefbfced4fe6b67bc6c29ac83b3d6d4bcdca272275b0eb9c",
+    "scripts/cp1_minimal_change.py": "554c1dd4695d7dea8687205899b9a13b21dff188fa8f7774783b3e00ac0bf299",
+    "scripts/run-cp1-minimal-change.py": "1d9ed963af92fdb781e0f334a33e79c54c4f728cf29c67df2baea01fe4af14cd",
+    "scripts/run-node-firewall-cni.py": "6fe34eb5ff64a3d8b16b588d66f81c9a5b6776a926d8db6fe662bd43d822bdd6",
+    "tests/test_cp1_operator_exception.py": "b33ea47ec8bf5dea0a6685a0b20b35caefad66243d121bb6f3ca0b1ed485aab2"
+  },
+  "independent_policy_approval": "NOT_CONFIRMED",
+  "legacy_bytes_unchanged": [
+    "scripts/node-firewall.py",
+    "scripts/run-node-firewall.py",
+    "scripts/analyze-cp1-cni-trial.py",
+    "scripts/cp-canary-node.py",
+    "scripts/cp1_minimal_consumer.py",
+    "policies/icr-d-net-01-01/node-firewall-v2.json"
+  ],
+  "new_exception_tests": 20,
+  "parent_commit": "a95ef4f42b45cb4bfaa7214e8ed366750e127502",
+  "prior_selected_tests": 156,
+  "protected_functions_ast_unchanged": [
+    "scripts/cp1_minimal_change.py:expected_objects",
+    "scripts/cp1_minimal_change.py:documents",
+    "scripts/cp1_minimal_change.py:validate_baseline",
+    "scripts/cp1_minimal_change.py:validate_view",
+    "scripts/cp1_minimal_change.py:recover",
+    "scripts/cp1_minimal_change.py:receipt",
+    "scripts/run-cp1-minimal-change.py:stage",
+    "scripts/run-cp1-minimal-change.py:remove_permanent",
+    "scripts/run-cp1-minimal-change.py:reload_restore",
+    "scripts/run-cp1-minimal-change.py:bind",
+    "scripts/run-cp1-minimal-change.py:arm",
+    "scripts/run-cp1-minimal-change.py:arm_one",
+    "scripts/run-cp1-minimal-change.py:disarm"
+  ],
+  "result": "PASS",
+  "runtime": "NOT_EXECUTED",
+  "schema": "fds.cp1-operator-exception-validation.v1",
+  "selected_static_mock_tests": 176,
+  "source_bundle_sha256": "22a371a9efcd799e5574b37f8aec19e21f7a19c8fe8eb587ea8106247cc064af",
+  "source_files": {
+    "analyze-cp1-cni-trial.py": "8d54ffd3358124bc513a0a0220eea5babb954786a4e8f747f1d5aea152fbd114",
+    "cp1_minimal_change.py": "554c1dd4695d7dea8687205899b9a13b21dff188fa8f7774783b3e00ac0bf299",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "run-cp1-minimal-change.py": "1d9ed963af92fdb781e0f334a33e79c54c4f728cf29c67df2baea01fe4af14cd",
+    "run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3"
+  }
+}

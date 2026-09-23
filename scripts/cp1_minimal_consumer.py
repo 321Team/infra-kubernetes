@@ -19,7 +19,13 @@ entry = load('consumer_minimal_entry', 'run-cp1-minimal-change.py')
 def validate(original, handoff, acceptance, trial_path, trial_sha256, clock=None):
     request, wrapper, _ = m.analyzer().archive_inputs(trial_path, trial_sha256)
     record = m.validate_handoff(handoff, original, request, wrapper, m.fingerprint(entry.source_files()), clock, acceptance)
-    m.validate_acceptance(acceptance, handoff, clock)
+    if acceptance.get('schema') == 'fds.cp-session-continuation.v1':
+        m.validate_session_decision(acceptance, handoff, clock)
+        m.need(acceptance['checks']['positive']['evidence_sha256'] == trial_sha256 and
+               acceptance['checks']['negative']['evidence_sha256'] == m.fingerprint(handoff['trial_report']),
+               'session trial evidence differs')
+    else:
+        m.validate_acceptance(acceptance, handoff, clock)
     return record
 
 
@@ -62,5 +68,8 @@ def before_or_after(controller, state, expected, record, minimum_seconds=0, acce
     m.need(state['stable']['firewall'] == record['after']['firewall'] and
            state['stable']['protection'] == record['after']['protection'], 'CP1 stable state differs from new receipt')
     status = remote_status(controller, record)
-    m.live_gate(status, record, minimum_seconds, acceptance=acceptance, required_until=required_until)
+    if acceptance is not None and acceptance.get('schema') == 'fds.cp-session-continuation.v1':
+        m.live_session_gate(status, record, acceptance, required_until=required_until)
+    else:
+        m.live_gate(status, record, minimum_seconds, acceptance=acceptance, required_until=required_until)
     return status
