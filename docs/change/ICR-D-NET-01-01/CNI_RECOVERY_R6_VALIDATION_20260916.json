@@ -1,0 +1,78 @@
+{
+  "schema": "fds.cni-recovery-r6-validation.v1",
+  "base_head": "b930b07be8f0716b147585e5cdab04a757737aa8",
+  "sources_sha256": {
+    "run-cni-kernel-integration.py": "a3a89a83fa2cc9d466ba353afc265d6cb1b00273772e73d39c20e7e81894f348",
+    "cni_diag_core.py": "4ef4ff77199851851cdc091088ee22679343b51f327f9e69fbd1e9147dc54bb9",
+    "cp1-cni-diagnostic-node.py": "156256876a084f017062e99599da83fad5fc4c4de72c12a9bbd16f1e6b9095ca",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+  },
+  "kernel_bundle_sha256": "22628cfbf5679fa008d2a48d43ff17d0b9f4ce1ca52542c63a389242b2daf99c",
+  "production_bundle_sha256": "7e53c034ca852ea3bccc83666f48684d1a8e9e547c7207585fd2cd37f6e87e26",
+  "python_ast_files": 14,
+  "plans": {
+    "run-cni-kernel-integration.py": {
+      "mode": "PLAN_ONLY",
+      "scope": "KERNEL_COMPONENT_ONLY",
+      "scenarios": [
+        "normal",
+        "kill",
+        "deadline",
+        "cleanup-retry",
+        "reboot"
+      ],
+      "source_hashes": {
+        "run-cni-kernel-integration.py": "a3a89a83fa2cc9d466ba353afc265d6cb1b00273772e73d39c20e7e81894f348",
+        "cni_diag_core.py": "4ef4ff77199851851cdc091088ee22679343b51f327f9e69fbd1e9147dc54bb9",
+        "cp1-cni-diagnostic-node.py": "156256876a084f017062e99599da83fad5fc4c4de72c12a9bbd16f1e6b9095ca",
+        "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+      },
+      "requires_reviewed_lab_decision": true,
+      "production_qualification_supported": false
+    },
+    "run-cp1-cni-diagnostic.py": {
+      "mode": "PLAN_ONLY",
+      "node": "k8s-control01",
+      "duration_seconds": 1200,
+      "cleanup_reserve_seconds": 180,
+      "bundle_sha256": "7e53c034ca852ea3bccc83666f48684d1a8e9e547c7207585fd2cd37f6e87e26",
+      "files_sha256": {
+        "cni_diag_core.py": "4ef4ff77199851851cdc091088ee22679343b51f327f9e69fbd1e9147dc54bb9",
+        "cp1-cni-diagnostic-node.py": "156256876a084f017062e99599da83fad5fc4c4de72c12a9bbd16f1e6b9095ca",
+        "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+      },
+      "requires_execution_head_review": true,
+      "requires_actual_isolated_qualification": true,
+      "purpose": "DIAGNOSTIC_ONLY",
+      "authorizes_cp1_acceptance": false
+    }
+  },
+  "test_scope": "STATIC/MOCK; local Python/file/archive/child-process tests, systemd/network/firewall adapters mocked",
+  "runtime": "NOT_TESTED",
+  "qualification": "NOT_CREATED",
+  "execution_approved": false,
+  "cp1_cp2_changed": false,
+  "normal_timer_seconds": 1020,
+  "accelerated_timer_seconds": 300,
+  "operation_seconds": 1200,
+  "cleanup_reserve_seconds": 180,
+  "unit_finalization_command_budget_seconds": 20,
+  "controller_response_budget_seconds": 30,
+  "tests": {
+    "total": 286,
+    "passed": 286,
+    "failed": 0,
+    "skipped": 0,
+    "baseline": 246,
+    "additional": 40
+  },
+  "red_reproduction": {
+    "baseline": "b930b07be8f0716b147585e5cdab04a757737aa8",
+    "expected_failure_observed": true,
+    "systemd": "MOCK"
+  },
+  "evidence_sha256": {
+    "CNI_RECOVERY_R6_TEST_OUTPUT_20260916.txt": "7c2d9a30f70c6ed1497f9804f50ba93b30a782a0013fd1b25a2742e8102e3a16",
+    "CNI_RECOVERY_R6_RED_REPRODUCTION_20260916.txt": "79b921ab4d6f914f9e5fe5eb17d20d0354216639b2e740f6cdb4aa7471f32c15"
+  }
+}

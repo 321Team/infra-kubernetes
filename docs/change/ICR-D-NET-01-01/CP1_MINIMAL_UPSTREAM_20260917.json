@@ -1,0 +1,539 @@
+{
+  "full_daemon_tested": false,
+  "generated": {
+    "fds-cp1-egress": {
+      "body": [
+        {
+          "chain": "filter_FWD_policy_fds-cp1-egress_allow",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "nfproto"
+                  }
+                },
+                "op": "==",
+                "right": "ipv4"
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "concat": [
+                    {
+                      "payload": {
+                        "field": "daddr",
+                        "protocol": "ip"
+                      }
+                    },
+                    {
+                      "meta": {
+                        "key": "oifname"
+                      }
+                    }
+                  ]
+                },
+                "op": "==",
+                "right": "@fds-cp1-out4"
+              }
+            },
+            {},
+            {},
+            {
+              "accept": null
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        },
+        {
+          "chain": "filter_FWD_policy_fds-cp1-egress_allow",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "nfproto"
+                  }
+                },
+                "op": "==",
+                "right": "ipv6"
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "concat": [
+                    {
+                      "payload": {
+                        "field": "daddr",
+                        "protocol": "ip6"
+                      }
+                    },
+                    {
+                      "meta": {
+                        "key": "oifname"
+                      }
+                    }
+                  ]
+                },
+                "op": "==",
+                "right": "@fds-cp1-out6"
+              }
+            },
+            {},
+            {},
+            {
+              "accept": null
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        }
+      ],
+      "dispatch": [
+        {
+          "%%POLICY_SORT_KEY%%": [
+            0,
+            2,
+            "fds-cp1-min",
+            "",
+            "cali*",
+            0,
+            2,
+            "fds-cp1-min",
+            "",
+            "cali*",
+            0,
+            -1
+          ],
+          "chain": "filter_FORWARD_POLICIES",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "iifname"
+                  }
+                },
+                "op": "==",
+                "right": "cali*"
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "oifname"
+                  }
+                },
+                "op": "==",
+                "right": "cali*"
+              }
+            },
+            {
+              "jump": {
+                "target": "filter_FWD_policy_fds-cp1-egress"
+              }
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        },
+        {
+          "%%POLICY_SORT_KEY%%": [
+            0,
+            2,
+            "fds-cp1-min",
+            "",
+            "cali*",
+            0,
+            2,
+            "public",
+            "",
+            "ens160",
+            0,
+            -1
+          ],
+          "chain": "filter_FORWARD_POLICIES",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "iifname"
+                  }
+                },
+                "op": "==",
+                "right": "cali*"
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "oifname"
+                  }
+                },
+                "op": "==",
+                "right": "ens160"
+              }
+            },
+            {
+              "jump": {
+                "target": "filter_FWD_policy_fds-cp1-egress"
+              }
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        },
+        {
+          "%%POLICY_SORT_KEY%%": [
+            0,
+            2,
+            "fds-cp1-min",
+            "",
+            "cali*",
+            32768,
+            2,
+            "public",
+            "",
+            "*",
+            0,
+            -1
+          ],
+          "chain": "filter_FORWARD_POLICIES",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "iifname"
+                  }
+                },
+                "op": "==",
+                "right": "cali*"
+              }
+            },
+            {
+              "jump": {
+                "target": "filter_FWD_policy_fds-cp1-egress"
+              }
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        }
+      ],
+      "tables": [
+        [
+          "filter",
+          "FORWARD"
+        ],
+        [
+          "nat",
+          "PREROUTING"
+        ],
+        [
+          "mangle",
+          "PREROUTING"
+        ],
+        [
+          "nat",
+          "POSTROUTING"
+        ]
+      ]
+    },
+    "fds-cp1-local": {
+      "body": [
+        {
+          "chain": "filter_FWD_policy_fds-cp1-local_allow",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "nfproto"
+                  }
+                },
+                "op": "==",
+                "right": "ipv4"
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "payload": {
+                    "field": "daddr",
+                    "protocol": "ip"
+                  }
+                },
+                "op": "==",
+                "right": {
+                  "prefix": {
+                    "addr": "10.244.246.64",
+                    "len": 26
+                  }
+                }
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "payload": {
+                    "field": "saddr",
+                    "protocol": "ip"
+                  }
+                },
+                "op": "==",
+                "right": {
+                  "prefix": {
+                    "addr": "10.244.246.64",
+                    "len": 26
+                  }
+                }
+              }
+            },
+            {},
+            {
+              "accept": null
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        }
+      ],
+      "dispatch": [
+        {
+          "%%POLICY_SORT_KEY%%": [
+            0,
+            2,
+            "fds-cp1-min",
+            "",
+            "cali*",
+            0,
+            2,
+            "fds-cp1-min",
+            "",
+            "cali*",
+            0,
+            -2
+          ],
+          "chain": "filter_FORWARD_POLICIES",
+          "expr": [
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "iifname"
+                  }
+                },
+                "op": "==",
+                "right": "cali*"
+              }
+            },
+            {
+              "match": {
+                "left": {
+                  "meta": {
+                    "key": "oifname"
+                  }
+                },
+                "op": "==",
+                "right": "cali*"
+              }
+            },
+            {
+              "jump": {
+                "target": "filter_FWD_policy_fds-cp1-local"
+              }
+            }
+          ],
+          "family": "inet",
+          "table": "firewalld"
+        }
+      ],
+      "tables": [
+        [
+          "filter",
+          "FORWARD"
+        ],
+        [
+          "nat",
+          "POSTROUTING"
+        ]
+      ]
+    }
+  },
+  "kernel_tested": false,
+  "limits": "Selected verbatim methods; rich objects, zone membership and packet evaluator are local models.",
+  "live_cp1_tested": false,
+  "operational_approval": false,
+  "packet_cases": [
+    {
+      "case": "local_tcp",
+      "local_accept": true,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "local_udp",
+      "local_accept": true,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "local_icmp",
+      "local_accept": true,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "new_cali_veth",
+      "local_accept": true,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "all_l4_8081",
+      "local_accept": true,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "reverse",
+      "local_accept": true,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "physical_ingress",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "spoofed_physical_egress",
+      "local_accept": false,
+      "preserved_external_accept": true
+    },
+    {
+      "case": "outside_source",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "outside_destination",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "vxlan_ingress",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "vxlan_egress",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "host_input",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "host_output",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "external_dns",
+      "local_accept": false,
+      "preserved_external_accept": true
+    },
+    {
+      "case": "external_api",
+      "local_accept": false,
+      "preserved_external_accept": true
+    },
+    {
+      "case": "external_high_half",
+      "local_accept": false,
+      "preserved_external_accept": true
+    },
+    {
+      "case": "unclassified_egress",
+      "local_accept": false,
+      "preserved_external_accept": false
+    },
+    {
+      "case": "ipv6_external_low",
+      "local_accept": false,
+      "preserved_external_accept": true
+    },
+    {
+      "case": "ipv6_external_high",
+      "local_accept": false,
+      "preserved_external_accept": true
+    },
+    {
+      "case": "ipv6_local",
+      "local_accept": false,
+      "preserved_external_accept": false
+    }
+  ],
+  "real_xml_parser_tested": false,
+  "sets": {
+    "fds-cp1-out4": [
+      {
+        "concat": [
+          {
+            "prefix": {
+              "addr": "0.0.0.0",
+              "len": 1
+            }
+          },
+          "ens160"
+        ]
+      },
+      {
+        "concat": [
+          {
+            "prefix": {
+              "addr": "128.0.0.0",
+              "len": 1
+            }
+          },
+          "ens160"
+        ]
+      }
+    ],
+    "fds-cp1-out6": [
+      {
+        "concat": [
+          {
+            "prefix": {
+              "addr": "8000::",
+              "len": 1
+            }
+          },
+          "ens160"
+        ]
+      },
+      {
+        "concat": [
+          {
+            "prefix": {
+              "addr": "::",
+              "len": 1
+            }
+          },
+          "ens160"
+        ]
+      }
+    ]
+  },
+  "source_sha256": {
+    "functions.py": "effb5c89fede743e7350e2c32e61f5f23b7f1a907d1d061462880869d9d993e0",
+    "fw_policy.py": "67394a8707f2bc9fb9a828c88a047cdc221e1ad12a3e46534e7b6808733786ab",
+    "fw_zone.py": "0e96f43b963fb50627ea5de37d7a32ed335194074f61f21ff7886936ee5aad8a",
+    "nftables.py": "42ad0f052ffc119d1263c3b66d299360bfc78f7d0de7011f3fbe83a0f2b4c232"
+  },
+  "status": "PINNED_UPSTREAM_BUILDERS_PASS"
+}

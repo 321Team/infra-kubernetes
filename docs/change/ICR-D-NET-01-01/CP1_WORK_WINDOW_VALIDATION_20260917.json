@@ -1,0 +1,88 @@
+{
+  "schema": "fds.cp1-work-window-validation.v1",
+  "status": "STATIC_MOCK_PASS_REVIEW_REQUIRED",
+  "date": "2026-09-17",
+  "parent_commit": "4aedf2503fae5549f9067251290499e3fa09c631",
+  "ast_parse_pass": [
+    "scripts/analyze-cp1-cni-trial.py",
+    "scripts/cp-canary-node.py",
+    "scripts/cp1_minimal_change.py",
+    "scripts/cp1_minimal_consumer.py",
+    "scripts/node-firewall.py",
+    "scripts/run-cp1-minimal-change.py",
+    "scripts/run-node-firewall-cni.py",
+    "scripts/run-node-firewall.py",
+    "tests/test_cp1_cni_trial_analysis.py",
+    "tests/test_cp1_minimal_change.py",
+    "tests/test_cp1_work_window.py",
+    "tests/test_node_firewall.py"
+  ],
+  "python": "3.12.14",
+  "source_bundle_sha256": "9b3ec15118d558b386fddfdc06a2ff9354339de1655034b2a32710348f25068e",
+  "source_files": {
+    "analyze-cp1-cni-trial.py": "8d54ffd3358124bc513a0a0220eea5babb954786a4e8f747f1d5aea152fbd114",
+    "cp1_minimal_change.py": "4ee38f796fe8abbdca6abd51d65226aa861487226b3d812a626082781ea95edc",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "run-cp1-minimal-change.py": "13184bb885b22142f2552cc721b29d191669091d14cad67800c86992f90e0ef5",
+    "run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3"
+  },
+  "unchanged_function_checks": {
+    "scripts/cp1_minimal_change.py:documents": "AST_IDENTICAL_TO_PARENT",
+    "scripts/cp1_minimal_change.py:expected_objects": "AST_IDENTICAL_TO_PARENT",
+    "scripts/cp1_minimal_change.py:receipt": "AST_IDENTICAL_TO_PARENT",
+    "scripts/cp1_minimal_change.py:recover": "AST_IDENTICAL_TO_PARENT",
+    "scripts/cp1_minimal_change.py:validate_baseline": "AST_IDENTICAL_TO_PARENT",
+    "scripts/cp1_minimal_change.py:validate_view": "AST_IDENTICAL_TO_PARENT",
+    "scripts/run-cp1-minimal-change.py:bind": "AST_IDENTICAL_TO_PARENT",
+    "scripts/run-cp1-minimal-change.py:reload_restore": "AST_IDENTICAL_TO_PARENT",
+    "scripts/run-cp1-minimal-change.py:remove_permanent": "AST_IDENTICAL_TO_PARENT",
+    "scripts/run-cp1-minimal-change.py:stage": "AST_IDENTICAL_TO_PARENT"
+  },
+  "unchanged_legacy_sha256": {
+    "policies/icr-d-net-01-01/node-firewall-v2.json": "7624989f489d983e44a9754d5c9baeeaa665ab80cfed9c8c189791b9578b5021",
+    "scripts/analyze-cp1-cni-trial.py": "8d54ffd3358124bc513a0a0220eea5babb954786a4e8f747f1d5aea152fbd114",
+    "scripts/cp-canary-node.py": "a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc",
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3"
+  },
+  "tests": {
+    "command": "(cd tests && python3 -m unittest -v test_cp1_minimal_change test_cp1_work_window test_cp1_cni_trial_analysis test_node_firewall)",
+    "selected_tests": 156,
+    "prior_selected_tests": 119,
+    "new_lifecycle_tests": 37,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "exit_code": 0,
+    "log": "CP1_WORK_WINDOW_TEST_20260917.txt",
+    "log_sha256": "11848de385a1e31e24fdb5f6e8d34ad42dac52a0498e60f2b6d308e08c31376e",
+    "scope": "Related selected unittest modules only; not all repository tests or previous upstream/XML checks"
+  },
+  "profile": {
+    "new_jobs_only": true,
+    "authorization_schema": "fds.cp1-minimal-authorization.v2",
+    "acceptance_schema": "fds.cp1-minimal-acceptance.v2",
+    "single_staffed_kst_weekday": true,
+    "cp1_fixed_ninety_minutes": false,
+    "cp1_max_two_hours": false,
+    "downstream_per_node_max_two_hours_unchanged": true,
+    "recovery_margin_minimum_seconds": 180,
+    "prearmed_transient_deadlines": 2,
+    "unaccepted_deadline": "window_end - recovery_margin_seconds",
+    "accepted_deadline": "retention_until - recovery_margin_seconds",
+    "target_end_strictly_before_cp1_accepted_deadline": true
+  },
+  "limitations": {
+    "firewall_systemd_ssh": "MOCKED",
+    "root_file_atomic_io": "REAL_TEMPORARY_FILES_OWNER_METADATA_MOCKED_FOR_PORTABILITY",
+    "live_vm_or_timer_mutation": false,
+    "live_v2_acceptance": false,
+    "cp2_cp3_join": false,
+    "reboot_persistence": false,
+    "permanent_promotion": false,
+    "old_job_migration": false,
+    "old_job_restoration_verified": false,
+    "ci_verified": false,
+    "merge_performed": false
+  }
+}

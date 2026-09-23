@@ -1,0 +1,59 @@
+test_nonready_calico_stops_protection_inspection (test_node_firewall_v2_contract.CP1ProtectionProjection.test_nonready_calico_stops_protection_inspection) ... ok
+test_volatile_resource_version_is_ignored_but_restart_changes_digest (test_node_firewall_v2_contract.CP1ProtectionProjection.test_volatile_resource_version_is_ignored_but_restart_changes_digest) ... ok
+test_controller_does_not_inherit_unrelated_credentials_or_python_settings (test_node_firewall_v2_contract.ExecutionBounds.test_controller_does_not_inherit_unrelated_credentials_or_python_settings) ... ok
+test_controller_serializes_different_targets_with_one_lock (test_node_firewall_v2_contract.ExecutionBounds.test_controller_serializes_different_targets_with_one_lock) ... ok
+test_duplicate_json_or_symlink_input_is_not_accepted (test_node_firewall_v2_contract.ExecutionBounds.test_duplicate_json_or_symlink_input_is_not_accepted) ... ok
+test_exhausted_time_or_count_budget_stops_without_subprocess (test_node_firewall_v2_contract.ExecutionBounds.test_exhausted_time_or_count_budget_stops_without_subprocess) ... ok
+test_local_bin_kubectl_still_passes_trust_and_execute_checks (test_node_firewall_v2_contract.ExecutionBounds.test_local_bin_kubectl_still_passes_trust_and_execute_checks) ... ok
+test_redact_handles_space_assignment_pem_and_url_credentials (test_node_firewall_v2_contract.ExecutionBounds.test_redact_handles_space_assignment_pem_and_url_credentials) ... ok
+test_remaining_budget_caps_each_subprocess_timeout (test_node_firewall_v2_contract.ExecutionBounds.test_remaining_budget_caps_each_subprocess_timeout) ... ok
+test_stderr_truncation_and_warning_never_prove_mutation_ownership (test_node_firewall_v2_contract.ExecutionBounds.test_stderr_truncation_and_warning_never_prove_mutation_ownership) ... ok
+test_acceptance_requires_this_receipt_tests_and_independent_review (test_node_firewall_v2_contract.ReceiptContract.test_acceptance_requires_this_receipt_tests_and_independent_review) ... ok
+test_completed_distributed_template_accepts_real_producer_with_mock_evidence (test_node_firewall_v2_contract.ReceiptContract.test_completed_distributed_template_accepts_real_producer_with_mock_evidence) ... ERROR
+test_cp1_state_drift_or_lost_runtime_rules_blocks_expansion (test_node_firewall_v2_contract.ReceiptContract.test_cp1_state_drift_or_lost_runtime_rules_blocks_expansion) ... ok
+test_distributed_acceptance_template_is_not_an_approval (test_node_firewall_v2_contract.ReceiptContract.test_distributed_acceptance_template_is_not_an_approval) ... ok
+test_distributed_acceptance_template_matches_pinned_producer (test_node_firewall_v2_contract.ReceiptContract.test_distributed_acceptance_template_matches_pinned_producer) ... FAIL
+test_integrated_producer_drift_stops_before_producer_execution (test_node_firewall_v2_contract.ReceiptContract.test_integrated_producer_drift_stops_before_producer_execution) ... ok
+test_pinned_producer_generates_accepted_v2_for_added_and_preserved_rules (test_node_firewall_v2_contract.ReceiptContract.test_pinned_producer_generates_accepted_v2_for_added_and_preserved_rules) ... ok
+test_producer_lock_matches_current_contract_and_integrated_source (test_node_firewall_v2_contract.ReceiptContract.test_producer_lock_matches_current_contract_and_integrated_source) ... ok
+test_rehashed_legacy_foreign_duplicated_or_uncertain_receipts_are_rejected (test_node_firewall_v2_contract.ReceiptContract.test_rehashed_legacy_foreign_duplicated_or_uncertain_receipts_are_rejected) ... ok
+test_rehashed_missing_invalid_or_outside_window_is_rejected (test_node_firewall_v2_contract.ReceiptContract.test_rehashed_missing_invalid_or_outside_window_is_rejected) ... ok
+test_backend_never_issues_a_permanent_mutation (test_node_firewall_v2_contract.RuntimeSafety.test_backend_never_issues_a_permanent_mutation) ... ok
+test_initial_zone_controls_must_be_explicit_and_match (test_node_firewall_v2_contract.RuntimeSafety.test_initial_zone_controls_must_be_explicit_and_match) ... ok
+test_permanent_promotion_fails_before_preflight_or_remote_execution (test_node_firewall_v2_contract.RuntimeSafety.test_permanent_promotion_fails_before_preflight_or_remote_execution) ... ok
+test_policy_file_and_five_executable_plans_are_bound (test_node_firewall_v2_contract.RuntimeSafety.test_policy_file_and_five_executable_plans_are_bound) ... ok
+test_remote_entry_rejects_missing_policy_before_identity_or_mutation (test_node_firewall_v2_contract.RuntimeSafety.test_remote_entry_rejects_missing_policy_before_identity_or_mutation) ... ok
+test_residual_configuration_change_stops_the_next_operation (test_node_firewall_v2_contract.RuntimeSafety.test_residual_configuration_change_stops_the_next_operation) ... ok
+test_success_receipt_cannot_hide_an_incomplete_prefix (test_node_firewall_v2_contract.RuntimeSafety.test_success_receipt_cannot_hide_an_incomplete_prefix) ... ok
+test_v1_receipt_is_retrievable_but_not_a_v2_rollback_input (test_node_firewall_v2_contract.RuntimeSafety.test_v1_receipt_is_retrievable_but_not_a_v2_rollback_input) ... ok
+
+======================================================================
+ERROR: test_completed_distributed_template_accepts_real_producer_with_mock_evidence (test_node_firewall_v2_contract.ReceiptContract.test_completed_distributed_template_accepts_real_producer_with_mock_evidence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3d8cc40c919f/cp1_handoff_20260916/tests/test_node_firewall_v2_contract.py", line 46, in test_completed_distributed_template_accepts_real_producer_with_mock_evidence
+    c.validate_cp1_acceptance(template, receipt, "f" * 64)
+  File "/workspace/scratch/3d8cc40c919f/cp1_handoff_20260916/scripts/run-node-firewall.py", line 293, in validate_cp1_acceptance
+    node.need(data.get(key) == receipt[key], "CP1 acceptance source/plan differs: " + key)
+  File "/workspace/scratch/3d8cc40c919f/cp1_handoff_20260916/scripts/node-firewall.py", line 143, in need
+    raise ValueError(message)
+ValueError: CP1 acceptance source/plan differs: source_commit
+
+======================================================================
+FAIL: test_distributed_acceptance_template_matches_pinned_producer (test_node_firewall_v2_contract.ReceiptContract.test_distributed_acceptance_template_matches_pinned_producer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3d8cc40c919f/cp1_handoff_20260916/tests/test_node_firewall_v2_contract.py", line 26, in test_distributed_acceptance_template_matches_pinned_producer
+    self.assertEqual({key: template[key] for key in n.CP1_CONTRACT}, n.CP1_CONTRACT)
+AssertionError: {'source_commit': 'f0388b1a372d19b5079e94ec6949ef443d774d2f'[257 chars]e04'} != {'source_commit': '264b273ab8ad79209bc0fec4a85c4497c946dbe3'[257 chars]e04'}
+  {'execution_plan_sha256': 'a85a819fed1e18b33e9b82d576c7a983aa39c21e36e270590dc0ee4ac0e85e04',
+   'plan_sha256': '2c1e6101724d078a0a8fd58497d4d84ae5453e938529496c3045b96ea0fef7d7',
+-  'source_commit': 'f0388b1a372d19b5079e94ec6949ef443d774d2f',
+-  'source_sha256': '0454a238d7451c86362dd98a54d3ed15cbf7f5d78c921cd6b93447581fc40ac2'}
++  'source_commit': '264b273ab8ad79209bc0fec4a85c4497c946dbe3',
++  'source_sha256': 'a09efb38dbbc313124f6d42858c3ee3e7d676e933abe8ed0550bf8937fb18dcc'}
+
+----------------------------------------------------------------------
+Ran 28 tests in 0.061s
+
+FAILED (failures=1, errors=1)

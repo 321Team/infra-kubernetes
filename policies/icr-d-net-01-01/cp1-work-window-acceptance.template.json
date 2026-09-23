@@ -1,0 +1,17 @@
+{
+  "schema": "fds.cp1-minimal-acceptance.v2",
+  "decision": null,
+  "retention_approved": false,
+  "independent_reviewer": null,
+  "review_decision": null,
+  "review_url": null,
+  "reviewed_at": null,
+  "source_bundle_sha256": null,
+  "handoff_sha256": null,
+  "expires_at": null,
+  "checks": {
+    "positive": {"status": "NOT_VERIFIED", "evidence_sha256": null},
+    "negative": {"status": "NOT_VERIFIED", "evidence_sha256": null},
+    "regression": {"status": "NOT_VERIFIED", "evidence_sha256": null}
+  }
+}

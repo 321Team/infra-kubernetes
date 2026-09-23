@@ -1,0 +1,8 @@
+test_default_deny_blocks_connection_without_root_exception (test_dbus_config_runtime.PrivateBusRuntime.test_default_deny_blocks_connection_without_root_exception) ... skipped 'configuration reached socket setup; local AF_UNIX creation is denied'
+test_generated_config_accepts_readiness_and_name_ownership (test_dbus_config_runtime.PrivateBusRuntime.test_generated_config_accepts_readiness_and_name_ownership) ... skipped 'configuration reached socket setup; local AF_UNIX creation is denied'
+test_previous_per_user_connection_rule_is_rejected (test_dbus_config_runtime.PrivateBusRuntime.test_previous_per_user_connection_rule_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.013s
+
+OK (skipped=2)

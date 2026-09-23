@@ -1,0 +1,28 @@
+{
+  "schema": "fds.cp1-minimal-authorization.v2",
+  "operator": "GWONUK",
+  "execution_approved": false,
+  "retention_approved": false,
+  "independent_reviewer": null,
+  "review_decision": null,
+  "review_url": null,
+  "reviewed_at": null,
+  "reviewed_bundle_sha256": null,
+  "before_sha256": null,
+  "window_start": null,
+  "window_end": null,
+  "retention_until": null,
+  "recovery_margin_seconds": null,
+  "backup_verified": false,
+  "console_recovery_available": false,
+  "maintenance_freeze": false,
+  "protection_reviewed": false,
+  "inert_permanent_staging_acknowledged": false,
+  "scope": {
+    "hostname": "k8s-control01",
+    "interfaces": "cali+",
+    "l4": "ALL",
+    "plane": "runtime",
+    "pod_block": "10.244.246.64/26"
+  }
+}

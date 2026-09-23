@@ -1,0 +1,136 @@
+{
+  "schema": "fds.cni-review-fix-local-validation.v1",
+  "verified_at_utc": "2026-09-15T12:27:02.641939+00:00",
+  "parent_head": "3f2b8c200313b329ef71e6b2f5977be509810a5d",
+  "review_url": "https://github.com/321Team/infra-kubernetes/pull/11#pullrequestreview-5209583886",
+  "scope": "LOCAL_STATIC_MOCK_ONLY",
+  "review_disposition": "FIXES_SUBMITTED_FOR_INDEPENDENT_REVIEW",
+  "unittest": {
+    "command": "python3 -B -m unittest discover -s tests -p 'test_cni_*.py' -v",
+    "returncode": 0,
+    "total": 170,
+    "passed": 170,
+    "modules": {
+      "test_cni_diagnostic": 83,
+      "test_cni_integration_preflight": 6,
+      "test_cni_kernel_integration": 28,
+      "test_cni_review_regressions": 53
+    },
+    "new_review_regressions": 53,
+    "log_sha256": "95ac6f55d0b22303f7df731c791523df9e5cc4d0897c8478e905415c00cffa47",
+    "controller_subprocesses": "Real local Python rc/archive checks with mocked remote adapter; no SSH or VM execution"
+  },
+  "syntax_parse": "PASS",
+  "default_plan": {
+    "run-cni-kernel-integration.py": {
+      "mode": "PLAN_ONLY",
+      "scope": "KERNEL_COMPONENT_ONLY",
+      "scenarios": [
+        "normal",
+        "kill",
+        "deadline",
+        "cleanup-retry",
+        "reboot"
+      ],
+      "source_hashes": {
+        "run-cni-kernel-integration.py": "03cb141f826aa9ccf6674cbfde52e6783c371c970c9d8834e18e40eaabf3f5a1",
+        "cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+        "cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+        "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+      },
+      "requires_reviewed_lab_decision": true,
+      "production_qualification_supported": false
+    },
+    "run-cp1-cni-diagnostic.py": {
+      "mode": "PLAN_ONLY",
+      "node": "k8s-control01",
+      "duration_seconds": 1200,
+      "cleanup_reserve_seconds": 180,
+      "bundle_sha256": "470d3550fef7f2c261e8105cc264bd230587862fb421468ff851629e018d0c24",
+      "files_sha256": {
+        "cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+        "cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+        "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+      },
+      "requires_execution_head_review": true,
+      "requires_actual_isolated_qualification": true,
+      "purpose": "DIAGNOSTIC_ONLY",
+      "authorizes_cp1_acceptance": false
+    }
+  },
+  "sources_sha256": {
+    "scripts/cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+    "scripts/collect-cni-integration-preflight.py": "dcf6398b8324f51a3b6b5f4427f1d515191b87d5db74e33303f5ba01f68c458c",
+    "scripts/cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "scripts/run-cni-kernel-integration.py": "03cb141f826aa9ccf6674cbfde52e6783c371c970c9d8834e18e40eaabf3f5a1",
+    "scripts/run-cp1-cni-diagnostic.py": "bc8253c0cab37dfee5ae3c01840d00ac0e1797131d0c8d0040ab5248e7d80235",
+    "scripts/run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3"
+  },
+  "test_sources_sha256": {
+    "tests/test_cni_diagnostic.py": "aede56d691230d61593962ec71b5069621beb3136ce1fb6d59cc637bed20a0b1",
+    "tests/test_cni_integration_preflight.py": "9defe217a8fc93ddc62dc5281fd4f4b9345eedacfe4394948f85bcd4da4679ba",
+    "tests/test_cni_kernel_integration.py": "add47c12c8d3a68e86525b3920c276a88d01412770bee78cd03f23148a6433c7",
+    "tests/test_cni_review_regressions.py": "d185bad92ee9f6a14ed0a30ab50e8be569f51b7638e152585040203a238190cd"
+  },
+  "kernel_executor_bundle_sha256": "2b1aab5b694ad91b265676882e5bfe64309061f7712c7910ee1a9d5ec93ba038",
+  "production_executor_bundle_sha256": "470d3550fef7f2c261e8105cc264bd230587862fb421468ff851629e018d0c24",
+  "unchanged": [
+    "scripts/cni_diag_core.py",
+    "scripts/node-firewall.py",
+    "scripts/collect-cni-integration-preflight.py"
+  ],
+  "changed_diagnostic_sources": [
+    "scripts/run-cp1-cni-diagnostic.py",
+    "scripts/cp1-cni-diagnostic-node.py"
+  ],
+  "unit_documents_equal_to_parent_for_all_scenarios": true,
+  "unit_static_verify": "NOT_REPEATED_UNCHANGED_DOCUMENTS; prior PARTIAL_TOOL_CHECK is not Runtime validation",
+  "findings": {
+    "K11-01": {
+      "severity": "P1",
+      "implementation": "Nonzero after evidence finalization; identity errors archived; safe terminal/diagnosis checked; collect/recovery request outcomes distinct",
+      "test_class": "ControllerRegressions"
+    },
+    "K11-02": {
+      "severity": "P1",
+      "implementation": "Pre Service/DNS gate; post 5 positives; diagnostic failure survives cleanup/disarm; successful recovery does not repeat diagnosis",
+      "test_class": "NodeRegressions"
+    },
+    "K11-03": {
+      "severity": "P1",
+      "implementation": "Mutable recover validates job/source/unit then execs staged A; direct B execution rejected before STOP/systemctl; matching staged recovery tested offline",
+      "test_class": "StagedRecoveryRegressions"
+    },
+    "K11-04": {
+      "severity": "P2",
+      "implementation": "TCP state distinct from HTTP; expectation/evidence mismatch saved as component failure and propagated after cleanup",
+      "test_classes": [
+        "FlowRegressions",
+        "ProbeRegressions",
+        "ComponentOutcomeRegressions"
+      ]
+    },
+    "K11-05": {
+      "severity": "P2",
+      "implementation": "Decision v2 reviewed bundle digest and PR #11 reference; blank review fields/false authorization by default; offline format is not approval verification",
+      "test_class": "ReviewBindingRegressions"
+    }
+  },
+  "environment": {
+    "pid1": "supervisord",
+    "effective_capabilities_hex": "0000000000000000"
+  },
+  "runtime_component_executed": false,
+  "full_linux_integration_executed": false,
+  "production_runtime_changed": false,
+  "ci_reported_pass": false,
+  "qualification_created": false,
+  "acceptance_criteria_credit": false,
+  "remaining": [
+    "Independent review of this new source HEAD; do not infer APPROVED from local tests",
+    "Fresh source-bound inspect and v2 lab decision; preserve prior preparation evidence",
+    "Actual normal component packet/trace/cleanup evidence, then remaining recovery scenarios",
+    "Full Calico/VM NIC/tunnel and production adapter/recovery integration qualification"
+  ]
+}

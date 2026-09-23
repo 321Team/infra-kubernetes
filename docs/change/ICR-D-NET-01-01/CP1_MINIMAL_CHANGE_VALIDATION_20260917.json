@@ -1,0 +1,44 @@
+{
+  "active_cali_binding_permanent": false,
+  "ci_executed": false,
+  "cp1_accepted": false,
+  "cp2_change": false,
+  "independent_new_source_review": "REQUEST_PENDING",
+  "join": false,
+  "live_cp1_change": false,
+  "new_trial": false,
+  "parent_commit": "7de8df845eaa7daf8e11e3c6ecc9126f88f70130",
+  "past_trial": {
+    "archive_sha256": "81a4210a2aaddf69d508fd9d166589630b17d87f6209658dc919a1bb1b18cb39",
+    "issues": [],
+    "passed": 3,
+    "status": "INCOMPLETE_REVIEW_REQUIRED",
+    "total": 5
+  },
+  "schema": "fds.cp1-minimal-validation.v1",
+  "source_bundle_sha256": "e2b98fdc22cd15d8577b0df8b45f9d841e1beb1b41e953cbe2e7dfd42979ac33",
+  "source_files_sha256": {
+    "analyze-cp1-cni-trial.py": "8d54ffd3358124bc513a0a0220eea5babb954786a4e8f747f1d5aea152fbd114",
+    "cp1_minimal_change.py": "d4af9ea8762576ff6c1c2d45c8c29c1a624d2bafabccb134ff5861b9747c366c",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa",
+    "run-cp1-minimal-change.py": "2888c9250d19d5d8b75e1f77697ec71c42c2fb8f101fafac70fd74faeb0d5817",
+    "run-node-firewall.py": "cb49cc6403b74c20f10d948c582da7b606209b1201b0eba740eb673ba1e7adb3"
+  },
+  "temporary_permanent_staging": true,
+  "unit_tests": {
+    "errors": 0,
+    "existing": 94,
+    "failures": 0,
+    "new": 36,
+    "passed": 130,
+    "skipped": 0
+  },
+  "upstream": {
+    "cases": 21,
+    "daemon": false,
+    "kernel": false,
+    "real_xml_parser": false,
+    "status": "PINNED_UPSTREAM_BUILDERS_PASS",
+    "tag": "v2.4.3"
+  }
+}
