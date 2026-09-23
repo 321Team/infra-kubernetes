@@ -1,0 +1,61 @@
+---
+- name: Collect only missing worker03 TLS inputs using existing SSH privileges
+  hosts: 'k8s-control01:k8s-control02:k8s-control03:k8s-worker03'
+  gather_facts: false
+  become: false
+  vars:
+    ansible_ssh_use_tty: false
+  tasks:
+    - name: Read configuration into memory without displaying or persisting it
+      ansible.builtin.raw: "{{ lookup('ansible.builtin.file', playbook_dir + '/remote.sh') }}"
+      register: tls_raw
+      changed_when: false
+      failed_when: false
+      no_log: true
+
+    - name: Reduce raw values to allowlisted public findings on the controller
+      ansible.builtin.set_fact:
+        tls_report: "{{ tls_raw | tls_input_report(inventory_hostname) }}"
+        cacheable: false
+      no_log: true
+
+    - name: Save selected findings in the controller result directory
+      ansible.builtin.copy:
+        content: "{{ tls_report | to_nice_json }}\n"
+        dest: "{{ tls_result_dir }}/{{ inventory_hostname }}.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: false
+      no_log: true
+
+- name: Compare the collected public inputs without authorizing a change
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Compare worker settings and all three signer public CAs
+      ansible.builtin.set_fact:
+        tls_summary: "{{ hostvars | tls_input_summary }}"
+        cacheable: false
+      no_log: true
+
+    - name: Save comparison
+      ansible.builtin.copy:
+        content: "{{ tls_summary | to_nice_json }}\n"
+        dest: "{{ tls_result_dir }}/summary.json"
+        mode: '0600'
+      no_log: true
+
+    - name: Display only collection and pending-item counts
+      ansible.builtin.debug:
+        msg:
+          collection_ok: "{{ tls_summary.collection_ok }}"
+          pending_count: "{{ tls_summary.pending | length }}"
+          runtime: NOT_RUN
+
+    - name: Return failure for incomplete collection while retaining safe results
+      ansible.builtin.assert:
+        that: tls_summary.collection_ok
+        quiet: true
+        fail_msg: 'Collection incomplete; inspect selected JSON results. No remediation was attempted.'
