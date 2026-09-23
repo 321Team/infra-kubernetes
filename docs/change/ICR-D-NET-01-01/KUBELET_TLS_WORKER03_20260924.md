@@ -1,6 +1,6 @@
 # worker03 kubelet serving TLS 변경 후보 — 2026-09-24
 
-상태: DRAFT / 운영 변경 / 독립 리뷰·실행 전 조건 확인 필요.
+상태: 독립 리뷰 가능 / 운영 변경 / APPLY HOLD. 사전조회 수신 완료, 작업창·복구·기존 실행 권한 조건은 적용 전에 확정.
 책임: K8S/SEC 이하영, MON 검증 이재환, ICR Source/경로 검증 지원 이권욱. 기존 담당 유지.
 연계: fds-project-baseline #10/#19/#17/#14. 네트워크 PR27과 분리한다.
 
@@ -28,6 +28,36 @@ NOT_PRESENT/NOT_EXPLICIT은 수집기의 누락 표시이며 설정 값 문자�
 v1.36.4 InitializeTLS는 bootstrap이 꺼지고 cert/key 경로가 비었을 때 기본 kubelet.crt/key 경로를 채울 수 있다.
 따라서 configz에 이 경로가 보인다는 이유만으로 명시적 파일/CLI override를 확정하거나 기존 인증서를 삭제하지 않는다.
 
+## 1.1. 05:00 추가 입력 수집 완료 — PR32
+
+- 현장 수집 시작: 2026-09-24T05:00:45 KST, CP3 + worker03, 기존 svc_ansible 계정.
+- 원본 MON_TLS_INPUTS.zaZ47pti.tar.gz SHA256: `f36f3f4ed737a6baee43ead37141b4be0b0cd4ac16fb6d077dfd64a96b6d9f3c`. 외부 sidecar 일치, 내부 SHA256SUMS 13/13 검증, 예상 파일 이외·중복 archive member 없음.
+- source `f29e8c4a0c290868fa2b9532267e22b2ea3c41fc`의 소스5개와 수신 archive bytes의 Git blob 일치. PR32 merge `f2bb91b04901c43bcc7238517482c0dff5f31ccb`.
+- Ansible RC=0, 4호스트 collection_ok=true, 실패/접속 불가0. changed는 위임된 localhost JSON 저장이며 원격 설정 변경이 아니다. 전체 설정/argv는 no_log 메모리 처리되어 원본 전체 YAML을 이 증적에 저장하지 않았다.
+
+| 확인 항목 | 실측 결과·판정 범위 |
+|---|---|
+| worker03 PID/시작 설정 | PID2948, 선택된 프로세스 인자에 --config=/var/lib/kubelet/config.yaml만 있음. 수집 대상 config-dir/serving TLS CLI override 충돌 없음 |
+| 로컬 YAML | 중복 없는 단일 KubeletConfiguration, 문서 끝 마커 없음. serverTLSBootstrap 미명시, rotateCertificates=true, 명시적 tlsCertFile/tlsPrivateKeyFile 없음. 검사 pending=[] |
+| 인증·인가 | anonymous=false, webhook=true, authorization=Webhook, client CA=/etc/kubernetes/pki/ca.crt |
+| 파일 SHA256 | 4f8474e0e4fe8e46f3decaed9723c8637fa61f3c6bc46d6f79fcc8c17cbd690c |
+| 파일 메타데이터 | uid/gid=0/0, mode0644, SELinux=unconfined_u:object_r:container_var_lib_t:s0, 1118bytes. 원본 백업·복구 검증까지 수행한 것은 아님 |
+| 실제 Prom 로드 설정 | kubelet /metrics 및 kubelet-cadvisor /metrics/cadvisor, HTTPS, insecure_skip_verify=false, server_name 미설정 |
+| 인증 참조 | authorization.type=Bearer, credentials_file=/var/run/secrets/kubernetes.io/serviceaccount/token. 파일 참조만 확인했고 token 내용·권한 검증은 안 함 |
+| CA 참조 | 두 job 모두 /var/run/secrets/kubernetes.io/serviceaccount/ca.crt, inline CA/proxy/client cert/key 없음 |
+| public CA | CP1/2/3 ca.crt와 Prom 마운트 bundle의 단일 인증서 DER SHA256 동일: e788befe100dbfd1a827af51a489844ed6f30f0b40e06ee465e0238b4a0574d7 |
+| Prom 신원 | UID46c00f91-2073-440a-800c-6cedba89d291, worker03 / 10.244.39.219 / SAprometheus, restart_count1. 수집 전후 같은 container 확인 |
+| 최신 Targets | 총20 / UP6 / DOWN14 / unknown0. worker03 두 job은 IP_SAN 오류 지속. lastScrape=05:00:44.240671197 및05:00:36.751943365 KST |
+
+실제 로드 설정 SHA256: `445ef6ea921ad3f526e67bf35eca6f4017a271efb0f7d4ee3a4faa3b613dce7a`.
+이번 보완에서 설정 충돌·CA 참조 불일치는 발견되지 않았다. 따라서 §2 단일 노드 변경안과 기존 명령·필드 명세를 유지한다.
+공개 CA 지문 포함은 인증서 유효기간/CA 제약·signer 개인키 가용성/실제 발급·애플리케이션 메모리 trust·새 leaf chain 검증을 대체하지 않는다.
+12개 나머지 DOWN의 이번 오류 원문은 수집하지 않았으므로 과거의 timeout 분류를 새 시각의 확정 원인으로 재표시하지 않는다.
+
+summary의 pending5는 수집기가 기본으로 유지하는 절차 항목이다. 새로 검출한 장애5건이 아니다.
+독립 리뷰·변경창/복구 백업·기존 SSH 쓰기 권한/CSR 검토자는 실행 전 조건이며, signer 발급·새 TLS/연속 scrape는 이후 적용 단계에서 검증한다.
+PR32 사전조회는 완료로 수용하고 같은 묶음을 반복하지 않는다. 변경창 시작 시 대상/파일 hash/관리 경로 등 변동 가능한 입력만 재대조한다.
+
 ## 2. 권장 변경과 범위
 
 대상은 worker03 한 대, /var/lib/kubelet/config.yaml의 최상위 필드 하나다.
@@ -47,7 +77,7 @@ controller-manager/CA/Trust/GNP/NetworkPolicy/Pod spec은 이번 후보에서 �
 
 ## 3. 적용 전에 한 번 확인할 입력
 
-이미 수집한 6대 cert/firewalld/Source/counter를 다시 요구하지 않는다. 다음은 변경 직전의 입력 고정이며 이번 4-GET 묶음에 없는 범위다.
+05:00 PR32 결과로 아래2·4·5의 사전조회와3의 YAML/메타데이터 확인은 완료했다. 6대 cert/firewalld/Source/counter와 PR29/32 전체 수집을 반복하지 않는다. 실제 변경창에는 파일 hash·대상 신원·현재 상태를 재대조하고, 아직 수행하지 않은 복구 백업/권한 확인을 완료한다.
 
 1. 담당 K8S/SEC Lead가 동일 SHA의 독립 리뷰와 작업창·실행자·복구 책임을 기존 PR에 기록한다. 새 ICR 공동 서명을 요구하지 않는다.
 2. worker03 실제 kubelet 시작 인자의 config/config-dir/rotate-server-certificates/TLS 관련 override와 선택 feature gate를 확인한다. config 경로가 /var/lib/kubelet/config.yaml이 아니거나 override 충돌이 있으면 이 후보 적용을 중단하고 수정한다. 전체 환경변수/명령행을 증적에 덤프하지 않는다.
@@ -124,8 +154,8 @@ CSR 객체 삭제는 이미 발급된 인증서의 암호학적 폐기를 뜻하
 
 ## 7. 검증 수준
 
-수신 archive·배포 collector·Ansible stdout 정합성 PASS, 현장 순수 조회4/4 PASS.
-이 변경 후보: YAML/Bash 예시 정적 검사만 수행. MOCK/UNIT·CI·운영 변경·CSR 승인·새 TLS 검증 NOT RUN.
+04:11 PR29 조회4/4 PASS를 보존한다. 05:00 PR32 추가 조회는 4호스트 성공, Ansible RC0, 외부 archive/내부13hash/소스5파일 정합성 PASS. PR32 실제 Ansible play 실행은 확인했지만 별도 --syntax-check 실행을 소급 주장하지 않는다.
+이 운영 변경 후보: YAML/Bash 예시 정적 검사만 수행. 이번 수정은 수신 결과·실행 전 잔여 구분을 보완한 문서 변경이며 기존 실행 명령/필드 명세는 동일하다. PR32 수집기 MOCK9 PASS는 PR31 운영 변경 시험이 아니다. PR31 MOCK/UNIT·운영 변경·CSR 승인·새 TLS 검증 NOT RUN, CI는 최신 HEAD의 실제 상태를 확인한다.
 REVIEW=PENDING / MERGE=NOT_DONE / APPLY=NOT_RUN. CODEX_ASSISTED.
 운영 설정과 재시작이 포함되므로 중앙 REVIEW_AUTHORITY_POLICY의 순수 Pre-check 예외로 적용하지 않는다.
 
