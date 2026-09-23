@@ -1,0 +1,45 @@
+---
+- name: Guard the existing sender before counter-only supplement
+  hosts: k8s-control01
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+  tasks:
+    - name: Check approved inventory and output identity
+      ansible.builtin.assert:
+        that:
+          - ansible_host == '10.1.93.102'
+          - ansible_user == 'svc_ansible'
+          - icr_output_dir.startswith('/')
+          - icr_source_sha is match('^[0-9a-f]{40}$')
+          - "'k8s-worker01' in hostvars and 'k8s-worker03' in hostvars"
+    - ansible.builtin.include_tasks: stage.yml
+      vars:
+        icr_phase: guard-before
+
+- name: Read existing kernel counters twice without repeating packet capture
+  hosts: k8s-worker01:k8s-worker03
+  gather_facts: false
+  become: false
+  strategy: linear
+  any_errors_fatal: true
+  tasks:
+    - name: Check approved worker inventory
+      ansible.builtin.assert:
+        that:
+          - ansible_user == 'svc_ansible'
+          - "ansible_host == {'k8s-worker01': '10.1.93.105', 'k8s-worker03': '10.1.93.108'}[inventory_hostname]"
+          - hostvars['k8s-control01'].icr_collection.rc == 0
+    - ansible.builtin.include_tasks: stage.yml
+      vars:
+        icr_phase: counters
+
+- name: Confirm sender identity after counter-only supplement
+  hosts: k8s-control01
+  gather_facts: false
+  become: false
+  any_errors_fatal: true
+  tasks:
+    - ansible.builtin.include_tasks: stage.yml
+      vars:
+        icr_phase: guard-after

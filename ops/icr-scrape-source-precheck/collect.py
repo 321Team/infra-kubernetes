@@ -12,6 +12,7 @@ import socket
 import stat
 import subprocess
 import sys
+import time
 
 EXPECTED = {"k8s-worker01": "10.1.93.105", "k8s-worker03": "10.1.93.108"}
 POD_NAME = "prometheus-58c848c688-kzvhp"
@@ -19,6 +20,7 @@ POD_UID = "46c00f91-2073-440a-800c-6cedba89d291"
 POD_IP = "10.244.39.219"
 IMAGE_ID = "10.1.93.54/fds/prometheus@sha256:b77f9cee82fd1c61521634d2d6b192fc526ffd938e904b8e6836b6c0cf8d875a"
 ENV = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C", "TZ": "Asia/Seoul"}
+TOOL_DIRS = ("/usr/sbin", "/usr/bin", "/sbin", "/bin", "/usr/local/bin")
 # Source is deliberately unrestricted on the destination: do not presuppose SNAT.
 FILTER = "ip and tcp and host 10.1.93.105 and (port 9100 or port 10250) and (tcp[tcpflags] & (tcp-syn|tcp-rst) != 0)"
 
@@ -28,7 +30,7 @@ def now():
 
 
 def tool(name, optional=False):
-    for directory in ("/usr/sbin", "/usr/bin", "/sbin", "/bin", "/usr/local/bin"):
+    for directory in TOOL_DIRS:
         path = pathlib.Path(directory, name)
         if path.exists():
             resolved = path.resolve()
@@ -37,7 +39,9 @@ def tool(name, optional=False):
                 raise ValueError("untrusted executable: " + str(path))
             if not os.access(resolved, os.X_OK):
                 raise ValueError("non-executable: " + str(path))
-            return str(resolved)
+            # Validate the resolved target, but preserve argv[0] for multi-call
+            # tools such as iptables-save -> xtables-nft-multi.
+            return str(path)
     if optional:
         return None
     raise ValueError("missing existing tool: " + name)
@@ -103,8 +107,31 @@ def capture(sudo, timeout_bin, tcpdump, interface):
     return r
 
 
+def counter_window(result, sudo):
+    saver = tool("iptables-save")
+    result["counter_executable"] = {"invoked": saver, "resolved": str(pathlib.Path(saver).resolve())}
+    # All existing IPv4 tables, including raw/mangle paths, without resetting counters.
+    # No tcpdump, conntrack deletion, probe, trace rule or package operation.
+    for label in ("before", "after"):
+        if label == "after":
+            time.sleep(20)
+        r = run([sudo, "-n", saver, "-c"])
+        r["snapshot"] = label
+        result["reads"].append(r)
+        require(r)
+        if "*filter\n" not in r["stdout"] or "COMMIT" not in r["stdout"]:
+            raise ValueError("filter table not returned; do not infer a complete policy view")
+    result["counter_window_seconds"] = 20
+
+
+def set_collection_result(result):
+    result["read_failures"] = sum(r["rc"] != 0 for r in result["reads"])
+    partial = result["read_failures"] or result.get("iptables_save_available") is False
+    result["result"] = "COLLECTED_PARTIAL" if partial else "COLLECTED_PENDING_ANALYSIS"
+
+
 def main():
-    result = {"schema": "icr-scrape-source-precheck/v1", "started_kst": now(),
+    result = {"schema": "icr-scrape-source-precheck/v2", "started_kst": now(),
               "host": socket.gethostname().split(".")[0], "account": getpass.getuser(),
               "collector_sha256": globals().get("SOURCE_SHA256", "LOCAL_UNRECORDED"),
               "phase": sys.argv[1] if len(sys.argv) == 2 else "INVALID",
@@ -126,10 +153,10 @@ def main():
             require(r)
             pod = json.loads(raw)
             result["sender"] = sender_fields(pod)
-        elif phase in ("prepare", "observe"):
+        elif phase in ("prepare", "observe", "counters"):
             if host not in EXPECTED:
                 raise ValueError("unexpected worker")
-            ip, tcpdump, timeout_bin = tool("ip"), tool("tcpdump"), tool("timeout")
+            ip = tool("ip")
             a = run([ip, "-j", "-4", "address", "show", "dev", "ens160"])
             result["reads"].append(a)
             require(a)
@@ -141,7 +168,10 @@ def main():
                 route = json.loads(r["stdout"])
             interfaces = interfaces_for(host, json.loads(a["stdout"]), route)
             result["interfaces"] = interfaces
-            if phase == "prepare":
+            if phase == "counters":
+                counter_window(result, sudo)
+            elif phase == "prepare":
+                tcpdump, timeout_bin = tool("tcpdump"), tool("timeout")
                 commands = [[sudo, "-n", timeout_bin, "5s", tcpdump, "--version"],
                             [sudo, "-n", timeout_bin, "5s", tcpdump, "-p", "-i", "ens160", "-d", FILTER]]
                 commands += [[ip, "-j", "link", "show", "dev", dev] for dev in interfaces]
@@ -150,6 +180,7 @@ def main():
                     result["reads"].append(r)
                     require(r)
             else:
+                tcpdump, timeout_bin = tool("tcpdump"), tool("timeout")
                 # Existing listeners, host routes and kernel rules only. No counter reset.
                 result["reads"].append(run([tool("ss"), "-lnt", "( sport = :9100 or sport = :10250 )"]))
                 for address in (POD_IP, EXPECTED["k8s-worker01"], EXPECTED["k8s-worker03"]):
@@ -173,9 +204,8 @@ def main():
                     raise ValueError("capture failed; no installation or privilege changes allowed")
         else:
             raise ValueError("unknown phase")
-        result["result"] = "COLLECTED_PENDING_ANALYSIS"
-        result["read_failures"] = sum(r["rc"] != 0 for r in result["reads"])
-        result["reason"] = "No packets is inconclusive; correlate both workers and sender guards. Not IF-06B evidence."
+        set_collection_result(result)
+        result["reason"] = "Inspect read completeness and correlate the dated evidence; counters alone do not attribute a flow or prove AC. Not IF-06B evidence."
         rc = 0
     except (ValueError, KeyError, TypeError, OSError, json.JSONDecodeError) as exc:
         result["reason"] = str(exc)
