@@ -1,0 +1,8 @@
+COMMAND=["/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3", "tests/check-crd.py", "--source", "../review_input/calico_v3.32.1_official.yaml"]
+RC=0
+STDOUT:
+PASS: 18 GNP/HEP/Felix objects: served API, recursive fields/types/required/enum/pattern/bounds/allOf/anyOf subset
+PASS: Calico offline preparation: VXLAN backend, IPPool env/CIDR/NAT/MTU, both BIRD probes, image digests
+NOT RUN: full JSONSchema, CEL, server admission, Calico semantic validation, runtime enforcement
+
+STDERR:

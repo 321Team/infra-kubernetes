@@ -1,0 +1,13 @@
+{
+  "node": null,
+  "cluster_uid": null,
+  "status": "NOT_REVIEWED",
+  "evidence": [
+    {
+      "path": null,
+      "sha256": null
+    }
+  ],
+  "attempt_id": null,
+  "config_sha256": null
+}

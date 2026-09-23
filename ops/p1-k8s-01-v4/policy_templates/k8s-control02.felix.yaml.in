@@ -1,0 +1,54 @@
+# REVIEW TEMPLATE ONLY. Do not apply. Complete runtime-input.json and run code/render.py.
+# Additional observed API/registry paths are generated only from reviewed inputs.
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: node.k8s-control02
+spec:
+  failsafeInboundHostPorts:
+  - protocol: tcp
+    port: 22
+    net: 10.250.10.10/32
+  - protocol: tcp
+    port: 6443
+    net: 10.1.93.109/32
+  - protocol: tcp
+    port: 2379
+    net: 10.1.93.102/32
+  - protocol: tcp
+    port: 2380
+    net: 10.1.93.102/32
+  - protocol: tcp
+    port: 2379
+    net: 10.1.93.103/32
+  - protocol: tcp
+    port: 2380
+    net: 10.1.93.103/32
+  - protocol: tcp
+    port: 2379
+    net: 10.1.93.104/32
+  - protocol: tcp
+    port: 2380
+    net: 10.1.93.104/32
+  failsafeOutboundHostPorts:
+  - protocol: tcp
+    port: 6443
+    net: 10.1.93.109/32
+  - protocol: tcp
+    port: 2379
+    net: 10.1.93.102/32
+  - protocol: tcp
+    port: 2380
+    net: 10.1.93.102/32
+  - protocol: tcp
+    port: 2379
+    net: 10.1.93.103/32
+  - protocol: tcp
+    port: 2380
+    net: 10.1.93.103/32
+  - protocol: tcp
+    port: 2379
+    net: 10.1.93.104/32
+  - protocol: tcp
+    port: 2380
+    net: 10.1.93.104/32

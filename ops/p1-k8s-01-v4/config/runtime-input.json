@@ -1,0 +1,271 @@
+{
+  "bundle": "p1-k8s-01-v4",
+  "cluster_uid": null,
+  "calico_version": "v3.32.1",
+  "dataplane": "iptables",
+  "mtu": null,
+  "system_images": {
+    "mode": null
+  },
+  "probe_image": null,
+  "probe_nodes": [
+    "k8s-worker01",
+    "k8s-worker02",
+    "k8s-worker03"
+  ],
+  "evidence": {
+    "transition": {
+      "path": null,
+      "sha256": null
+    },
+    "system_images": {
+      "path": null,
+      "sha256": null
+    },
+    "forward_boundary": {
+      "path": null,
+      "sha256": null
+    },
+    "policy_overlap": {
+      "path": null,
+      "sha256": null
+    }
+  },
+  "nodes": {
+    "k8s-worker01": {
+      "ip": "10.1.93.105",
+      "interface": null,
+      "ntp_nets": [],
+      "registry_nets": [],
+      "api_ingress_node_sources": [],
+      "api_ingress_workload_selectors": [],
+      "api_egress_nets": [],
+      "evidence": {
+        "felix_effective": {
+          "path": null,
+          "sha256": null
+        },
+        "source_route": {
+          "path": null,
+          "sha256": null
+        },
+        "firewall_checkpoint": {
+          "path": null,
+          "sha256": null
+        },
+        "recovery": {
+          "path": null,
+          "sha256": null
+        },
+        "api_paths": {
+          "path": null,
+          "sha256": null
+        },
+        "ntp": {
+          "path": null,
+          "sha256": null
+        },
+        "dataplane": {
+          "path": null,
+          "sha256": null
+        }
+      }
+    },
+    "k8s-worker02": {
+      "ip": "10.1.93.107",
+      "interface": null,
+      "ntp_nets": [],
+      "registry_nets": [],
+      "api_ingress_node_sources": [],
+      "api_ingress_workload_selectors": [],
+      "api_egress_nets": [],
+      "evidence": {
+        "felix_effective": {
+          "path": null,
+          "sha256": null
+        },
+        "source_route": {
+          "path": null,
+          "sha256": null
+        },
+        "firewall_checkpoint": {
+          "path": null,
+          "sha256": null
+        },
+        "recovery": {
+          "path": null,
+          "sha256": null
+        },
+        "api_paths": {
+          "path": null,
+          "sha256": null
+        },
+        "ntp": {
+          "path": null,
+          "sha256": null
+        },
+        "dataplane": {
+          "path": null,
+          "sha256": null
+        }
+      }
+    },
+    "k8s-worker03": {
+      "ip": "10.1.93.108",
+      "interface": null,
+      "ntp_nets": [],
+      "registry_nets": [],
+      "api_ingress_node_sources": [],
+      "api_ingress_workload_selectors": [],
+      "api_egress_nets": [],
+      "evidence": {
+        "felix_effective": {
+          "path": null,
+          "sha256": null
+        },
+        "source_route": {
+          "path": null,
+          "sha256": null
+        },
+        "firewall_checkpoint": {
+          "path": null,
+          "sha256": null
+        },
+        "recovery": {
+          "path": null,
+          "sha256": null
+        },
+        "api_paths": {
+          "path": null,
+          "sha256": null
+        },
+        "ntp": {
+          "path": null,
+          "sha256": null
+        },
+        "dataplane": {
+          "path": null,
+          "sha256": null
+        }
+      }
+    },
+    "k8s-control01": {
+      "ip": "10.1.93.102",
+      "interface": null,
+      "ntp_nets": [],
+      "registry_nets": [],
+      "api_ingress_node_sources": [],
+      "api_ingress_workload_selectors": [],
+      "api_egress_nets": [],
+      "evidence": {
+        "felix_effective": {
+          "path": null,
+          "sha256": null
+        },
+        "source_route": {
+          "path": null,
+          "sha256": null
+        },
+        "firewall_checkpoint": {
+          "path": null,
+          "sha256": null
+        },
+        "recovery": {
+          "path": null,
+          "sha256": null
+        },
+        "api_paths": {
+          "path": null,
+          "sha256": null
+        },
+        "ntp": {
+          "path": null,
+          "sha256": null
+        },
+        "dataplane": {
+          "path": null,
+          "sha256": null
+        }
+      }
+    },
+    "k8s-control02": {
+      "ip": "10.1.93.103",
+      "interface": null,
+      "ntp_nets": [],
+      "registry_nets": [],
+      "api_ingress_node_sources": [],
+      "api_ingress_workload_selectors": [],
+      "api_egress_nets": [],
+      "evidence": {
+        "felix_effective": {
+          "path": null,
+          "sha256": null
+        },
+        "source_route": {
+          "path": null,
+          "sha256": null
+        },
+        "firewall_checkpoint": {
+          "path": null,
+          "sha256": null
+        },
+        "recovery": {
+          "path": null,
+          "sha256": null
+        },
+        "api_paths": {
+          "path": null,
+          "sha256": null
+        },
+        "ntp": {
+          "path": null,
+          "sha256": null
+        },
+        "dataplane": {
+          "path": null,
+          "sha256": null
+        }
+      }
+    },
+    "k8s-control03": {
+      "ip": "10.1.93.104",
+      "interface": null,
+      "ntp_nets": [],
+      "registry_nets": [],
+      "api_ingress_node_sources": [],
+      "api_ingress_workload_selectors": [],
+      "api_egress_nets": [],
+      "evidence": {
+        "felix_effective": {
+          "path": null,
+          "sha256": null
+        },
+        "source_route": {
+          "path": null,
+          "sha256": null
+        },
+        "firewall_checkpoint": {
+          "path": null,
+          "sha256": null
+        },
+        "recovery": {
+          "path": null,
+          "sha256": null
+        },
+        "api_paths": {
+          "path": null,
+          "sha256": null
+        },
+        "ntp": {
+          "path": null,
+          "sha256": null
+        },
+        "dataplane": {
+          "path": null,
+          "sha256": null
+        }
+      }
+    }
+  },
+  "attempt_id": null
+}
