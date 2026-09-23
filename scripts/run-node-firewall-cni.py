@@ -188,6 +188,25 @@ def remote_request(name, request):
                 "stdout_excerpt": node.redact(result.stdout)[:1000] if result else ""}
 
 
+def bind_policy_reader(policy, policy_sha256):
+    """Supply the verified policy to the consumer's CP1 read-only request.
+
+    remote_status deliberately knows only the CP1 host and mode. The same
+    helper protocol used by inspect also requires policy and policy_sha256.
+    Keep the existing transport and remote validation, with an explicit
+    read-only boundary on this callback.
+    """
+    policy = copy.deepcopy(policy)
+
+    def read(name, request):
+        node.need(name == request.get("node") == "k8s-control01"
+                  and request.get("mode") == "cp1-state", "CP1 read-only request required")
+        return remote_request(name, dict(request, policy=copy.deepcopy(policy),
+                                         policy_sha256=policy_sha256))
+
+    return read
+
+
 def archive_output(directory):
     files = sorted(p for p in directory.iterdir() if p.is_file())
     (directory / "SHA256SUMS").write_text("".join(digest(p) + "  " + p.name + "\n" for p in files))
@@ -360,6 +379,7 @@ def main():
         policy_raw, _ = read_checked(POLICY_PATH)
         policy = parse_unique(policy_raw)
         node.validate_policy(policy)
+        controller.remote_request = bind_policy_reader(policy, node.policy_hash())
         summary.update(source_commit=commit, policy_sha256=node.policy_hash())
         (out / "POLICY.json").write_bytes(node.encoded(policy))
         summary["preflight"] = preflight()
