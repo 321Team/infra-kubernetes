@@ -19,6 +19,7 @@ The operator supplied Ansible output in the active troubleshooting conversation.
 | 01:28:15–17 | worker01 ens160 receives SYNs from 10.1.93.108 to .105:9100 and .105:10250, including repeated SYNs. |
 | 02:05 Source collection | Matched 64 SYN observations across worker03 Pod veth, worker03 ens160 and worker01 ens160, covering 19 connections. Pod10.244.39.219 is translated to node10.1.93.108 with source-port translation. The counter reads in this older archive failed and retain PARTIAL classification. |
 | 02:40 counter supplement | All 9 reads succeeded. Over 20 seconds, worker03 egress allow counters toward .105 increased by14 packets on9100 and32 on10250. Worker01 host-GNP source .108 match and terminal DROP each increased by46 packets/2,760 bytes. |
+| 05:20 negative candidate inventory | Real Ansible syntax-check and all3 reads succeeded. Four general workload candidates were observed on worker03. Grafana is now the preparation target following the user's instruction to proceed with the recommendation; this is not an operational approval or an executed negative test. |
 
 The older01:28 SYN-only capture cannot establish absence of SYN-ACK. The02:05 capture also matched SYN-ACK/RST, but only SYNs were observed before the64-packet limit ended the approximately28.7-second window. It establishes the Pod network path and pre/post-NAT correspondence, not PID/socket attribution or successful return traffic.
 
@@ -53,11 +54,57 @@ This revision changes this document only. The26-line companion manifest is byte-
 | Sender identity | Last confirmed UID `46c00f91-2073-440a-800c-6cedba89d291`, worker03, PodIP10.244.39.219, hostIP10.1.93.108, SA prometheus. Refresh the relevant identity immediately before a reviewed change window; stop if it changed. |
 | Host endpoint and policy | The01:21 snapshot identifies worker01 ens160/v4 labels, expectedIP10.1.93.105, default tier/order100. Reconfirm the relevant live HEP, applicable policies and candidate absence at the change window; do not rerun all historical Gate2 work. |
 | Independent code review | Not yet received. An AI self-check or another PR's approval does not satisfy this input. |
-| Negative workload | An existing, approved workload on worker03 with a non-Prometheus identity, verified test capability and an applicable egress policy must be identified. Namespace/name/UID/SA/container/imageID, approval reference and exact .105:9100 test command are not supplied in the current evidence. Leave these unfilled and keep APPLY HOLD. |
+| Negative workload | Grafana identity is available and fixed below as the preparation target. Current policy inputs, installed tool capability, K8S/SEC Lead execution acceptance and the executable probe choice remain pending. Keep APPLY HOLD until these are resolved; do not repeat the entire candidate inventory. |
 | Previous security tests | [Gate2 report9/9](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5772355948) covers management/DNS/NTP/SELinux/Cockpit/VXLAN scenarios; it does not identify this same-node unauthorized workload test. [verify-probe-failover.sh](https://github.com/321Team/infra-kubernetes/blob/2d35809313c70731c58d210b37ef29ed0a300883/scripts/verify-probe-failover.sh) tests DB access, not this endpoint. Neither replaces the required negative evidence. |
 | Change window | Responsible K8S/SEC Lead records acceptance of this node-source diagnostic scope, operator, reviewed SHA, start/end and recovery access in the existing PR/ticket execution record. No additional standing ICR co-signature or separate approval form. |
 
 The negative workload must be able to execute the agreed probe in its existing image; missing tools, failed kubectl exec, connection refusal from an unhealthy listener, and generic timeout do not establish a successful security control. Pair the denied observation with a healthy positive endpoint and evidence of the applicable blocking policy. Preserve the workload's existing identity/policies; do not change labels, create a test Pod, install tools or weaken egress to make this run possible. If a suitable approved workload does not exist, the responsible Lead must prepare a separately reviewed test provision or choose another policy design before applying this candidate.
+
+## Grafana preparation target and reviewed probe proposal
+
+Evidence: [05:20 identity receipt](https://github.com/321Team/fds-project-evidence/blob/5c13e7c2393df260e0356e5f2b160573624ded64/evidence/ICR-D-NET-01-01/negative-candidates-20260924T052009/README.md). The user's instruction to proceed with the recommendation selects Grafana for preparation. Responsible K8S/SEC Lead acceptance for the operational window and independent review of this PR remain required under the existing governance policy; no extra ICR co-signature is introduced.
+
+| Field | Pinned observation |
+|---|---|
+| Namespace / Pod | `monitoring-api/grafana-7dc57885d4-sk8h2` |
+| UID | `00396c87-640c-4704-ac6c-dcbacf6fbc90` |
+| Node / hostIP / PodIP | `k8s-worker03` / `10.1.93.108` / `10.244.39.217` |
+| SA / container / label | `default` / `grafana` / `app=grafana` |
+| imageID | `10.1.93.54/fds/grafana@sha256:7a1ff54408c90357ff1c76189e5bbc24f898531cb771fbbfe6a477f00de37d5b` |
+
+The SA is shared with Alertmanager. Do not identify the test by SA alone. Read the exact Pod immediately before and after each reviewed exec and preserve UID, node, IP, labels, container imageID, readiness, containerID/restartCount and execution timestamps. A replacement, restart, unexpected container or uncertain identity invalidates that trial. kubectl exec uses the Pod name and has no UID precondition; these observations do not remove that race. Stop on mismatch instead of adopting the new Pod. Never substitute a deployment-wide exec, ephemeral container or newly created test Pod.
+
+The01:21 snapshot shows Grafana-selected egress to Prometheus TCP9090 and DNS, with no observed .105:9100 allow. This is an older policy observation, not a current DENY result. The separate `ops/icr-grafana-policy-precheck/` source on main reads the pinned Pod, namespace/SA labels and bounded current K8s/Calico policies, tiers and network sets through LB .109. Use its separately published immutable SHA; do not mix it into this operational PR's Pre-check classification. Its successful collection is input for policy review, not authorization or a dataplane verdict. Consider every selecting K8s egress allow and all applicable Calico order/tier actions; unresolved selectors, endpoint/profile or native admin-policy dependencies keep HOLD.
+
+The following **operational proposal is for independent review and is NOT a command to run now**. Do not infer curl or /bin/sh availability from the image name. The Lead first accepts a single bounded tool introspection through the existing control01/svc_ansible access, with the pinned Pod identity checks above. Retain stdout/stderr/rc; do not install a tool or switch images if it fails.
+
+```bash
+/usr/bin/sudo -n /usr/bin/kubectl \
+  --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s \
+  -n monitoring-api exec grafana-7dc57885d4-sk8h2 -c grafana -- \
+  /bin/sh -c 'for p in /usr/bin/curl /bin/curl; do if [ -x "$p" ]; then printf "CURL_PATH=%s\n" "$p"; "$p" --disable --version; exit $?; fi; done; exit 127'
+```
+
+No network request is made by that introspection, but it is a Pod exec and is deliberately outside the pure read-only policy collector. A missing shell/curl or access error means capability NOT VERIFIED. If `/usr/bin/curl` is actually observed and its installed version supports the options, the exact proposed request is:
+
+```bash
+/usr/bin/sudo -n /usr/bin/kubectl \
+  --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s \
+  -n monitoring-api exec grafana-7dc57885d4-sk8h2 -c grafana -- \
+  /usr/bin/curl --disable --noproxy '*' --proto '=http' \
+  --connect-timeout 2 --max-time 5 --retry 0 --max-redirs 0 \
+  --silent --show-error --output /dev/null \
+  --write-out 'http_code=%{http_code} remote_ip=%{remote_ip} time_connect=%{time_connect}\n' \
+  http://10.1.93.105:9100/metrics
+```
+
+This is one direct HTTP request, no redirects/retries/proxy, with response body discarded. curl config loading is disabled by placing `--disable` first. If only `/bin/curl` exists, record that exact absolute-path substitution against the reviewed command in the existing Lead execution record. If neither path or required option works, retain HOLD and choose a separately reviewed alternative; do not fall back to wget/nc automatically. An outer kubectl timeout must not be treated as evidence of a denied remote request or proof that the remote process finished.
+
+Before allowing the canary, establish installed capability, the exact invocation and an applicable blocking-policy basis. Run at most one pre-change trial and one during-canary trial in the agreed short window, each with its own identity checks and bounded attributable dataplane observation. During-canary denial must be paired with the actual Prometheus .105:9100 positive result in that same window. Do not repeatedly retry to obtain a preferred result.
+
+Any demonstrated unauthorized TCP/HTTP reachability is FAIL, including an HTTP error response; an HTTP status such as404 is still reachability. curl success alone does not prove application acceptance. Generic timeout/HTTP000, refusal, failed exec, missing tool, identity uncertainty or loss of the stream is INCONCLUSIVE unless separately resolved by the correlated policy and endpoint evidence. A pre-change timeout at the destination host deny does not prove Grafana's workload egress would still protect it after the host canary is added. Preserve enough evidence to identify the applicable blocking enforcement point during the canary. All four phases below remain mandatory, and any failure/inconclusive result triggers the reviewed stop/recovery path.
+
+Reference for proposed options: https://curl.se/docs/manpage.html. Actual installed capabilities remain NOT VERIFIED.
 
 ## Application gate and bounded execution
 
