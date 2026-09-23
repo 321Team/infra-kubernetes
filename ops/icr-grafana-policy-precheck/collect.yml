@@ -1,0 +1,47 @@
+---
+- name: Observe pinned Grafana policy inputs once through existing access
+  hosts: k8s-control01
+  gather_facts: false
+  become: false
+  tasks:
+    - name: Require the existing inventory identity and controller output path
+      ansible.builtin.assert:
+        that:
+          - ansible_host == '10.1.93.102'
+          - ansible_user == 'svc_ansible'
+          - icr_output_dir is defined
+          - icr_output_dir.startswith('/')
+          - icr_source_sha is match('^[0-9a-f]{40}$')
+    - name: Read projected metadata without installing a collector on the server
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -I
+          - -B
+          - -c
+          - "import sys,hashlib; s=sys.stdin.buffer.read(); exec(compile(s,'<icr-grafana-policy-precheck>','exec'),{'__name__':'__main__','SOURCE_SHA256':hashlib.sha256(s).hexdigest()})"
+        stdin: "{{ lookup('ansible.builtin.file', playbook_dir + '/collect.py', rstrip=False) }}"
+        stdin_add_newline: false
+      register: icr_collection
+      changed_when: false
+      failed_when: false
+      no_log: true
+    - name: Preserve the projection and execution envelope on ansible01
+      ansible.builtin.copy:
+        dest: "{{ icr_output_dir }}/icr-grafana-policy.json"
+        mode: '0600'
+        content: >-
+          {{ {'source_sha': icr_source_sha,
+               'collector_sha256': lookup('ansible.builtin.file', playbook_dir + '/collect.py', rstrip=False) | hash('sha256'),
+               'inventory_sources': ansible_inventory_sources,
+               'target': inventory_hostname, 'ansible_host': ansible_host,
+               'ansible_user': ansible_user, 'rc': icr_collection.rc,
+               'stdout': icr_collection.stdout, 'stderr': icr_collection.stderr}
+             | to_nice_json }}
+      delegate_to: localhost
+      no_log: true
+    - name: Stop on incomplete policy inputs without changing permissions or policies
+      ansible.builtin.assert:
+        that: icr_collection.rc == 0
+        fail_msg: 'STOP: preserve result; no sudo/RBAC/policy changes or probe execution.'
+        success_msg: 'COLLECTED_PENDING_POLICY_REVIEW; approval NOT_ESTABLISHED; probe NOT_RUN.'
