@@ -1,6 +1,6 @@
 # MON scrape canary and kubelet serving TLS follow-up — 2026-09-24 KST
 
-Status: DRAFT / REVIEW PENDING / RUNTIME NOT RUN.
+Status: REVIEW READY / INDEPENDENT REVIEW PENDING / APPLY HOLD / RUNTIME NOT RUN.
 Classification: operational manifest + execution proposal, NOT a pure Pre-check exception.
 
 Responsibility: ICR #14 (source/return path and host-policy validation support), SEC #19 and K8S #10 (policy and kubelet configuration), MON #17 (scrape and service acceptance). Existing owners and AC remain unchanged.
@@ -17,10 +17,14 @@ The operator supplied Ansible output in the active troubleshooting conversation.
 | 01:24 | All six nodes listen on TCP10250; all workers listen on TCP9100. Return route toward 10.244.39.219 uses worker03 .108; this is route evidence, not complete return-path proof. |
 | 01:28:14 | All six firewalld units disabled/inactive. Serving leaf certificates all have DNS-only SAN, no IP SAN. Filtered kubelet config prints rotateCertificates:true but not serverTLSBootstrap or tlsCertFile. No CSR objects reported. |
 | 01:28:15–17 | worker01 ens160 receives SYNs from 10.1.93.108 to .105:9100 and .105:10250, including repeated SYNs. |
+| 02:05 Source collection | Matched 64 SYN observations across worker03 Pod veth, worker03 ens160 and worker01 ens160, covering 19 connections. Pod10.244.39.219 is translated to node10.1.93.108 with source-port translation. The counter reads in this older archive failed and retain PARTIAL classification. |
+| 02:40 counter supplement | All 9 reads succeeded. Over 20 seconds, worker03 egress allow counters toward .105 increased by14 packets on9100 and32 on10250. Worker01 host-GNP source .108 match and terminal DROP each increased by46 packets/2,760 bytes. |
 
-The SYN-only capture cannot establish absence of SYN-ACK. It does not uniquely identify the originating process. Its source is consistent with SNAT of traffic from the Prometheus node, but paired sender capture/conntrack attribution has not been performed.
+The older01:28 SYN-only capture cannot establish absence of SYN-ACK. The02:05 capture also matched SYN-ACK/RST, but only SYNs were observed before the64-packet limit ended the approximately28.7-second window. It establishes the Pod network path and pre/post-NAT correspondence, not PID/socket attribution or successful return traffic.
 
-The receiver observation supersedes using an assumed Pod CIDR as the source for this path. The current worker01 GNP does not permit the observed tuple. Kernel/Calico drop counters have not independently proven the exact drop point.
+The02:40 filter chain `cali-pi-_IZ_dpYgvbSNCZTvi1r-` is explicitly identified by a comment as `GlobalNetworkPolicy fds-k8s-host-k8s-worker01 ingress`. Its final DROP, comment `cali:wYUSqCe2q6dO_hSD`, increased by46 packets. The INPUT/ens160 dispatch path and source .108 match were verified in the same snapshots. This is direct evidence of activity at a named host-policy DROP rule and strongly supports it as the cross-node scrape blocker. Aggregate counters do not identify individual flows, and the earlier64 SYNs are not the later46 drops. The policy does not allow TCP9100; TCP10250 allows only CP .102/.103/.104. Its .108 source mark is used for UDP4789, not an allow for all ports.
+
+Pinned evidence: [01:21 sender/policy](https://github.com/321Team/fds-project-evidence/blob/2f8a238142ad669a35800bb3e8ecc6d372354d60/evidence/ICR-D-NET-01-01/monitoring-precheck-20260924T012110/README.md), [02:05 Source/SNAT](https://github.com/321Team/fds-project-evidence/blob/2f8a238142ad669a35800bb3e8ecc6d372354d60/evidence/ICR-D-NET-01-01/scrape-source-20260924T020500/README.md), [02:40 counter analysis and originals](https://github.com/321Team/fds-project-evidence/blob/2f8a238142ad669a35800bb3e8ecc6d372354d60/evidence/ICR-D-NET-01-01/scrape-counters-20260924T024027/README.md). These are in evidence Draft PR23 pending independent intake review. Source/counter collection is complete within its stated scope; do not repeat it merely to request code review.
 
 Node-specific issuer names are not proof of a verified certificate chain. IP SAN absence is confirmed. rotateCertificates is not proof of serving certificate bootstrapping; effective command-line/drop-in overrides have not been inspected.
 
@@ -39,23 +43,71 @@ SECURITY LIMIT: source IP .108 is a node identity, not Prometheus identity. Othe
 
 The worker03 -> worker01 edge is chosen because it is observed. Worker02 and cross-node kubelet paths remain outside this canary. Prometheus relocation invalidates the source premise; do not automatically expand the source set.
 
+## Review readiness and remaining runtime inputs
+
+This revision changes this document only. The26-line companion manifest is byte-identical to Git blob `71544281b433a2161b2f97d4f3ae22f0aafa915c`. The complete operational manifest and this execution proposal still require independent review; there is no earlier independent approval for PR27 to inherit. Ready for review does not release APPLY HOLD.
+
+| Input | Existing evidence / actual remaining work |
+|---|---|
+| Source and blocker | Source/SNAT and worker01 host-policy DROP evidence are available above. No new diagnostic repetition is needed for review. |
+| Sender identity | Last confirmed UID `46c00f91-2073-440a-800c-6cedba89d291`, worker03, PodIP10.244.39.219, hostIP10.1.93.108, SA prometheus. Refresh the relevant identity immediately before a reviewed change window; stop if it changed. |
+| Host endpoint and policy | The01:21 snapshot identifies worker01 ens160/v4 labels, expectedIP10.1.93.105, default tier/order100. Reconfirm the relevant live HEP, applicable policies and candidate absence at the change window; do not rerun all historical Gate2 work. |
+| Independent code review | Not yet received. An AI self-check or another PR's approval does not satisfy this input. |
+| Negative workload | An existing, approved workload on worker03 with a non-Prometheus identity, verified test capability and an applicable egress policy must be identified. Namespace/name/UID/SA/container/imageID, approval reference and exact .105:9100 test command are not supplied in the current evidence. Leave these unfilled and keep APPLY HOLD. |
+| Previous security tests | [Gate2 report9/9](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5772355948) covers management/DNS/NTP/SELinux/Cockpit/VXLAN scenarios; it does not identify this same-node unauthorized workload test. [verify-probe-failover.sh](https://github.com/321Team/infra-kubernetes/blob/2d35809313c70731c58d210b37ef29ed0a300883/scripts/verify-probe-failover.sh) tests DB access, not this endpoint. Neither replaces the required negative evidence. |
+| Change window | Responsible K8S/SEC Lead records acceptance of this node-source diagnostic scope, operator, reviewed SHA, start/end and recovery access in the existing PR/ticket execution record. No additional standing ICR co-signature or separate approval form. |
+
+The negative workload must be able to execute the agreed probe in its existing image; missing tools, failed kubectl exec, connection refusal from an unhealthy listener, and generic timeout do not establish a successful security control. Pair the denied observation with a healthy positive endpoint and evidence of the applicable blocking policy. Preserve the workload's existing identity/policies; do not change labels, create a test Pod, install tools or weaken egress to make this run possible. If a suitable approved workload does not exist, the responsible Lead must prepare a separately reviewed test provision or choose another policy design before applying this candidate.
+
 ## Application gate and bounded execution
 
-The central governance/REVIEW_AUTHORITY_POLICY.md requires independent review of operational manifests. Before execution, the responsible K8S/SEC Lead decides whether this explicit diagnostic scope is acceptable and records the independently reviewed full commit SHA, operator, short work window, positive/negative probes and rollback responsibility. ICR provides source/return-path validation support; no additional standing ICR co-signature is required. Publishing this Draft is not independent code review or an execution decision.
+The central governance/REVIEW_AUTHORITY_POLICY.md requires independent review of operational manifests. Before execution, the responsible K8S/SEC Lead decides whether this explicit diagnostic scope is acceptable and records the independently reviewed full commit SHA, operator, short work window, positive/negative probes and rollback responsibility. ICR provides source/return-path validation support; no additional standing ICR co-signature is required. Publishing this proposal or marking the PR ready is not independent code review or an execution decision.
 
 At the reviewed work window, through the existing ansible01 inventory, svc_ansible identity and sudo permissions:
 
 1. Before opening the diagnostic path, identify an existing approved negative-probe workload and confirm its current egress controls and pre-change denied result. If no suitable approved probe exists, keep application on HOLD. Confirm the Prometheus Pod UID/IP/node/SA, worker01 HEP labels/expectedIPs/interface, default tier and all applicable earlier policies still match the recorded premise. Confirm the candidate name is absent. Stop on any mismatch or existing object; do not overwrite another object. Check worker01 node-exporter readiness, approved image and listening port.
-2. Preserve the existing HEP/GNP snapshots and current target errors in the operator's result directory. Validate the pinned candidate with the installed CRD/server-side dry-run; inspect the diff for exactly one new resource. No apply on schema rejection, unexpected admission mutation or wider diff.
-3. Apply only this resource after the approval above, without restarting nodes or Pods. Observe two completed scrape cycles of worker01 node-exporter. The previous configured interval is 15 seconds; verify the active interval.
+2. Preserve the relevant current HEP/GNP, sender/negative-workload identities and target errors in the operator's result directory. Validate the pinned candidate with a create-mode server-side dry-run against the installed CRD and compare the returned spec with this manifest. A candidate-absence GET must distinguish explicit NotFound from Forbidden/timeout/transport error. No mutation on schema rejection, unexpected admission mutation or a resource other than the single proposed GNP.
+3. After the prerequisites above, create only this previously absent resource using create semantics that fail on AlreadyExists. Do not use apply/replace to adopt or overwrite an object that appeared concurrently. Preserve the creation response UID/resourceVersion/spec and KST timestamp. Without restarting nodes or Pods, observe two completed scrape cycles of worker01 node-exporter. Verify the active interval rather than assuming the historical15-second setting.
 4. Correlate the actual Prometheus request with a bounded sender/receiver capture of the exact tuple, including both directions. Use existing tools; do not add packages or privilege.
 5. Verify existing approved SSH/API/metrics paths and the specifically agreed unauthorized workload negative probe, including the same source node. A successful unauthorized probe is FAIL, not an accepted AC-07 exception. Do not create an unreviewed test Pod or fabricate a negative result when no approved probe is available.
 6. Record target UP/DOWN, HTTP/error and source/return observations. Any management regression, unexpected source, unauthorized access, unavailable negative probe, or failure to improve the target means stop and remove the canary.
 7. Remove this one temporary resource at the end of the window even if the target improves. It has no automatic TTL. Retention or expansion requires a separately reviewed durable policy decision.
 
-Rollback: after confirming the live object's identity/spec is still the one created by this work window, delete only icr-mon-worker03-to-worker01-9100-canary. Do not delete by label, replace existing host GNPs, reload firewalld or flush rules. Verify the object is absent, baseline host policies remain and approved management paths still work. Removing an allow does not necessarily terminate an already tracked connection; test a new connection when verifying rollback. Full persistence/reboot/rollback ACs are not awarded from this one window.
+Rollback: after confirming the live object's UID/spec is still the one created by this work window, remove only icr-mon-worker03-to-worker01-9100-canary using the UID/resourceVersion-preconditioned method below. A name-only get-then-delete is not a race-safe ownership check. Check the existing kubectl's support before creation; if unavailable, keep HOLD without installing tools. Do not delete by label, adopt a pre-existing object, replace existing host GNPs, reload firewalld or flush rules. If creation times out and its outcome is unknown, inspect the live resource and establish ownership from retained API/audit evidence; do not blindly retry creation or delete a same-name object. Verify the owned object is absent, baseline host policies remain and approved management paths still work. Removing an allow does not necessarily terminate an already tracked connection; test a new connection when verifying rollback. Do not reset conntrack or restart Prometheus to manufacture that condition. Full persistence/reboot/rollback ACs are not awarded from this one window.
+
+Reviewed removal method: through the same existing svc_ansible/control01 access, send a DeleteOptions JSON body on stdin to the existing kubectl raw DELETE. The body uses the UID from the retained successful creation response and resourceVersion from the latest read after UID/spec verification. Do not substitute a UID merely discovered by object name. This is an operational command for independent review, not a current execution instruction.
+
+```bash
+/usr/bin/sudo -n /usr/bin/kubectl \
+  --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s \
+  delete --raw=/apis/crd.projectcalico.org/v1/globalnetworkpolicies/icr-mon-worker03-to-worker01-9100-canary -f -
+```
+
+Stdin shape (placeholders are deliberately not an executable deletion input):
+
+```json
+{"apiVersion":"v1","kind":"DeleteOptions","preconditions":{"uid":"RECORDED_CREATED_UID","resourceVersion":"LATEST_VERIFIED_RESOURCE_VERSION"}}
+```
+
+Retain stdout/stderr/rc on ansible01. A409 means no deletion under those preconditions: re-read and investigate; never remove the precondition or use force as a fallback. The raw DELETE response is not proof of final disappearance, so follow it with a bounded GET and require explicit NotFound. Keep finalizers and evidence intact if cleanup does not complete, record cleanup FAIL and use the existing recovery/Lead escalation path. Kubernetes [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-api/definitions/delete-options-v1-meta/) defines these preconditions; upstream [kubectl delete implementation](https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/delete/delete.go) passes a single file/stdin body to raw DELETE. Installed-client/server execution remains NOT RUN.
 
 Expected positive result, if the HEP rule is the effective blocker: worker01 node-exporter becomes UP while worker02 and kubelet failures remain. This is a hypothesis to test, not a predicted PASS.
+
+## Evidence and verdict for the reviewed window
+
+Use one existing PR/ticket execution record with links to original files and hashes. The fields below are required observations, not a new approval workflow or prefilled results.
+
+| Phase | Record and verdict |
+|---|---|
+| Before | Reviewed full SHA, manifest hash, operator/window, sender UID and approved negative workload identity, relevant HEP/GNP specs, candidate NotFound, listener/positive-control health, target identity and lastScrape/error, original negative probe stdout/stderr/rc and policy attribution. Missing or contradictory input means HOLD. |
+| Creation | Dry-run returned spec, create response UID/resourceVersion/spec and time. Exactly one new GNP; no other object adoption or change. Ambiguous creation outcome means STOP and ownership investigation. |
+| Positive | From the existing approved Prometheus access path, retain the exact active target matching .105:9100, including job/scrapePool/scrapeUrl, health, lastError, lastScrape and scrapeInterval. Require two distinct post-creation lastScrape values, increasing and consistent with successive active scrape cycles, both health=up and lastError empty. Repeated polling of the same lastScrape is one observation. Missing/duplicate target, API failure or stale timestamp is NOT VERIFIED, not PASS. |
+| Negative | Same approved workload UID/container on worker03, same .105:9100 destination and same test command before/after. A functioning probe plus healthy positive control and policy-attributed denial is required. Unauthorized successful access is FAIL and immediate recovery; tool/exec/listener ambiguity is NOT VERIFIED and requires recovery. |
+| Regression | Reuse existing approved management tests for ansible01→worker01 SSH and affected CP/worker01 kubelet management paths. Retain commands/rc and actual outcomes. Do not manufacture a broader6-node or reboot PASS. |
+| Recovery | Record why/when recovery started, verify live UID/spec, use recorded UID-preconditioned deletion, confirm absence and baseline HEP/GNP/management health. Check a new connection for baseline denial; existing keep-alive/conntrack state alone cannot prove failure of policy removal. |
+| Close window | Positive/Negative/Regression/Recovery each get PASS/FAIL/NOT_VERIFIED plus original references. Report overall diagnostic success only if all required checks pass and the temporary object is removed. No AC05 across3workers, AC06 TLS, AC07 across unauthorized workloads, or ICR closure is awarded from this one window. |
+
+No new remote execution tool is introduced by this revision. The exact negative command remains an input to be fixed for the approved workload; the removal method is defined above and must be supported by the installed client under existing access. This document is a reviewable procedure; do not turn an unreviewed ad-hoc helper into an execution shortcut.
 
 ## Kubelet TLS follow-up (design; no configuration patch in this PR)
 
@@ -73,9 +125,10 @@ worker03 is a useful TLS canary because its existing local scrape reaches the TL
 
 ## Validation and acceptance
 
-STATIC: YAML syntax checked and scope manually compared with the supplied HEP/GNP snapshot.
+STATIC: YAML syntax and exact single-resource/source/destination/port/tier/order/selector scope checked against the supplied HEP/GNP evidence. This document revision does not alter the manifest bytes.
 MOCK/UNIT: N/A (one declarative diagnostic rule; no new executor).
-CI: not run locally; check the PR's actual workflow status separately.
+CI: record the latest HEAD's actual check/workflow status in the PR; zero runs means NOT RUN.
+SERVER-SIDE DRY-RUN: NOT RUN.
 RUNTIME: NOT RUN.
 REVIEW: PENDING (AI preparation is not independent human review).
 MERGE/APPLY: NOT DONE.
@@ -88,5 +141,8 @@ References:
 - https://github.com/321Team/infra-kubernetes/pull/26 (v4 source intake, separate work)
 - https://docs.tigera.io/calico/latest/reference/resources/globalnetworkpolicy
 - https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/
+- https://prometheus.io/docs/prometheus/latest/querying/api/ (target health/lastScrape/error fields; latest documentation is not evidence of the installed version)
+- https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/ (create and server-side dry-run semantics)
+- https://kubernetes.io/docs/reference/using-api/api-concepts/ (delete preconditions and optimistic concurrency)
 
 AI assistance: CODEX_ASSISTED.
