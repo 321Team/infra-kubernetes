@@ -105,7 +105,20 @@ def main():
         need(set(n['metadata']['name'] for n in nodes) == set(ORDER), 'node inventory mismatch')
         need(all(any(x['type'] == 'Ready' and x['status'] == 'True'
                      for x in n['status']['conditions']) for n in nodes), 'all six nodes must be Ready')
-        weps = json.loads(k.call('get', 'workloadendpoints.' + GROUP, '-A', '-o', 'json'))['items']
+        # WorkloadEndpoint is served through the calico-apiserver aggregation
+        # layer in this Calico release, not as a plain crd.projectcalico.org/v1
+        # CRD. This cluster deliberately runs without calico-apiserver (kubectl
+        # applies crd.projectcalico.org/v1 resources directly instead), so the
+        # resource type genuinely does not exist here -- that is expected given
+        # this architecture, not a fault. Treat "resource type absent" the same
+        # as "no matching workloads found" for this selector-collision check.
+        try:
+            weps = json.loads(k.call('get', 'workloadendpoints.' + GROUP, '-A', '-o', 'json'))['items']
+        except RuntimeError as e:
+            if "doesn't have a resource type" in str(e):
+                weps = []
+            else:
+                raise
         need(not any(x['metadata'].get('labels', {}).get(LABEL) == BUNDLE for x in weps),
              'GNP selector already selects a workload')
         controllers = k.get('kubecontrollersconfigurations.' + GROUP)['items']

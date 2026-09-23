@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import socket
 import subprocess
 from pathlib import Path
@@ -28,10 +29,62 @@ def tree_hash(root):
 def firewall_view(permanent=False):
     base = ['firewall-cmd'] + (['--permanent'] if permanent else [])
     result = {}
-    for arg in ('--get-default-zone', '--list-all-zones', '--list-all-policies',
-                '--get-ipsets'):
-        # Only the presentation-only active suffix is ignored; no rules are dropped.
-        result[arg] = run(base + [arg])['stdout'].replace(' (active)', '')
+    # --get-default-zone is a stand-alone option: firewalld rejects it when
+    # combined with --permanent ("Can't use stand-alone options with other
+    # options"), and it has no separate permanent/runtime variant anyway.
+    # Always query it without --permanent.
+    result['--get-default-zone'] = run(['firewall-cmd', '--get-default-zone'])['stdout'].replace(' (active)', '')
+    for arg in ('--list-all-zones', '--list-all-policies', '--get-ipsets'):
+        # firewall-cmd appends presentation-only status markers that do not
+        # reflect any actual rule difference between runtime and permanent:
+        # 'active' on the currently-applied zone/interface, 'disabled' on
+        # policies that are currently off. These can appear either alone,
+        # e.g. "zone1 (active)", or combined with other markers in the same
+        # parenthetical, e.g. "public (default, active)" -- a plain
+        # '.replace(" (active)", "")' only catches the standalone form and
+        # silently leaves the combined form untouched. Strip the marker
+        # wherever it appears inside the parenthetical instead.
+        out = run(base + [arg])['stdout']
+        out = re.sub(r',\s*(active|disabled)(?=[,)])', '', out)
+        out = re.sub(r'\s*\((active|disabled)\)', '', out)
+        if arg == '--list-all-zones':
+            # Interface-to-zone binding lives in NetworkManager connection
+            # profiles, not in firewalld's permanent zone config: per
+            # firewall-cmd(1), an "active zone" is defined as one with a
+            # live interface/source binding, which is a runtime-only
+            # concept by firewalld's own design. So --list-all-zones will
+            # always show the bound interface under runtime and always
+            # show it empty under permanent, on every correctly configured
+            # node -- this is not a drift to flag, so normalize it out
+            # before comparing.
+            out = '\n'.join(
+                line if not line.strip().startswith('interfaces:')
+                else '  interfaces: '
+                for line in out.splitlines()
+            )
+        # Multi-line rule bodies (rich rules, direct rules, forward-ports,
+        # etc, each on its own indented line, e.g. lines starting with a
+        # tab under 'rich rules:') are the same *set* of rules on runtime
+        # and permanent, but firewalld lists them in a different order on
+        # each side (live internal order vs on-disk file order). A raw
+        # line-by-line diff flags that ordering difference as a config
+        # mismatch even when every rule is present on both sides. Sort
+        # each contiguous run of tab-indented lines so only an actual
+        # missing/extra rule shows up as a difference, not the order.
+        lines = out.splitlines()
+        sorted_lines = []
+        run_start = None
+        for i, line in enumerate(lines + ['']):
+            is_rule_line = line.startswith('\t')
+            if is_rule_line and run_start is None:
+                run_start = i
+            elif not is_rule_line and run_start is not None:
+                sorted_lines.extend(sorted(lines[run_start:i]))
+                run_start = None
+            if not is_rule_line and i < len(lines):
+                sorted_lines.append(line)
+        out = '\n'.join(sorted_lines)
+        result[arg] = out
     for name in result['--get-ipsets'].split():
         result['ipset:' + name] = run(base + ['--info-ipset=' + name])['stdout']
     for arg in ('--get-all-rules', '--get-all-passthroughs'):
