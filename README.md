@@ -33,6 +33,35 @@
 5. 병합 직전에 HEAD 일치를 확인하고 승인된 절차에 따라 이권욱이 병합한다. PR, 승인 HEAD와 병합 커밋을 기록한다.
 6. 실서버 반영은 대상·순서·영향·중단 조건·복구 절차·고정 커밋이 명시된 Runbook과 별도 실행 승인에 따른다. PR 병합이나 Gate 0 PASS를 실행 승인으로 전용하지 않는다.
 
+위 1~5의 Reviewer PASS·최종 승인 절차에는 아래 사전 검증(Pre-check) 코드 예외가 적용된다.
+
+### 사전 검증(Pre-check) 코드 예외 — 2026-09-23
+
+적용 기준: 프로젝트 중간 결과 회고에 따른 2026-09-23 KST 사용자 정책 변경 안내. 상세 기준은 [중앙 리뷰 권한 정책 §3.2](https://github.com/321Team/fds-project-baseline/blob/ea2488b33a870d35c16bd303af568c5fe48c2e44/governance/REVIEW_AUTHORITY_POLICY.md)([PR #93](https://github.com/321Team/fds-project-baseline/pull/93))를 따른다. 중앙 PR 병합 전까지 이 절은 제안 상태다.
+
+| 단계 | 검토와 병합 |
+|---|---|
+| Pre-check 코드 병합 | 사전 검증 단계의 점검·수집·판정용 스크립트·검증기와 그 시험 코드는 별도 코드 리뷰 없이 책임 티켓의 담당 Lead 권한으로 즉시 병합할 수 있다. |
+| 운영(Production) 서버 Runtime 적용 | 운영 서버에서 실행·설치·배포·영구 반영하거나 운영 배포 경로에 편입하는 시점부터 코드 리뷰가 필수다. 읽기 전용 실행도 포함한다. |
+
+- **Pre-check 병합 기록.**
+  - PR은 계속 사용한다. main 직접 push·force push·자동 병합은 금지다.
+  - PR에 `Pre-check` 분류, 책임 티켓, 병합 SHA, 담당 Lead, KST 시각을 남긴다.
+  - 리뷰 상태는 `REVIEW=NOT PERFORMED (Pre-check)`로 표기한다. 이 병합을 리뷰 완료, Runtime PASS, AC 인수로 표시하지 않는다.
+- **운영 적용 전 절차.**
+  - 적용할 SHA를 고정한다.
+  - 직전 독립 리뷰 SHA 이후 전체 diff를 작성자 외 적격 검토자가 리뷰한다. 리뷰 이력이 없으면 적용 대상 코드 전체가 범위다.
+  - Lead는 리뷰 완료 SHA와 적용 SHA의 일치를 실행 기록에 남긴다.
+  - 리뷰 후 수정 PR은 일반 코드 PR 절차를 따른다.
+- **대상 외(기존 독립 리뷰 유지).**
+  - Pre-check 코드와 운영 Runtime 코드·manifest·IaC·배포 설정이 섞인 혼합 PR
+  - 병합·Release 게이트 CI workflow
+  - 시크릿·무결성 등 보안 통제 코드
+  - fds-project-evidence의 모든 PR
+- **유지 통제.** 비밀정보 커밋 금지, 필수 AC·시험·보안 기준, 운영 적용 시 선행조건·중단·복구 기준은 완화하지 않는다.
+
+이 저장소에서 Pre-check로 병합한 코드도 실서버 실행 전에 위 2~4의 독립 검토·최종 승인을 해당 SHA에 대해 기록한다. 6의 Runbook·실행 승인은 그대로 적용한다.
+
 `main` 직접 push와 force push는 변경 관리 절차에서 금지한다. GitHub에서 README를 포함해 새 저장소를 생성하는 초기화 이후, 이 초기 관리 문서도 작업 브랜치와 PR로 편입한다.
 
 현재 프로젝트의 GitHub Free 조직·Private 운영 기준에서는 브랜치 보호와 Ruleset을 통한 필수 리뷰 강제를 전제로 하지 않는다. 위 절차는 사람이 확인하는 운영 통제이며, 실제 설정 완료나 기술적 강제 상태로 표시하지 않는다. `Write` 역할에는 push와 병합 권한이 있으므로 최종 병합 담당자 제한도 운영 규칙으로 준수한다. [브랜치 보호 지원 범위](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches), [Ruleset 지원 범위](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [역할별 권한](https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization).
