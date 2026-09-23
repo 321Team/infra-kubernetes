@@ -98,10 +98,10 @@
 - ~~`<Worker-Node-CIDR>`~~ — baseline §6.2에서 개별 IP(10.1.93.105/107/108)로 확정, 반영 완료 (2차 수정)
 - `<PVC용량의-80%>` — Prometheus PVC 실제 용량 확정 후 계산
 
-## Out-of-band 클러스터 Drift — NodePort 30080 GNP (2026-09-22, 해소 완료)
+## Out-of-band 클러스터 Drift — NodePort 30080 GNP (9/22 관측, 9/24 범위 정정)
 
 > 출처: 재환 독립 리뷰 [pullrequestreview-5274034835](https://github.com/321Team/infra-kubernetes/pull/7#pullrequestreview-5274034835) 경미 지적 4번,
-> baseline 보류 이슈 [fds-project-baseline#90](https://github.com/321Team/fds-project-baseline/issues/90) (Closed, 이 PR로 이관).
+> 실행 이관 이슈 [infra-kubernetes#23](https://github.com/321Team/infra-kubernetes/issues/23) (Closed/not_planned: PR로 이관, Runtime 완료 아님).
 
 - `nodeport-30080-allow` GlobalNetworkPolicy가 이 저장소의 리뷰·병합 절차를 거치지 않고
   **클러스터에 직접(out-of-band) 적용**되어 있었다.
@@ -110,7 +110,14 @@
   결과 `order: 50`, `preDNAT: true`, `applyOnForward: true`, `selector: "fds.example/role == 'worker'"`.
 - 저장소 파일은 `order: 100`, `selector: role == 'k8s-worker'`였다 — 이번 커밋으로 두 값 모두
   클러스터 실측값과 정확히 일치하도록 동기화했다(`order: 50`, `selector: fds.example/role == 'worker'`).
-- **drift 항목 해소.** `p1-k8s-01-v4` 재배포 시 이 파일을 적용해도 현재 클러스터 상태와 동일하다.
+- **후보 spec 동기화 완료 / 운영 배포 편입 미완료.** 위 네 필드는 9/22 관측값과
+  일치하지만 v4 자동 배포에 이 파일을 편입하지 않았으므로 재배포 유지까지 보장하지 않는다.
+- [PR21 리뷰](https://github.com/321Team/infra-kubernetes/pull/21#pullrequestreview-5292027958)의
+  대안 2를 반영했다. 05는 기존 v4 HEP 전용이며 구 01~04의 HEP/Bootstrap과 결합하지 않는다.
+  구 HEP/Bootstrap은 현장 보호의 기준이 아님을 README·Runbook·05 주석에 명시하고
+  잘못된 01→05 적용 연결을 제거했다. YAML spec과 기존 HEP 라벨은 변경하지 않았다.
+- **FIXED_PENDING_REVIEW:** 대상 HEP 3개 및 생산자·승인 후보 대조, 필요 시 단일 GNP
+  변경·직전 spec 복구, v4 생산자 편입과 Runtime 양성/음성 시험은 별도 후속이다.
 - **재개 조건(변경 없음):** `.50/32(edge01) → Worker:30080` preDNAT 허용의 Runtime
   Positive/Negative 검증은 여전히 NOT VERIFIED이며, [P1-SEC-01 #19](https://github.com/321Team/fds-project-baseline/issues/19)의
   정식 승인 없이는 edge01 마이그레이션 재개 판단을 내리지 않는다.

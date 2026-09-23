@@ -9,6 +9,19 @@
 > baseline 근거: `FDS_Project_Implementation_Baseline_v3.1.18.md` §6.6 "HostEndpoint 정책은
 > Bootstrap Allow → canary Worker → Worker 확장 → Control Plane 순서로 적용"
 
+## 현재 클러스터 적용 경계 — 2026-09-24
+
+9/22 Gate2 기록에서 현재 클러스터의 보호 생산자는 별도 `p1-k8s-01-v4` 패키지다.
+이 Runbook의 `worker01-hep` 등 구 HEP 및 `bootstrap-allow`는 현재 운영 자원의
+기준이 아니며 v4 자원과 함께 생성하거나 현재 보호를 대체하지 않는다.
+아래 단계는 구 템플릿의 설계 이력이다. 생산자·자원명·라벨·정책의 이관을 정하기 전
+현재 클러스터에 이 순서를 실행하지 않는다.
+
+`05-nodeport-allow.yaml`은 현재 v4 HEP의 `fds.example/role=worker`를 대상으로 한다.
+구 템플릿 HEP의 `role=k8s-worker`와 결합하면 대상이 0개다. NodePort 후속은
+[`manifests/calico/README.md`](../../manifests/calico/README.md)의 별도 v4 경로로만
+검토한다. 이 PR은 HEP 라벨 변경, 기존 GNP 교체, v4 자동 배포 편입을 수행하지 않는다.
+
 ## 원칙
 
 - 이전 단계의 보호가 정상 복원됨을 확인하기 전까지 다음 단계로 진행하지 않는다.
@@ -90,10 +103,11 @@ kubectl apply -f manifests/calico/04-worker03-hep.yaml
 # 회귀시험 세트 실행 (Worker03 대상) ...
 ```
 
-- [ ] 3대 전체 완료 후에만 NodePort 규칙 적용
+- [ ] 구 HEP 템플릿 경로에서는 여기서 중단한다. 현재 `05`는 v4 전용으로 분리되어
+      이 단계 뒤에 적용할 수 없다. 아래 기존 시험은 대상 생산자 정합화 후의 요구로 보존한다.
 
 ```bash
-kubectl apply -f manifests/calico/05-nodeport-allow.yaml
+# 현재 05 적용 경로는 manifests/calico/README.md의 v4 전용 절을 따른다.
 ./scripts/verify-probe-failover.sh allow-flow   # edge01 -> Worker:30080, 3/3 PASS 필요
 ```
 

@@ -1,4 +1,7 @@
-# SEC-06 2차 수정 — NodePort preDNAT 규칙. Worker 3대(02~04) 전체가 안정화된 뒤에만 적용.
+# NodePort preDNAT — p1-k8s-01-v4의 기존 Worker HEP 대상 전용 후보.
+# 이 디렉터리의 01~04 구 HEP/Bootstrap 템플릿과 조합해 적용하지 않는다.
+# 대상은 fds.example/role=worker인 기존 HEP 3개이며 role=k8s-worker만 있는 HEP는 제외된다.
+# 적용 경계·중단·복구 조건은 README.md의 v4 경로를 따른다. 자동 배포 편입은 미완료다.
 # edge01(.50) -> Worker:30080만 preDNAT 허용, 그 외는 명시적 Deny.
 #
 # [DRIFT SYNC — 2026-09-22, 확인 완료] 이 GNP는 클러스터에 저장소 리뷰 절차를 거치지 않고
@@ -7,7 +10,7 @@
 # nodeport-30080-allow -o yaml`로 실측 대조 완료(2026-09-22): order 50 / preDNAT true /
 # applyOnForward true / selector "fds.example/role == 'worker'". order는 100->50으로,
 # selector는 role == 'k8s-worker' -> fds.example/role == 'worker'로 동기화했다.
-# 관련: fds-project-baseline#90(Closed), #19.
+# 관련: infra-kubernetes#23(Closed: PR 이관), fds-project-baseline#19.
 apiVersion: crd.projectcalico.org/v1
 kind: GlobalNetworkPolicy
 metadata:
