@@ -1,0 +1,5 @@
+{
+  "quay.io/calico/node:v3.32.1": null,
+  "quay.io/calico/cni:v3.32.1": null,
+  "quay.io/calico/kube-controllers:v3.32.1": null
+}

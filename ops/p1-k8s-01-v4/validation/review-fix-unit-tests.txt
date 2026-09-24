@@ -1,0 +1,47 @@
+COMMAND=["python3", "tests/validate.py"]
+PYTHON=Python 3.13.3, PyYAML=6.0.3
+HOST=offline workstation (no cluster access, no root)
+DATE=2026-09-24
+RC=0
+STDOUT:
+{"status": "HOLD", "no_matches": true, "both_markers_retained": false, "audit_counters_healthy": true, "avc_query": "NO_MATCH", "markers_query": "ERROR", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "HOLD", "no_matches": false, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "OK", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "NO_AVC_REVIEW_REQUIRED", "no_matches": true, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "OK", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "HOLD", "no_matches": false, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "ERROR", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "NO_AVC_REVIEW_REQUIRED", "no_matches": true, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "NO_MATCH", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "HOLD", "no_matches": false, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "ERROR", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "HOLD", "no_matches": false, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "ERROR", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "HOLD", "no_matches": false, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "ERROR", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "NO_AVC_REVIEW_REQUIRED", "no_matches": true, "both_markers_retained": true, "audit_counters_healthy": true, "avc_query": "NO_MATCH", "markers_query": "OK", "note": "Review auditd continuity/rotation and clock events separately."}
+{"status": "HOLD", "no_matches": false, "both_markers_retained": false, "audit_counters_healthy": false, "avc_query": "NOT_RUN", "markers_query": "NOT_RUN", "note": "window starts before yesterday 00:00 UTC; ausearch keyword cannot cover it"}
+PREFLIGHT_STRUCTURAL_OK; effective Felix, policy overlap and recovery review still required
+CALICO_RESTORED_TEST_REQUIRED; recheck effective inheritance and traffic
+
+STDERR:
+test_audit_marker_query_failure_is_hold (__main__.OperationalTests.test_audit_marker_query_failure_is_hold) ... ok
+test_audit_rc0_avc_in_window_is_hold (__main__.OperationalTests.test_audit_rc0_avc_in_window_is_hold) ... ok
+test_audit_rc0_avc_outside_window_only_is_zero_avc (__main__.OperationalTests.test_audit_rc0_avc_outside_window_only_is_zero_avc) ... ok
+test_audit_rc1_empty_stdout_is_hold_not_zero_avc (__main__.OperationalTests.test_audit_rc1_empty_stdout_is_hold_not_zero_avc) ... ok
+test_audit_rc1_exact_no_matches_is_zero_avc (__main__.OperationalTests.test_audit_rc1_exact_no_matches_is_zero_avc) ... ok
+test_audit_stderr_failure_is_hold (__main__.OperationalTests.test_audit_stderr_failure_is_hold) ... ok
+test_audit_window_crossing_midnight_uses_yesterday (__main__.OperationalTests.test_audit_window_crossing_midnight_uses_yesterday) ... ok
+test_bundle_tamper_rejected (__main__.OperationalTests.test_bundle_tamper_rejected) ... ok
+test_cockpit_empty_ss_error_is_not_pass (__main__.OperationalTests.test_cockpit_empty_ss_error_is_not_pass) ... skipped 'shell under test requires root; no privilege escalation in tests'
+test_firewall_evidence_capture_records_errors (__main__.OperationalTests.test_firewall_evidence_capture_records_errors) ... ok
+test_missing_protection_receipt_blocks_all_rollback_mutations (__main__.OperationalTests.test_missing_protection_receipt_blocks_all_rollback_mutations) ... ok
+test_missing_wep_falls_back_to_pod_labels (__main__.OperationalTests.test_missing_wep_falls_back_to_pod_labels) ... ok
+test_raw_delete_binds_uid_and_resource_version (__main__.OperationalTests.test_raw_delete_binds_uid_and_resource_version) ... ok
+test_recovery_order_after_bound_protection_receipt (__main__.OperationalTests.test_recovery_order_after_bound_protection_receipt) ... ok
+test_wrong_node_receipt_blocks_all_rollback_mutations (__main__.OperationalTests.test_wrong_node_receipt_blocks_all_rollback_mutations) ... ok
+test_evidence_hash_validation (__main__.PolicyTests.test_evidence_hash_validation) ... ok
+test_failsafe_does_not_reopen_dns_or_worker_cp_ports (__main__.PolicyTests.test_failsafe_does_not_reopen_dns_or_worker_cp_ports) ... ok
+test_fixed_flow_matrix (__main__.PolicyTests.test_fixed_flow_matrix) ... ok
+test_missing_inputs_block_output (__main__.PolicyTests.test_missing_inputs_block_output) ... ok
+test_ntp_unknown_and_broad_nets_rejected (__main__.PolicyTests.test_ntp_unknown_and_broad_nets_rejected) ... ok
+test_probe_manifest_restricted_and_no_external_service (__main__.PolicyTests.test_probe_manifest_restricted_and_no_external_service) ... ok
+test_roles_api_reciprocity_and_workload_scope (__main__.PolicyTests.test_roles_api_reciprocity_and_workload_scope) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.140s
+
+OK (skipped=1)

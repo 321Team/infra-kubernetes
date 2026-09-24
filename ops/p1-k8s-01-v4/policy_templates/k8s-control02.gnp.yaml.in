@@ -1,0 +1,113 @@
+# REVIEW TEMPLATE ONLY. Do not apply. Complete runtime-input.json and run code/render.py.
+# Additional observed API/registry paths are generated only from reviewed inputs.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: fds-k8s-host-k8s-control02
+  labels:
+    fds.example/package: p1-k8s-01-v4
+spec:
+  order: 100
+  selector: fds.example/bootstrap == "p1-k8s-01-v4" && fds.example/node == "k8s-control02"
+  applyOnForward: false
+  types:
+  - Ingress
+  - Egress
+  ingress:
+  - action: Allow
+    protocol: TCP
+    source:
+      nets:
+      - 10.250.10.10/32
+    destination:
+      ports:
+      - 22
+  - action: Allow
+    protocol: TCP
+    source:
+      nets: &id001
+      - 10.1.93.102/32
+      - 10.1.93.103/32
+      - 10.1.93.104/32
+    destination:
+      ports:
+      - 10250
+  - action: Allow
+    protocol: UDP
+    source:
+      nets: &id002
+      - 10.1.93.105/32
+      - 10.1.93.107/32
+      - 10.1.93.108/32
+      - 10.1.93.102/32
+      - 10.1.93.103/32
+      - 10.1.93.104/32
+    destination:
+      ports:
+      - 4789
+  - action: Allow
+    protocol: TCP
+    source:
+      nets:
+      - 10.1.93.109/32
+    destination:
+      ports:
+      - 6443
+  - action: Allow
+    protocol: TCP
+    source:
+      nets: *id001
+    destination:
+      ports:
+      - 2379
+      - 2380
+  - action: Deny
+  egress:
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports:
+      - 6443
+      nets:
+      - 10.1.93.109/32
+  - action: Allow
+    protocol: UDP
+    destination:
+      ports:
+      - 4789
+      nets: *id002
+  - action: Allow
+    protocol: UDP
+    destination:
+      ports:
+      - 53
+      nets: &id003
+      - 10.1.93.52/32
+      - 10.1.93.53/32
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports:
+      - 53
+      nets: *id003
+  - action: Allow
+    protocol: UDP
+    destination:
+      ports:
+      - 123
+      nets:
+      - REQUIRED_APPROVED_NTP_IPV4/32
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports:
+      - 2379
+      - 2380
+      nets: *id001
+  - action: Allow
+    protocol: TCP
+    destination:
+      ports:
+      - 10250
+      nets: *id002
+  - action: Deny

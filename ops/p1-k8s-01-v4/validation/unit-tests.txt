@@ -1,0 +1,26 @@
+COMMAND=["/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3", "tests/validate.py"]
+RC=0
+STDOUT:
+CALICO_RESTORED_TEST_REQUIRED; recheck effective inheritance and traffic
+
+STDERR:
+test_audit_dates_are_separate_arguments (__main__.OperationalTests.test_audit_dates_are_separate_arguments) ... ok
+test_bundle_tamper_rejected (__main__.OperationalTests.test_bundle_tamper_rejected) ... ok
+test_cockpit_empty_ss_error_is_not_pass (__main__.OperationalTests.test_cockpit_empty_ss_error_is_not_pass) ... ok
+test_firewall_evidence_capture_records_errors (__main__.OperationalTests.test_firewall_evidence_capture_records_errors) ... ok
+test_missing_protection_receipt_blocks_all_rollback_mutations (__main__.OperationalTests.test_missing_protection_receipt_blocks_all_rollback_mutations) ... ok
+test_raw_delete_binds_uid_and_resource_version (__main__.OperationalTests.test_raw_delete_binds_uid_and_resource_version) ... ok
+test_recovery_order_after_bound_protection_receipt (__main__.OperationalTests.test_recovery_order_after_bound_protection_receipt) ... ok
+test_wrong_node_receipt_blocks_all_rollback_mutations (__main__.OperationalTests.test_wrong_node_receipt_blocks_all_rollback_mutations) ... ok
+test_evidence_hash_validation (__main__.PolicyTests.test_evidence_hash_validation) ... ok
+test_failsafe_does_not_reopen_dns_or_worker_cp_ports (__main__.PolicyTests.test_failsafe_does_not_reopen_dns_or_worker_cp_ports) ... ok
+test_fixed_flow_matrix (__main__.PolicyTests.test_fixed_flow_matrix) ... ok
+test_missing_inputs_block_output (__main__.PolicyTests.test_missing_inputs_block_output) ... ok
+test_ntp_unknown_and_broad_nets_rejected (__main__.PolicyTests.test_ntp_unknown_and_broad_nets_rejected) ... ok
+test_probe_manifest_restricted_and_no_external_service (__main__.PolicyTests.test_probe_manifest_restricted_and_no_external_service) ... ok
+test_roles_api_reciprocity_and_workload_scope (__main__.PolicyTests.test_roles_api_reciprocity_and_workload_scope) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 0.072s
+
+OK

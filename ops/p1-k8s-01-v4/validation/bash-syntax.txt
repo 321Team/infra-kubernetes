@@ -1,0 +1,5 @@
+COMMAND=["bash", "-n", "code/cockpit.sh"]
+RC=0
+STDOUT:
+
+STDERR:

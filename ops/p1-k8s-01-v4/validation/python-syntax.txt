@@ -1,0 +1,5 @@
+COMMAND=["/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python3", "-m", "compileall", "-q", "code", "tests"]
+RC=0
+STDOUT:
+
+STDERR:
