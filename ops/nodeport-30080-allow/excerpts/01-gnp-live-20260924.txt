@@ -1,0 +1,35 @@
+collected_at_kst=2026-09-24T14:47:53+09:00
+jump=ansible01 10.250.10.10
+ssh_user=svc_ansible
+kubectl_rc=0
+
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  creationTimestamp: "2026-09-22T02:11:55Z"
+  generation: 1
+  name: nodeport-30080-allow
+  resourceVersion: "1083332"
+  uid: f9de0f2e-aa29-4545-8d46-ea2e31c4a3f0
+spec:
+  applyOnForward: true
+  ingress:
+  - action: Allow
+    destination:
+      ports:
+      - 30080
+    protocol: TCP
+    source:
+      nets:
+      - 10.1.93.50/32
+  - action: Deny
+    destination:
+      ports:
+      - 30080
+    protocol: TCP
+  order: 50
+  preDNAT: true
+  selector: fds.example/role == 'worker'
+  tier: default
+  types:
+  - Ingress
