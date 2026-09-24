@@ -44,11 +44,13 @@
 | 혼합 | 문서와 코드가 함께 있는 PR | 코드·실행 설정 기준 |
 | 사전 검증(Pre-check) 코드 | 아래 절 | 아래 절 |
 
+Runbook·실행계획이라도 새 실행 명령·로직을 넣어 실제 배포·실행 입력으로 쓰거나, 자동화가 소비하는 JSON/YAML·설정값을 바꾸면 코드 변경으로 분류한다. 기존 명령의 설명이나 실행 결과 기록만 바뀌면 문서 변경이다(중앙 §2 단서).
+
 위 1~5의 Reviewer PASS·최종 승인 절차에는 아래 사전 검증(Pre-check) 코드 예외가 적용된다.
 
 ### 사전 검증(Pre-check) 코드 예외 — 2026-09-23
 
-적용 기준: 프로젝트 중간 결과 회고에 따른 2026-09-23 KST 사용자 정책 변경 안내. 상세 기준은 [중앙 리뷰 권한 정책 §3.2](https://github.com/321Team/fds-project-baseline/blob/49278c189dacb620e81d282c6401faa2a9c677a6/governance/REVIEW_AUTHORITY_POLICY.md)를 따른다. 중앙 [PR #93](https://github.com/321Team/fds-project-baseline/pull/93)이 2026-09-23 15:02 KST에 병합(`49278c1`)되어 이 절을 적용한다.
+적용 기준: 프로젝트 중간 결과 회고에 따른 2026-09-23 KST 사용자 정책 변경 안내. 상세 기준은 [중앙 리뷰 권한 정책 §3.2](https://github.com/321Team/fds-project-baseline/blob/99b48c13ec83a0d130018e62b6751a0b9cb78066/governance/REVIEW_AUTHORITY_POLICY.md)를 따른다. 중앙 [PR #93](https://github.com/321Team/fds-project-baseline/pull/93)이 2026-09-23 15:02 KST에 병합(`49278c1`)되어 이 절을 적용한다.
 
 | 단계 | 검토와 병합 |
 |---|---|
