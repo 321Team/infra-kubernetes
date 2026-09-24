@@ -138,3 +138,45 @@ except RuntimeError as e:
 - 6대 노드 각각에 `scp`로 재배포, `SHA256SUMS` 파일을 매 수정 시점마다 해당 항목만 재계산하여 갱신
 - 각 수정 후 6대 전체 `sha256sum -c SHA256SUMS` 재확인을 반복 수행(과정 중 일부 노드 배포 누락이 발견되어 재배포한 사례 있음, 예: `node-evidence.py` 1차 배포 시 `worker01` 자신에게는 반영됐으나 CP1에는 반영 안 된 사례가 실제 발생함)
 - 원본 `render.py`는 미수정 — 6가지 버그 수정은 `audit-window.py`(2건), `node-evidence.py`(4건), `cluster-change.py`(1건)에 걸쳐 있으며, 이 중 "6가지 버그"로 통칭한 것은 위 1-1, 1-2, 2-1~2-5(세부 5건이나 단일 diff로 통합 수정됨), 3-1을 합산한 것임 — 파일 수 기준 3개, 개별 원인 기준 최대 8건으로 셀 수 있어 "6"이라는 숫자는 세션 중 대화상의 구두 집계이며 본 diff 기준 재검증된 정확한 개수는 아님(문서 정확성을 위해 명기)
+
+---
+
+## 4. 사후 리뷰 대응 수정 (2026-09-24, 운영 미배포)
+
+근거: [#26 리뷰](https://github.com/321Team/infra-kubernetes/pull/26#pullrequestreview-5299800159) (REQUEST_CHANGES). 이 절의 수정은 **로컬 코드·MOCK 시험만** 거쳤다. 어느 노드에도 배포하지 않았고 운영 재실행도 하지 않았다. 수정 후 해시는 `REVIEW_FIX_SHA256SUMS`, 시험 로그는 `validation/review-fix-unit-tests.txt`에 있다.
+
+### 4-1. `audit-window.py`: 조회 실패를 AVC 0건으로 판정하던 결함 (차단 1)
+
+- **결함:** §1 수정본은 `ausearch` rc 0/1을 모두 정상으로 봤고, `filter_by_window()`가 빈 stdout을 `<no matches>`로 바꿨다. 그래서 rc=1이고 stdout이 비어 있으면 stderr에 오류가 있어도 `NO_AVC_REVIEW_REQUIRED`로 기록될 수 있었다. marker 조회도 같은 구조였다.
+- **수정:** `classify_ausearch()`를 신설해 결과를 `OK` / `NO_MATCH` / `ERROR`로 나눈다.
+  - `NO_MATCH`: rc=1, stdout이 정확히 `<no matches>`, stderr 없음
+  - `OK`: rc=0, stdout에 내용 있음, stderr 없음
+  - 그 외(rc=1+빈 stdout, stderr 있음, rc∉{0,1}): `ERROR`
+  - `ERROR`면 `no_matches=False`, `result.status=HOLD`이다. `filter_by_window()`는 `OK`일 때만 호출하고 빈 입력을 `<no matches>`로 바꾸지 않는다. `result.json`에 `avc_query`·`markers_query` 분류를 남긴다.
+- **자정 경계:** `-ts today`는 자정(UTC)을 넘는 창에서 전날 이벤트를 놓친다. 창 시작이 오늘 0시 이전이면 `-ts yesterday`를 쓰고, 어제 0시보다 이르면 조회하지 않고 `HOLD`(`NOT_RUN`)로 남긴다. `-ts yesterday`는 이 audit 빌드에서 실측하지 않았다. 실패하면 stderr가 생겨 `ERROR`→`HOLD`가 되므로 0건으로 오판하지 않는다.
+
+### 4-2. `cluster-change.py`: WEP 부재 시 selector 충돌 검사가 항상 통과하던 결함 (차단 2)
+
+- **결함:** §3 수정본은 `workloadendpoints` 리소스 타입이 없으면 `weps=[]`로 처리했다. 그래서 GNP selector 충돌 검사가 검사 없이 통과했다.
+- **수정:** 리소스 타입이 없을 때만 Pod 목록(`kubectl get pods -A`)의 라벨로 같은 검사를 한다. WEP는 Pod 라벨을 그대로 가진다. 대체 경로를 쓴 사실은 `state/wep-fallback.json`(source, count, 원 오류)으로 남긴다. 다른 오류(연결 실패 등)는 그대로 중단한다.
+- **남은 한계:** namespace·serviceaccount에서 상속되는 Calico 라벨(`pcns.*`, `pcsa.*`)은 Pod 라벨에 없다. 이 검사의 selector(`fds.example/bootstrap`)는 Pod 라벨만 대상이라 영향은 없다.
+
+### 4-3. `node-evidence.py`: 정규화가 실제 zone 이동을 가릴 수 있음 (비차단)
+
+- §2의 정규화(interfaces 공백화, `active`/`disabled` 제거, rich rule 정렬)는 유지한다.
+- `checkpoint-firewall`에서 정규화 전 원본을 `runtime.raw.json`·`permanent.raw.json`에 함께 저장한다. runtime↔permanent diff를 정규화 전(`runtime-vs-permanent.raw.diff`)과 후(`…normalized.diff`) 둘 다 남긴다. 정규화 후 일치해도 실제 zone 이동은 raw diff에서 보인다.
+
+### 4-4. 시험
+
+- `tests/validate.py`의 `test_audit_dates_are_separate_arguments`는 §1에서 `time_args()`를 삭제한 뒤 **실패하던 상태**였다(9/22 실행 전 단위시험 미수행). 삭제된 함수를 검사하던 이 시험을 아래 시험으로 교체했다.
+- 추가 시험(MOCK, 운영 호출 없음):
+  - rc=1+빈 stdout → `HOLD`
+  - rc=1+`<no matches>` → 0건
+  - rc=0+창 안 AVC → `HOLD`
+  - rc=0+창 밖 AVC만 → 0건
+  - stderr 있는 실패 3종 → `HOLD`
+  - marker 조회 실패 → `HOLD`
+  - 자정 경계(`today`/`yesterday`/`NOT_RUN`)
+  - WEP 부재 시 Pod 라벨 검사(충돌 Pod 차단, 비대상 오류 전파)
+- 같은 fixture를 §1·§3 수정본(`b0d86e9`)에 돌리면 rc=1+빈 stdout과 rc=1+stderr 오류가 `NO_AVC_REVIEW_REQUIRED`로 나오고, 충돌 Pod가 있어도 preflight를 통과한다. 결함이 재현되고 이번 수정으로 막힌다.
+- 결과: 22개 중 21 통과, 1 skip(root 필요한 `cockpit.sh` 시험). 운영 노드 실측(STATIC/RUNTIME)은 하지 않았다.

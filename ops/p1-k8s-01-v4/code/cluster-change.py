@@ -107,18 +107,20 @@ def main():
                      for x in n['status']['conditions']) for n in nodes), 'all six nodes must be Ready')
         # WorkloadEndpoint is served through the calico-apiserver aggregation
         # layer in this Calico release, not as a plain crd.projectcalico.org/v1
-        # CRD. This cluster deliberately runs without calico-apiserver (kubectl
-        # applies crd.projectcalico.org/v1 resources directly instead), so the
-        # resource type genuinely does not exist here -- that is expected given
-        # this architecture, not a fault. Treat "resource type absent" the same
-        # as "no matching workloads found" for this selector-collision check.
+        # CRD, and this cluster runs without calico-apiserver. An absent
+        # resource type must not turn the selector-collision check into an
+        # automatic pass, so check pod labels instead (a WEP carries its pod's
+        # labels) and record that the fallback source was used.
         try:
             weps = json.loads(k.call('get', 'workloadendpoints.' + GROUP, '-A', '-o', 'json'))['items']
+            wep_source = 'workloadendpoints'
         except RuntimeError as e:
-            if "doesn't have a resource type" in str(e):
-                weps = []
-            else:
+            if "doesn't have a resource type" not in str(e):
                 raise
+            weps = json.loads(k.call('get', 'pods', '-A', '-o', 'json'))['items']
+            wep_source = 'pods-as-fallback'
+            dump(a.state / 'wep-fallback.json', {'source': wep_source, 'count': len(weps),
+                                                 'reason': str(e).strip()})
         need(not any(x['metadata'].get('labels', {}).get(LABEL) == BUNDLE for x in weps),
              'GNP selector already selects a workload')
         controllers = k.get('kubecontrollersconfigurations.' + GROUP)['items']

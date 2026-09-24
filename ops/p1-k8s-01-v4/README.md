@@ -1,5 +1,11 @@
 # P1-K8S-01 리드 전달 패키지 v4.0
 
+> **저장소 편입 상태 (2026-09-24, infra-kubernetes #26)**
+> - `5395065`: 전달받은 v4.0 원본 그대로 보관. 해시는 `SHA256SUMS`.
+> - `b0d86e9`: 2026-09-22 Gate 2에서 **독립 리뷰 없이 실제 실행한 수정본**(`UNAPPROVED_RUNTIME_SNAPSHOT`). 해시는 `MODIFIED_SHA256SUMS`. **이 버전으로 재실행 금지.**
+> - 리뷰 대응 커밋: 사후 리뷰(#26 REQUEST_CHANGES)의 차단 2건을 수정한 버전. 해시는 `REVIEW_FIX_SHA256SUMS`, 내용은 `SCRIPT_MODIFICATION_HISTORY.md` §4.
+> - 운영 재render·재실행은 이 HEAD에 대한 재리뷰 승인 전까지 금지한다. 이 저장소 편입은 9/22 실행을 소급 승인하지 않는다.
+
 G2-01~08의 권고·코드 보완을 반영한 최종 전달안이다. **운영 서버에 적용하지 않았으며 Runtime PASS와 실서버 배포 승인을 포함하지 않는다.**
 
 ## 전달 내용

@@ -225,9 +225,116 @@ class OperationalTests(unittest.TestCase):
     def test_recovery_order_after_bound_protection_receipt(self):
         self.rollback_scenario('valid')
 
-    def test_audit_dates_are_separate_arguments(self):
-        args = audit.time_args(1709164799, 1709164801)
-        self.assertEqual(args, ['-ts', '02/28/2024', '23:59:59', '-te', '02/29/2024', '00:00:01'])
+    def audit_query(self, avc, markers=None, start=1790000000, end=1790000100, now=1790000200):
+        """Run audit-window.py query against synthetic ausearch results; return result.json."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            mark = 'FDS_G2_SYNTHETIC'
+            (root / 'window.json').write_text(json.dumps(
+                {'node': 'synthetic-node', 'start_epoch': start, 'end_epoch': end, 'marker': mark}))
+            status = 'enabled 1\nlost 0\n'
+            (root / 'audit-status-start.txt').write_text(status)
+            (root / 'audit-status-end.txt').write_text(status)
+            if markers is None:
+                markers = (0, ('type=USER msg=audit(%d.000:1): msg=%s_START\n----\n'
+                               'type=USER msg=audit(%d.000:2): msg=%s_END\n') % (start, mark, end, mark), '')
+            argvs = []
+            def fake_call(args):
+                argvs.append(args)
+                rc, out, err = {'Enforcing': (0, 'Enforcing\n', ''), 'status': (0, status, '')}.get(
+                    'Enforcing' if args[0] == 'getenforce' else 'status' if args[0] == 'auditctl' else '',
+                    avc if 'AVC,USER_AVC,SELINUX_ERR,USER_SELINUX_ERR' in args
+                    else markers if args[0] == 'ausearch' else (0, '', ''))
+                return subprocess.CompletedProcess(args, rc, out, err)
+            with patch.object(audit, 'call', fake_call), patch.object(audit.os, 'geteuid', return_value=0), \
+                    patch.object(audit.socket, 'gethostname', return_value='synthetic-node'), \
+                    patch.object(audit.time, 'time', return_value=now), \
+                    patch.object(sys, 'argv', ['audit-window.py', 'query', '--dir', str(root)]):
+                try:
+                    audit.main()
+                except SystemExit as e:
+                    self.assertEqual(e.code, 2)
+            result = json.loads((root / 'result.json').read_text())
+            result['argvs'] = argvs
+            return result
+
+    def test_audit_rc1_empty_stdout_is_hold_not_zero_avc(self):
+        r = self.audit_query((1, '', ''))
+        self.assertEqual((r['status'], r['no_matches'], r['avc_query']), ('HOLD', False, 'ERROR'))
+
+    def test_audit_rc1_exact_no_matches_is_zero_avc(self):
+        r = self.audit_query((1, '<no matches>\n', ''))
+        self.assertEqual((r['status'], r['no_matches'], r['avc_query']),
+                         ('NO_AVC_REVIEW_REQUIRED', True, 'NO_MATCH'))
+
+    def test_audit_rc0_avc_in_window_is_hold(self):
+        avc = 'type=AVC msg=audit(1790000050.123:9): avc:  denied  { read } for pid=1\n'
+        r = self.audit_query((0, avc, ''))
+        self.assertEqual((r['status'], r['no_matches'], r['avc_query']), ('HOLD', False, 'OK'))
+
+    def test_audit_rc0_avc_outside_window_only_is_zero_avc(self):
+        avc = 'type=AVC msg=audit(1789999000.123:9): avc:  denied  { read } for pid=1\n'
+        r = self.audit_query((0, avc, ''))
+        self.assertEqual((r['status'], r['no_matches']), ('NO_AVC_REVIEW_REQUIRED', True))
+
+    def test_audit_stderr_failure_is_hold(self):
+        for avc in ((1, '', 'Error opening config file\n'), (1, '<no matches>\n', 'warning\n'), (2, '', 'boom\n')):
+            r = self.audit_query(avc)
+            self.assertEqual((r['status'], r['no_matches'], r['avc_query']), ('HOLD', False, 'ERROR'), avc)
+
+    def test_audit_marker_query_failure_is_hold(self):
+        r = self.audit_query((1, '<no matches>\n', ''), markers=(1, '', ''))
+        self.assertEqual((r['status'], r['both_markers_retained'], r['markers_query']), ('HOLD', False, 'ERROR'))
+
+    def test_audit_window_crossing_midnight_uses_yesterday(self):
+        midnight = 1790035200  # 2026-09-22 00:00:00 UTC
+        self.assertEqual(audit.search_start(midnight + 10, midnight + 100), 'today')
+        self.assertEqual(audit.search_start(midnight - 10, midnight + 100), 'yesterday')
+        self.assertIsNone(audit.search_start(midnight - 86401, midnight + 100))
+        r = self.audit_query((1, '<no matches>\n', ''), start=midnight - 60, end=midnight + 60, now=midnight + 100)
+        self.assertTrue(all(a[-1] == 'yesterday' for a in r['argvs'] if a[0] == 'ausearch'))
+        r = self.audit_query((1, '<no matches>\n', ''), start=midnight - 86401, end=midnight, now=midnight + 100)
+        self.assertEqual((r['status'], r['avc_query']), ('HOLD', 'NOT_RUN'))
+
+    def preflight_with(self, weps_error, pods):
+        """Run cluster-change.py preflight with a fake cluster; return the state directory contents."""
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            bundle = root / 'bundle'; bundle.mkdir()
+            (bundle / 'config.lock.json').write_text(json.dumps(
+                {'cluster_uid': 'uid-synthetic', 'attempt_id': 'OFFLINE_TEST_ONLY'}))
+            (bundle / 'SHA256SUMS').write_text(
+                hashlib.sha256((bundle / 'config.lock.json').read_bytes()).hexdigest() + '  config.lock.json\n')
+            node = {'status': {'conditions': [{'type': 'Ready', 'status': 'True'}]}}
+            class Fake:
+                def __init__(self, prefix): pass
+                def get(self, kind, name=None, optional=False):
+                    if kind == 'namespace': return {'metadata': {'uid': 'uid-synthetic'}}
+                    if kind == 'nodes':
+                        return {'items': [dict(node, metadata={'name': n}) for n in render.ORDER]}
+                    return {'items': []}
+                def call(self, *args, data=None):
+                    if args[1].startswith('workloadendpoints'):
+                        raise RuntimeError(weps_error)
+                    if args[1] == 'pods':
+                        return json.dumps({'items': pods})
+                    raise AssertionError(args)
+            state = root / 'state'
+            args = ['cluster-change.py', 'preflight', '--bundle', str(bundle), '--state', str(state),
+                    '--kubeconfig', '/SYNTHETIC', '--context', 'SYNTHETIC']
+            with patch.object(change, 'Cluster', Fake), patch.object(sys, 'argv', args):
+                change.main()
+            return json.loads((state / 'wep-fallback.json').read_text())
+
+    def test_missing_wep_falls_back_to_pod_labels(self):
+        absent = 'error: the server doesn\'t have a resource type "workloadendpoints"'
+        clean = [{'metadata': {'labels': {'app': 'x'}}}]
+        self.assertEqual(self.preflight_with(absent, clean)['source'], 'pods-as-fallback')
+        selected = [{'metadata': {'labels': {render.LABEL: render.BUNDLE}}}]
+        with self.assertRaisesRegex(ValueError, 'selects a workload'):
+            self.preflight_with(absent, selected)
+        with self.assertRaises(RuntimeError):
+            self.preflight_with('Unable to connect to the server', clean)
 
     def test_raw_delete_binds_uid_and_resource_version(self):
         k = change.Cluster(['kubectl'])

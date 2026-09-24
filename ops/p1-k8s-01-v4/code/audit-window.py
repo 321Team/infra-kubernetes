@@ -41,18 +41,33 @@ import re
 AUDIT_MSG_RE = re.compile(r'msg=audit\((\d+)\.\d+:\d+\)')
 
 
+def classify_ausearch(r):
+    """Classify one ausearch result as OK, NO_MATCH or ERROR.
+
+    ausearch exits 1 both for "no matching events" and for real failures, so
+    rc alone cannot tell them apart. Only the exact '<no matches>' text with
+    rc=1 and empty stderr counts as zero events. rc=1 with empty stdout, any
+    stderr, or any other rc is a query failure and must never read as 0 AVC.
+    """
+    text = (r.stdout or '').strip()
+    err = (r.stderr or '').strip()
+    if r.returncode not in (0, 1) or err:
+        return 'ERROR'
+    if r.returncode == 1:
+        return 'NO_MATCH' if text == '<no matches>' else 'ERROR'
+    return 'OK' if text and text != '<no matches>' else 'ERROR'
+
+
 def filter_by_window(raw_text, start, end):
     """Keep only complete audit records whose timestamp falls in [start, end].
 
-    ausearch groups a record's lines under a single '----' separated block
-    that begins with a 'type=... msg=audit(epoch.msec:id):' line. We split on
-    that separator, inspect the epoch on the first msg=audit(...) found in
-    each block, and keep the block only if it is in range. Blocks without a
-    parseable timestamp are kept as-is (e.g. '<no matches>') so the caller can
-    still recognize known ausearch output rather than silently dropping it.
+    Call this only for an OK query. ausearch groups a record's lines under a
+    single '----' separated block that begins with a 'type=... msg=audit(...)'
+    line. We split on that separator, inspect the epoch on the first
+    msg=audit(...) found in each block, and keep the block only if it is in
+    range. Blocks without a parseable timestamp are kept as-is so unexpected
+    output surfaces for review instead of being silently dropped.
     """
-    if raw_text.strip() in ('', '<no matches>'):
-        return '<no matches>'
     blocks = raw_text.split('----\n')
     kept = []
     for block in blocks:
@@ -65,6 +80,32 @@ def filter_by_window(raw_text, start, end):
             kept.append(block)
     result = '----\n'.join(b for b in kept if b.strip())
     return result if result else '<no matches>'
+
+
+def search_start(start_epoch, now_epoch):
+    """Return the ausearch -ts keyword that covers start_epoch, or None.
+
+    ENV pins TZ=UTC, so 'today'/'yesterday' are UTC midnights. A window that
+    began before today's midnight needs 'yesterday'; one older than that
+    cannot be covered by a keyword that works on this build and must HOLD.
+    """
+    midnight = now_epoch - now_epoch % 86400
+    if start_epoch >= midnight:
+        return 'today'
+    if start_epoch >= midnight - 86400:
+        return 'yesterday'
+    return None
+
+
+def query(cmd, start_epoch, end_epoch):
+    """Run ausearch and return (status, raw result, filtered text)."""
+    r = call(cmd)
+    status = classify_ausearch(r)
+    if status == 'OK':
+        return status, r, filter_by_window(r.stdout, start_epoch, end_epoch)
+    if status == 'NO_MATCH':
+        return status, r, '<no matches>'
+    return status, r, r.stdout
 
 
 def main():
@@ -109,34 +150,35 @@ def main():
     elif 'end_epoch' not in data:
         raise SystemExit('close interval with end first')
     start_epoch, end_epoch = data['start_epoch'], data['end_epoch']
-    # '-ts today' is the widest scope that reliably works on this ausearch
-    # build; we narrow to [start_epoch, end_epoch] ourselves afterward.
-    cmd = ['ausearch', '--input-logs', '-m', 'AVC,USER_AVC,SELINUX_ERR,USER_SELINUX_ERR', '-ts', 'today']
-    r = call(cmd)
-    # ausearch exits 1 (not 0) with stdout '<no matches>' or empty stdout when
-    # there are genuinely no matching events; that is a valid, expected
-    # outcome here, not a failure. Only treat other/unexpected nonzero exits
-    # as a real query failure (stderr will be non-empty in that case).
-    avc_query_ok = r.returncode in (0, 1)
-    raw_avc = r.stdout
-    filtered_avc = filter_by_window(raw_avc, start_epoch, end_epoch) if avc_query_ok else raw_avc
-    (a.dir / 'avc.stdout.raw').write_text(raw_avc)
+    # The explicit -ts/-te date form fails on this ausearch build; use the
+    # narrowest keyword that still covers start_epoch and filter by epoch.
+    ts = search_start(start_epoch, int(time.time()))
+    if ts is None:
+        result = {'status': 'HOLD', 'no_matches': False, 'both_markers_retained': False,
+                  'audit_counters_healthy': False, 'avc_query': 'NOT_RUN', 'markers_query': 'NOT_RUN',
+                  'note': 'window starts before yesterday 00:00 UTC; ausearch keyword cannot cover it'}
+        (a.dir / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+        print(json.dumps(result))
+        raise SystemExit(2)
+    cmd = ['ausearch', '--input-logs', '-m', 'AVC,USER_AVC,SELINUX_ERR,USER_SELINUX_ERR', '-ts', ts]
+    avc_status, r, filtered_avc = query(cmd, start_epoch, end_epoch)
+    (a.dir / 'avc.stdout.raw').write_text(r.stdout)
     (a.dir / 'avc.stdout').write_text(filtered_avc)
     (a.dir / 'avc.stderr').write_text(r.stderr)
     (a.dir / 'avc.command.json').write_text(json.dumps(
-        {'argv': cmd, 'rc': r.returncode, 'filtered_window': [start_epoch, end_epoch],
-         'note': 'ausearch -ts/-te MM/DD/YYYY fails on this audit build; queried -ts today and filtered by epoch instead.'},
+        {'argv': cmd, 'rc': r.returncode, 'classified': avc_status,
+         'filtered_window': [start_epoch, end_epoch],
+         'note': 'ausearch -ts/-te MM/DD/YYYY fails on this audit build; queried by keyword and filtered by epoch instead.'},
         indent=2))
-    markers_cmd = ['ausearch', '--input-logs', '-m', 'USER', '-ts', 'today']
-    markers = call(markers_cmd)
-    markers_query_ok = markers.returncode in (0, 1)
-    raw_markers = markers.stdout
-    filtered_markers = filter_by_window(raw_markers, start_epoch, end_epoch) if markers_query_ok else raw_markers
-    (a.dir / 'markers.stdout.raw').write_text(raw_markers)
+    markers_cmd = ['ausearch', '--input-logs', '-m', 'USER', '-ts', ts]
+    markers_status, markers, filtered_markers = query(markers_cmd, start_epoch, end_epoch)
+    (a.dir / 'markers.stdout.raw').write_text(markers.stdout)
     (a.dir / 'markers.stdout').write_text(filtered_markers)
     (a.dir / 'markers.stderr').write_text(markers.stderr)
-    no_matches = avc_query_ok and filtered_avc.strip() == '<no matches>'
-    retained = markers_query_ok and all(data['marker'] + x in filtered_markers for x in ('_START', '_END'))
+    # A failed AVC query is never "no AVC": only NO_MATCH, or OK whose
+    # in-window remainder is empty, counts as zero events.
+    no_matches = avc_status in ('NO_MATCH', 'OK') and filtered_avc.strip() == '<no matches>'
+    retained = markers_status == 'OK' and all(data['marker'] + x in filtered_markers for x in ('_START', '_END'))
     def counters(text):
         return dict(line.split(None, 1) for line in text.splitlines() if len(line.split(None, 1)) == 2)
     before = counters((a.dir / 'audit-status-start.txt').read_text())
@@ -144,7 +186,8 @@ def main():
     healthy = all(x.get('enabled') in ('1', '2') and x.get('lost') == '0' for x in (before, after))
     result = {'status': 'NO_AVC_REVIEW_REQUIRED' if no_matches and retained and healthy else 'HOLD',
               'no_matches': no_matches, 'both_markers_retained': retained,
-              'audit_counters_healthy': healthy, 'note': 'Review auditd continuity/rotation and clock events separately.'}
+              'audit_counters_healthy': healthy, 'avc_query': avc_status,
+              'markers_query': markers_status, 'note': 'Review auditd continuity/rotation and clock events separately.'}
     (a.dir / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps(result))
     if result['status'] == 'HOLD':

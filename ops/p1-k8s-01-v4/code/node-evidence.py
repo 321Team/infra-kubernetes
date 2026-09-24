@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Host-local evidence and firewalld checkpoint/restore. No HEP deletion."""
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -26,14 +27,18 @@ def tree_hash(root):
             for p in sorted(root.rglob('*')) if p.is_file()}
 
 
-def firewall_view(permanent=False):
+def firewall_view(permanent=False, raw=None):
+    """Return the normalized view; if raw is a dict, fill it with unnormalized output."""
     base = ['firewall-cmd'] + (['--permanent'] if permanent else [])
     result = {}
+    if raw is None:
+        raw = {}
     # --get-default-zone is a stand-alone option: firewalld rejects it when
     # combined with --permanent ("Can't use stand-alone options with other
     # options"), and it has no separate permanent/runtime variant anyway.
     # Always query it without --permanent.
-    result['--get-default-zone'] = run(['firewall-cmd', '--get-default-zone'])['stdout'].replace(' (active)', '')
+    raw['--get-default-zone'] = run(['firewall-cmd', '--get-default-zone'])['stdout']
+    result['--get-default-zone'] = raw['--get-default-zone'].replace(' (active)', '')
     for arg in ('--list-all-zones', '--list-all-policies', '--get-ipsets'):
         # firewall-cmd appends presentation-only status markers that do not
         # reflect any actual rule difference between runtime and permanent:
@@ -44,7 +49,7 @@ def firewall_view(permanent=False):
         # '.replace(" (active)", "")' only catches the standalone form and
         # silently leaves the combined form untouched. Strip the marker
         # wherever it appears inside the parenthetical instead.
-        out = run(base + [arg])['stdout']
+        out = raw[arg] = run(base + [arg])['stdout']
         out = re.sub(r',\s*(active|disabled)(?=[,)])', '', out)
         out = re.sub(r'\s*\((active|disabled)\)', '', out)
         if arg == '--list-all-zones':
@@ -86,10 +91,20 @@ def firewall_view(permanent=False):
         out = '\n'.join(sorted_lines)
         result[arg] = out
     for name in result['--get-ipsets'].split():
-        result['ipset:' + name] = run(base + ['--info-ipset=' + name])['stdout']
+        result['ipset:' + name] = raw['ipset:' + name] = run(base + ['--info-ipset=' + name])['stdout']
     for arg in ('--get-all-rules', '--get-all-passthroughs'):
-        result['direct:' + arg] = run(base + ['--direct', arg])['stdout']
+        result['direct:' + arg] = raw['direct:' + arg] = run(base + ['--direct', arg])['stdout']
     return result
+
+
+def diff_views(left, right, left_name, right_name):
+    """Unified diff of two firewall views, key by key, for review evidence."""
+    out = []
+    for key in sorted(set(left) | set(right)):
+        out.extend(difflib.unified_diff(
+            left.get(key, '').splitlines(), right.get(key, '').splitlines(),
+            left_name + ':' + key, right_name + ':' + key, lineterm=''))
+    return '\n'.join(out) + '\n' if out else ''
 
 
 def main():
@@ -124,9 +139,19 @@ def main():
             raise SystemExit('this transition requires enabled firewalld at start')
         run(['firewall-cmd', '--state'])
         run(['firewall-cmd', '--check-config'])
-        runtime, permanent = firewall_view(), firewall_view(True)
+        runtime_raw, permanent_raw = {}, {}
+        runtime, permanent = firewall_view(raw=runtime_raw), firewall_view(True, raw=permanent_raw)
         (a.dir / 'runtime.json').write_text(json.dumps(runtime, indent=2))
         (a.dir / 'permanent.json').write_text(json.dumps(permanent, indent=2))
+        # Normalization hides presentation-only differences, so keep the
+        # unnormalized output and both diffs for review: a real zone move must
+        # stay visible in the raw diff even when the normalized views match.
+        (a.dir / 'runtime.raw.json').write_text(json.dumps(runtime_raw, indent=2))
+        (a.dir / 'permanent.raw.json').write_text(json.dumps(permanent_raw, indent=2))
+        (a.dir / 'runtime-vs-permanent.raw.diff').write_text(
+            diff_views(runtime_raw, permanent_raw, 'runtime', 'permanent'))
+        (a.dir / 'runtime-vs-permanent.normalized.diff').write_text(
+            diff_views(runtime, permanent, 'runtime', 'permanent'))
         if runtime != permanent:
             raise SystemExit('runtime/permanent differ: reconcile and test before checkpoint; no automatic overwrite')
         archive = a.dir / 'firewalld-config.tar'
