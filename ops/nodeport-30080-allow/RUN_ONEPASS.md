@@ -1,123 +1,134 @@
-# 잔여 3건 원패스 수집 — 2026-09-24
+# 잔여 3건 원패스 — ansible01 점프만
 
-동작 환경에서 10.1.93.0/24·ansible01에 접속할 수 없다. 격리 VM 붙여넣기용.
-READ-ONLY. apply/patch/delete, firewalld, HEP/GNP 변경, 테스트 Pod/Service 생성 없음.
-#19 승인·edge01 마이그레이션 재개 아님.
+사실: v4 host GNP Ingress SSH는 `10.250.10.10/32`(ansible01) 만 Allow.
+CP/Worker 콘솔을 작업 PC에서 직접 열지 않는다. 이 문서는 **ansible01에 붙여 넣는 한 블록**이다.
 
-## 대상
+READ-ONLY. apply/patch/delete, firewalld, HEP/GNP, SELinux 해제 없음.
+#19·edge01 마이그레이션 재개 아님.
 
-| 단계 | 호스트 | 계정 | 성공 | 중단 |
-|---|---|---|---|---|
-| A | k8s-control01 | root/sudo, kubeconfig `/etc/kubernetes/admin.conf` | 파일+검증합. GNP NotFound는 결과 | apply 계열 |
-| B | ansible01 `10.250.10.10` | 기존 SSH | Worker:22, `.109:6443` TCP 가부 | 새 키·firewalld 해제 |
-| C | edge01 `10.1.93.50` | 기존 계정 | A에 NodePort 30080 리스너가 있을 때만 curl | 없으면 NOT_VERIFIED. 생성 금지 |
+## 경로
 
-전달: 켘솔 붙여넣기. clone 불필.
+```
+작업 PC —(기존 관리 SSH)→ ansible01 10.250.10.10
+ ansible01 —SSH:22→ k8s-control01 10.1.93.102   # A kubectl
+ ansible01 —SSH:22→ worker .105/.107/.108        # B 회귀
+ ansible01 —TCP→ 10.1.93.109:6443               # B API
+ ansible01 —TCP→ worker:30080                   # C 음성 후보(소스는 .10, .50 아님)
+ ansible01 —SSH→ edge01 10.1.93.50 있을 때만  # C 양성. 없으면 NOT_VERIFIED
+```
 
-## A — control01
+계정: `SSH_USER`(basic `ansible` 또는 `svc_ansible`). kubeconfig는 control01 `/etc/kubernetes/admin.conf`, sudo.
+
+## ansible01에서 전체
 
 ```bash
-sudo bash <<'EOF'
+bash <<'EOF'
+set +e
+SSH_USER="${SSH_USER:-ansible}"
+SSH_OPTS="-o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=accept-new"
+CP=10.1.93.102
+OUT=$HOME/nodeport-onepass-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)
+mkdir -p "$OUT"
+{
+  echo collected_at_kst=$(TZ=Asia/Seoul date -Iseconds)
+  echo jump=$(hostname)
+  echo jump_ips=$(hostname -I 2>/dev/null)
+  echo ssh_user=$SSH_USER
+} > "$OUT/00-meta.txt"
+
+# A: kubectl on control01 via ansible01
+ssh $SSH_OPTS "${SSH_USER}@${CP}" -- sudo bash -s <<'REMOTE' >"$OUT/01-kubectl.out" 2>"$OUT/01-kubectl.err"
 set +e
 export KUBECONFIG=/etc/kubernetes/admin.conf
-OUT=/root/nodeport-onepass-A-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)
-mkdir -p "$OUT"
-{
-  echo collected_at_kst=$(TZ=Asia/Seoul date -Iseconds)
-  echo host=$(hostname)
-} > "$OUT/00-meta.txt"
-kubectl get globalnetworkpolicy nodeport-30080-allow -o yaml \
-  >"$OUT/01-nodeport-gnp.yaml" 2>"$OUT/01-nodeport-gnp.err"
-echo rc=$? > "$OUT/01-nodeport-gnp.rc"
-kubectl get globalnetworkpolicy -o wide >"$OUT/02-gnp-list.txt" 2>"$OUT/02-gnp-list.err"
-kubectl get hostendpoint -o yaml >"$OUT/03-hep-full.yaml" 2>"$OUT/03-hep-full.err"
-kubectl get hostendpoint -o wide >"$OUT/04-hep-list.txt"
-kubectl get svc -A -o wide >"$OUT/05-svc-all.txt" 2>"$OUT/05-svc-all.err"
-kubectl get svc -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name} type={.spec.type} ports={.spec.ports[*].port} nodePorts={.spec.ports[*].nodePort}{"\n"}{end}' \
-  >"$OUT/06-svc-ports.txt" 2>"$OUT/06-svc-ports.err"
-grep -n '30080' "$OUT/05-svc-all.txt" "$OUT/06-svc-ports.txt" >"$OUT/07-nodeport-30080-grep.txt" || true
-( cd "$OUT" && sha256sum * > SHA256SUMS )
-echo OUT=$OUT
-ls -l "$OUT"
-EOF
-```
+echo HOST=$(hostname)
+echo '---GNP---'
+kubectl get globalnetworkpolicy nodeport-30080-allow -o yaml
+echo GNP_RC=$?
+echo '---GNP_LIST---'
+kubectl get globalnetworkpolicy -o wide
+echo '---HEP_LIST---'
+kubectl get hostendpoint -o wide
+echo '---HEP_WORKER---'
+kubectl get hostendpoint -o yaml
+echo '---SVC---'
+kubectl get svc -A -o wide
+echo '---NODEPORT_GREP---'
+kubectl get svc -A -o wide | grep 30080 || true
+REMOTE
+echo kubectl_ssh_rc=$? > "$OUT/01-kubectl.rc"
 
-판정: `01-nodeport-gnp.yaml` spec을 후보 YAML과 대조. `07-nodeport-30080-grep.txt`가 비어 있으면 C는 NOT_VERIFIED.
-
-## B — ansible01
-
-```bash
-bash <<'EOF'
-set +e
-OUT=$HOME/nodeport-onepass-B-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)
-mkdir -p "$OUT"
-{
-  echo collected_at_kst=$(TZ=Asia/Seoul date -Iseconds)
-  echo host=$(hostname)
-  echo src=$(hostname -I 2>/dev/null)
-} > "$OUT/00-meta.txt"
+# B: SSH workers + API LB from ansible01
+: > "$OUT/02-ssh-workers.txt"
 for ip in 10.1.93.105 10.1.93.107 10.1.93.108; do
-  echo "=== ssh $ip:22 ===" | tee -a "$OUT/01-ssh-workers.txt"
-  timeout 8 ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
-    "$ip" -- true >>"$OUT/01-ssh-workers.txt" 2>&1
-  echo rc=$? ip=$ip | tee -a "$OUT/01-ssh-workers.txt"
+  echo "=== $ip:22 ===" | tee -a "$OUT/02-ssh-workers.txt"
+  timeout 8 ssh $SSH_OPTS "${SSH_USER}@${ip}" -- true >>"$OUT/02-ssh-workers.txt" 2>&1
+  echo rc=$? ip=$ip | tee -a "$OUT/02-ssh-workers.txt"
 done
-echo "=== tcp 10.1.93.109:6443 ===" > "$OUT/02-api-lb.txt"
-if command -v nc >/dev/null; then
-  timeout 5 nc -zv -w 3 10.1.93.109 6443 >>"$OUT/02-api-lb.txt" 2>&1
-  echo nc_rc=$? >> "$OUT/02-api-lb.txt"
-elif command -v curl >/dev/null; then
-  curl -sk --connect-timeout 5 -o /dev/null -w 'http_code=%{http_code} err=%{errormsg}\n' https://10.1.93.109:6443/readyz \
-    >>"$OUT/02-api-lb.txt" 2>&1
-  echo curl_rc=$? >> "$OUT/02-api-lb.txt"
+{
+  echo "=== 10.1.93.109:6443 from $(hostname) ==="
+  if command -v nc >/dev/null; then
+    timeout 5 nc -zv -w 3 10.1.93.109 6443
+    echo nc_rc=$?
+  elif command -v curl >/dev/null; then
+    curl -sk --connect-timeout 5 -o /dev/null -w 'http_code=%{http_code}\n' https://10.1.93.109:6443/readyz
+    echo curl_rc=$?
+  else
+    echo NOTOOL
+  fi
+} >"$OUT/03-api-lb.txt" 2>&1
+
+# C-negative: ansible01(.10) -> Worker:30080. 승인 소스 아님.
+# 리스너 없으면 정책 차단과 구분 불가.
+: > "$OUT/04-neg-30080-from-ansible01.txt"
+for ip in 10.1.93.105 10.1.93.107 10.1.93.108; do
+  echo "=== $ip:30080 from ansible01 ===" | tee -a "$OUT/04-neg-30080-from-ansible01.txt"
+  if command -v curl >/dev/null; then
+    curl -sS -o /dev/null -w 'http_code=%{http_code}\n' --connect-timeout 3 "http://$ip:30080/readyz" \
+      >>"$OUT/04-neg-30080-from-ansible01.txt" 2>&1
+    echo curl_rc=$? ip=$ip | tee -a "$OUT/04-neg-30080-from-ansible01.txt"
+  else
+    echo NOTOOL >> "$OUT/04-neg-30080-from-ansible01.txt"
+  fi
+done
+
+# C-positive: edge01에 SSH가 열릴 때만. 안 열리면 NOT_VERIFIED.
+{
+  echo "=== ssh edge01 10.1.93.50 ==="
+  timeout 8 ssh $SSH_OPTS "${SSH_USER}@10.1.93.50" -- 'hostname; hostname -I' 
+  echo edge_ssh_rc=$?
+} >"$OUT/05-edge01-ssh.txt" 2>&1
+if grep -q 'edge_ssh_rc=0' "$OUT/05-edge01-ssh.txt"; then
+  : > "$OUT/06-pos-30080-from-edge01.txt"
+  for ip in 10.1.93.105 10.1.93.107 10.1.93.108; do
+    echo "=== $ip:30080 from edge01 ===" | tee -a "$OUT/06-pos-30080-from-edge01.txt"
+    timeout 20 ssh $SSH_OPTS "${SSH_USER}@10.1.93.50" -- \
+      "curl -sS -o /dev/null -w 'http_code=%{http_code}\n' --connect-timeout 3 http://$ip:30080/readyz; echo curl_rc=\$? ip=$ip" \
+      >>"$OUT/06-pos-30080-from-edge01.txt" 2>&1
+  done
 else
-  echo NOTOOL >> "$OUT/02-api-lb.txt"
+  echo 'NOT_VERIFIED: ansible01에서 edge01 SSH 실패. .50 양성은 이 경로로 실행 불가.' > "$OUT/06-pos-30080-from-edge01.txt"
 fi
-echo "=== udp 4789 worker01 (판정 아님, 도달만) ===" > "$OUT/03-vxlan-note.txt"
-echo 'VXLAN 성공/실패는 이 프로브로 단정하지 않는다. SSH/6443만 기록.' >> "$OUT/03-vxlan-note.txt"
+
 ( cd "$OUT" && sha256sum * > SHA256SUMS )
 echo OUT=$OUT
 ls -l "$OUT"
 EOF
 ```
 
-판정: Worker 3대 SSH rc=0 그리고 `.109:6443`가 도달되면 관리 경로 회귀 관측. 22 거부는 이 GNP(30080 전용)와 분리.
+`SSH_USER`가 다르면 ù 줄 앞에 `SSH_USER=svc_ansible bash <<'EOF'`.
 
-## C — edge01, A에 30080 리스너가 있을 때만
+## 판정
 
-A `07-nodeport-30080-grep.txt`가 비어 있으면 실행하지 말 것. NOT_VERIFIED.
+| 파일 | 의미 |
+|---|---|
+| `01-kubectl.out` | 현장 GNP spec. 후보 YAML과 대조. NotFound는 결과 |
+| `02-ssh-workers.txt` | ansible01→Worker:22. rc=0이면 기존 SSH Allow 유지 |
+| `03-api-lb.txt` | ansible01→.109:6443 |
+| `04-neg-30080-from-ansible01.txt` | 비승인 소스(.10)→30080. 리스너 없으면 NOT_VERIFIED |
+| `06-pos-30080-from-edge01.txt` | .50 양성. edge SSH 실패면 NOT_VERIFIED |
 
-```bash
-bash <<'EOF'
-set +e
-OUT=$HOME/nodeport-onepass-C-$(TZ=Asia/Seoul date +%Y%m%dT%H%M%S%z)
-mkdir -p "$OUT"
-{
-  echo collected_at_kst=$(TZ=Asia/Seoul date -Iseconds)
-  echo host=$(hostname)
-  echo src=$(hostname -I 2>/dev/null)
-} > "$OUT/00-meta.txt"
-if ! command -v curl >/dev/null; then
-  echo NOTOOL > "$OUT/RESULT.txt"
-  exit 3
-fi
-: > "$OUT/01-allow-workers.txt"
-for ip in 10.1.93.105 10.1.93.107 10.1.93.108; do
-  echo "=== $ip:30080 ===" | tee -a "$OUT/01-allow-workers.txt"
-  curl -sS -o /dev/null -w 'http_code=%{http_code} rc_placeholder\n' --connect-timeout 3 "http://$ip:30080/readyz" \
-    >>"$OUT/01-allow-workers.txt" 2>&1
-  echo curl_rc=$? ip=$ip | tee -a "$OUT/01-allow-workers.txt"
-done
-echo 'negative: this host must be 10.1.93.50. other source is a separate run.' > "$OUT/02-source-note.txt"
-( cd "$OUT" && sha256sum * > SHA256SUMS )
-echo OUT=$OUT
-ls -l "$OUT"
-EOF
-```
-
-음성(비승인 Source)는 ansible01 또는 control01에서 같은 curl을 한 번 더 돌린다. 연결 실패만으로 PASS라 하지 말 것. 리스너가 없으면 정책 차단과 구분 불가(NOT_VERIFIED).
+control01에서 Worker:22를 테스트하지 말 것. 9/22 기록대로 차단된다.
 
 ## 회수
 
-원본 폴더 3개를 작업 PC로 옮긴다. 이 PR `REVIEW_PACK.md` 셑션 6에 SHA와 함께 붙인다.
-합성 결과 파일을 만들지 말 것.
+`$OUT` 전체를 작업 PC로 가져온다. 합성 YAML 금지.
