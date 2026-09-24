@@ -1,0 +1,11 @@
+# source: fds-project-evidence main 11e28a82
+# path: evidence/P1-K8S-01/gate2-final-20260922/03-gnp-list.txt
+# blob: 37df73b41e382590022519cbcfcce44fc36525eb
+# note: nodeport-30080-allow 행 없음. 인용. 정본은 evidence 저장소.
+NAME                         AGE
+fds-k8s-host-k8s-control01   9h
+fds-k8s-host-k8s-control02   9h
+fds-k8s-host-k8s-control03   9h
+fds-k8s-host-k8s-worker01    9h
+fds-k8s-host-k8s-worker02    9h
+fds-k8s-host-k8s-worker03    9h
