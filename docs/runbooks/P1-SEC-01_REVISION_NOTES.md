@@ -10,12 +10,12 @@
 
 | ID | 수준 | 1차 리뷰 지적 | 2차 재검토 지적 (HEAD 4454098) | 수정 파일 | 상태 |
 |---|---|---|---|---|---|
-| SEC-01 | Critical | identity 우선 재작성 = 평문 저장, static Pod mount 미제출 | 키 내용/길이/CP 동일성 미검증, 구조적 mount 대조 아님, 실제 재시작 미확인, 무한 대기, raw 검증기가 구 키도 PASS | `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
-| SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | umask 늦음, 고정 /tmp 경로, set -e로 정리 미도달 | `scripts/create-secrets-safe.sh`, `scripts/rotate-secretbox-key.sh` | FIXED_PENDING_REVIEW (2차) |
+| SEC-01 | Critical | identity 우선 재작성 = 평문 저장, static Pod mount 미제출 | 키 내용/길이/CP 동일성 미검증, 구조적 mount 대조 아님, 실제 재시작 미확인, 무한 대기, raw 검증기가 구 키도 PASS | ~~`scripts/rotate-secretbox-key.sh`~~ → 범위 조정(아래) | 원 지적(평문 저장)은 실제 최초 구성으로 해소. 회전 스크립트는 PR 범위 제외·분리 추적 |
+| SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | umask 늦음, 고정 /tmp 경로, set -e로 정리 미도달 | `scripts/create-secrets-safe.sh` (회전 스크립트 해당분은 분리 추적) | FIXED_PENDING_REVIEW (2차) |
 | SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | 방향 수정 인정(CLOSED_STATIC), monitor01 실주소는 baseline §6.4 재확인으로 해소(10.250.10.30) | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (3차, TLS/Auth/Payload 계약 자체는 여전히 P1-MON-01 소관) |
 | SEC-04 | High | selector/labels 누락, Monitoring image 누락 | selector/labels 인정(PARTIAL), Service 80→8000(IF-02A) 위반, "완성" 주장 철회 필요 | `manifests/02-securitycontext.yaml` | 1차 FIXED, 2차 IF-02A 포트 수정 완료 / 나머지(UID·PVC 등) BLOCKED_INPUT |
 | SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | monitoring-api DNS 허용 없음, API endpoint 미완성 | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (2차) |
-| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | `manifests/calico/*.yaml`(신규 분리), `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | FIXED_PENDING_REVIEW (2차) |
+| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | ~~`manifests/calico/*.yaml`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md`~~ → 범위 조정(아래) | 원 지적(eth0 고정, Bootstrap/canary 부재)은 P1-K8S-01 v4 적용(ens160 HEP, 노드별 전환)으로 해소. 저장소 정본은 v4 편입 PR로 이관 |
 | SEC-07 | High | 테스트 대상 IP 오류(.109) | nc/curl 부재·부분 실패·timeout을 PASS로 오판 | `scripts/verify-probe-failover.sh` | FIXED_PENDING_REVIEW (2차) |
 | SEC-08 | High | `auth can-i` TYPE/NAME과 subresource 구문 혼동 | API 통신 오류를 "no"로 오인해 전체 PASS | `scripts/verify-rbac.sh` | FIXED_PENDING_REVIEW (2차) |
 
@@ -23,6 +23,17 @@
 이 PR 제출만으로 CLOSED로 전환하지 않으며, 독립 Reviewer의 HEAD 검토 후 판정한다.
 2026-09-13 기준 SEC-01/02/04/05/06/07/08은 2차 수정을, SEC-03은 baseline §6.4 재확인으로
 3차 수정(monitor01 IP 10.250.10.30 확정 반영)을 제출했다. 8개 항목 전체 코드 대응 완료.
+
+## 범위 조정 — 2026-09-24 (P1-SEC-01 Lead 이하영)
+
+실제 운영 클러스터에 적용되지 않은 두 묶음을 이 PR에서 제외한다. 아래 SEC-01·SEC-06 항목별 설명은 당시 제출 이력으로 보존한다.
+
+| 제외 파일 | 이유 | 이후 추적 |
+|---|---|---|
+| `scripts/rotate-secretbox-key.sh` | 기존 config 존재를 전제한 회전 도구. 2026-09-22 Secretbox는 최초 구성 수동 절차로 적용했고(provider `secretbox → identity`, raw etcd에서 `k8s:enc:secretbox:v1:key1:` 확인) 이 스크립트는 실행되지 않음. 리뷰 B1~B4는 이 파일에 한정 | 별도 Issue/PR. B1~B4 그대로 인계, 운영 회전 전 독립 리뷰 필수. 노출 이력 키의 회전 필요성은 유지 |
+| `manifests/calico/*`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | 실제 HEP/GNP는 P1-K8S-01 v4 패키지로 적용됨. 이 파일들은 미적용 후보이며 실제 정책과 불일치(NodePort selector, CP1 NTP 등) | [infra-kubernetes PR #26](https://github.com/321Team/infra-kubernetes/pull/26)(v4 코드), [fds-project-evidence PR #28](https://github.com/321Team/fds-project-evidence/pull/28)(적용 상태 증적) |
+
+`docs/evidence/P1-SEC-01/GATE2_RUNTIME_EXECUTION_20260922.md`의 제외 파일 언급은 당시 실행 기록으로 보존한다. 이 조정은 SEC AC 해석 변경을 포함하므로 [fds-project-baseline#19](https://github.com/321Team/fds-project-baseline/issues/19)에 Lead 결정으로 별도 기록한다.
 
 ## 항목별 변경 내용
 
