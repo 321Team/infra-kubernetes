@@ -45,6 +45,16 @@ spec:
     destination:
       ports:
       - 4789
+  - action: Allow
+    protocol: TCP
+    source:
+      nets:
+      - 10.1.93.105/32
+      - 10.1.93.108/32
+    destination:
+      ports:
+      - 9100
+      - 10250
   - action: Deny
   egress:
   - action: Allow
