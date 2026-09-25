@@ -10,11 +10,17 @@
 #     ps/bash history/로그에 노출되는 경로였음 → 파일·stdin 기반으로 교체
 #   - 실행 전 xtrace(set -x) 비활성 강제, 임시 파일 chmod/umask, 중단 시 정리(trap)
 #
+# PR #7 리뷰(c9ec46d) 반영:
+#   - Harbor Robot 이름을 파일에 고정하지 않고 인자로 받는다(운영 기준 robot$worker).
+#   - DB Secret을 transaction-api가 실제로 참조하는 transaction-api-db-credentials /
+#     DATABASE_URL로 맞춘다(예전 fds-app-db-credentials는 참조하는 워크로드가 없었다).
+#   - 값 파일 끝의 줄바꿈 1개를 떼어 Secret 값이 달라지지 않게 한다.
+#
 # 실행 위치: K8s Control Plane (kubectl 접속 가능한 관리 호스트)
 #
 # 사용법:
-#   ./create-secrets-safe.sh harbor-pull <harbor-password-file>
-#   ./create-secrets-safe.sh db-credentials <db-password-file>
+#   ./create-secrets-safe.sh harbor-pull <robot-name> <harbor-secret-file>   # 운영 기준 robot$worker (pull-only)
+#   ./create-secrets-safe.sh db-url <database-url-file>                        # transaction-api-db-credentials / DATABASE_URL
 #   ./create-secrets-safe.sh grafana-admin <grafana-password-file>
 #   ./create-secrets-safe.sh cicd-token <audience> [duration]   # TokenRequest, stdout 미출력, 파일로만 저장
 #
@@ -43,16 +49,42 @@ trap cleanup EXIT INT TERM
 
 require_pwfile() {
   local f="$1"
-  [[ -f "$f" ]] || die "비밀번호 파일 없음: $f"
+  [[ -f "$f" && ! -L "$f" ]] || die "비밀번호 파일 없음 또는 symlink: $f"
   local perm
   perm="$(stat -c '%a' "$f" 2>/dev/null || stat -f '%Lp' "$f")"
   [[ "$perm" == "600" || "$perm" == "400" ]] || die "비밀번호 파일 권한이 600/400이 아닙니다: $f ($perm)"
 }
 
+# --from-file은 파일 바이트를 그대로 Secret 값으로 넣는다. `echo pass > file`로 만든
+# 파일은 끝에 줄바꿈이 붙어 DB/Grafana 인증이 실패한다. 끝 줄바꿈 1개(LF 또는 CRLF)를
+# 뗀 사본을 임시 파일로 만들고 그 경로를 STAGED에 넣는다. 비었거나 여러 줄이면 거부한다.
+# (호출 측 $(...) 서브셸에서 만들면 TMP_FILES 등록이 부모에 남지 않으므로 전역 변수로 돌려준다.)
+STAGED=""
+stage_value() {
+  local src="$1"
+  require_pwfile "$src"
+  STAGED="$(mktemp)"
+  TMP_FILES+=("$STAGED")
+  python3 -I - "$src" "$STAGED" <<'PY' || die "값 파일 형식 오류: 비어 있거나 여러 줄입니다 ($src)"
+import sys
+data = open(sys.argv[1], 'rb').read()
+if data.endswith(b'\r\n'):
+    data = data[:-2]
+elif data.endswith(b'\n'):
+    data = data[:-1]
+if not data or b'\n' in data or b'\r' in data:
+    sys.exit(1)
+open(sys.argv[2], 'wb').write(data)
+PY
+}
+
 # ── harbor-pull: Worker Pull-only Robot Account Secret ──────────────
 cmd_harbor_pull() {
-  local pwfile="${1:?harbor-password-file 인자 필요}"
-  require_pwfile "$pwfile"
+  local robot="${1:?robot-name 인자 필요 (운영 기준: robot\$worker)}"
+  local pwfile="${2:?harbor-secret-file 인자 필요}"
+  # Robot 이름을 파일에 고정하지 않는다. 형식만 확인하고, pull-only 권한은 Harbor에서 확인한다.
+  [[ "$robot" =~ ^robot\$[A-Za-z0-9._-]+$ ]] || die "Robot 이름 형식 오류: $robot"
+  stage_value "$pwfile"
 
   # --docker-password는 argv에 남으므로 사용하지 않는다.
   # kubectl create secret docker-registry는 --docker-password-stdin을 지원하지 않으므로
@@ -62,13 +94,13 @@ cmd_harbor_pull() {
   TMP_FILES+=("$dockerconfig")
 
   local password
-  password="$(cat "$pwfile")"
+  password="$(cat "$STAGED")"
   local auth
-  auth="$(printf '%s' "robot\$fds-pull:${password}" | base64 -w0)"
+  auth="$(printf '%s' "${robot}:${password}" | base64 -w0)"
   unset password
 
   cat > "$dockerconfig" <<EOF
-{"auths":{"10.1.93.54":{"username":"robot\$fds-pull","auth":"${auth}"}}}
+{"auths":{"10.1.93.54":{"username":"${robot}","auth":"${auth}"}}}
 EOF
   unset auth
 
@@ -78,34 +110,36 @@ EOF
     --from-file=.dockerconfigjson="$dockerconfig" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-  log "harbor-pull-secret 생성 완료 (argv에 비밀번호 노출 없음)."
+  log "harbor-pull-secret 생성 완료 (robot=${robot}, argv에 비밀번호 노출 없음)."
 }
 
-# ── db-credentials ────────────────────────────────────────────────
-cmd_db_credentials() {
-  local pwfile="${1:?db-password-file 인자 필요}"
-  require_pwfile "$pwfile"
+# ── db-url: transaction-api가 실제로 참조하는 Secret ──────────────────
+# 02-securitycontext.yaml의 transaction-api는 transaction-api-db-credentials/DATABASE_URL
+# 하나만 읽는다(app/db.py). 예전 fds-app-db-credentials(DB_HOST/PORT/USER/PASSWORD)는
+# 참조하는 워크로드가 없어 생성해도 앱 기동에 쓰이지 않았다.
+cmd_db_url() {
+  local urlfile="${1:?database-url-file 인자 필요}"
+  stage_value "$urlfile"
+  grep -Eq '^postgres(ql)?(\+[a-z0-9]+)?://[^[:space:]@]+@10\.1\.93\.55:5432/[^[:space:]/]+$' "$STAGED" \
+    || die "DATABASE_URL 형식/대상 오류: postgresql[+driver]://<user>:<password>@10.1.93.55:5432/<db> 형식이어야 합니다 (값은 출력하지 않음)"
 
-  kubectl create secret generic fds-app-db-credentials \
+  kubectl create secret generic transaction-api-db-credentials \
     --namespace fds-app \
-    --from-literal=DB_HOST=10.1.93.55 \
-    --from-literal=DB_PORT=5432 \
-    --from-literal=DB_USER=fds_app_user \
-    --from-file=DB_PASSWORD="$pwfile" \
+    --from-file=DATABASE_URL="$STAGED" \
     --dry-run=client -o yaml | kubectl apply -f -
 
-  log "fds-app-db-credentials 생성 완료 (--from-file 사용, argv에 값 없음)."
+  log "transaction-api-db-credentials 생성 완료 (key DATABASE_URL, argv에 값 없음)."
 }
 
 # ── grafana-admin ────────────────────────────────────────────────
 cmd_grafana_admin() {
   local pwfile="${1:?grafana-password-file 인자 필요}"
-  require_pwfile "$pwfile"
+  stage_value "$pwfile"
 
   kubectl create secret generic grafana-admin-credentials \
     --namespace monitoring-api \
     --from-literal=GF_SECURITY_ADMIN_USER=admin \
-    --from-file=GF_SECURITY_ADMIN_PASSWORD="$pwfile" \
+    --from-file=GF_SECURITY_ADMIN_PASSWORD="$STAGED" \
     --dry-run=client -o yaml | kubectl apply -f -
 
   log "grafana-admin-credentials 생성 완료."
@@ -143,16 +177,16 @@ cmd_cicd_token() {
 }
 
 case "${1:-}" in
-  harbor-pull)      cmd_harbor_pull "${2:-}" ;;
-  db-credentials)   cmd_db_credentials "${2:-}" ;;
+  harbor-pull)      cmd_harbor_pull "${2:-}" "${3:-}" ;;
+  db-url)           cmd_db_url "${2:-}" ;;
   grafana-admin)    cmd_grafana_admin "${2:-}" ;;
   cicd-token)       cmd_cicd_token "${2:-}" "${3:-1h}" ;;
   *)
     cat <<EOF
 사용법: $0 <command> [args]
 
-  harbor-pull <harbor-password-file>
-  db-credentials <db-password-file>
+  harbor-pull <robot-name> <harbor-secret-file>   (운영 기준 robot\$worker)
+  db-url <database-url-file>
   grafana-admin <grafana-password-file>
   cicd-token <audience> [duration=1h]
 

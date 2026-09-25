@@ -78,17 +78,35 @@ check() {
     || die "TSV 파일 쓰기 실패 ($OUT) — 이 시점까지의 결과 기록을 신뢰할 수 없음, 즉시 중단"
 }
 
+# P1-MON-01 AC 7 / baseline §8: Prometheus·kube-state-metrics 모두 "쓰기 Verb 없음 + Secret
+# 읽기 없음"을 확인해야 한다. 두 SA에 같은 부정 검사 집합을 적용한다.
+negative_read_only_checks() {
+  local sa="$1"
+  check "$sa" "get secrets -A" no get secrets -A
+  check "$sa" "list secrets -A" no list secrets -A
+  check "$sa" "get nodes --subresource=proxy" no get nodes --subresource=proxy
+  check "$sa" "delete pods -A" no delete pods -A
+  check "$sa" "create pods -A" no create pods -A
+  check "$sa" "patch deployments -A" no patch deployments.apps -A
+  check "$sa" "patch nodes" no patch nodes
+}
+
 echo "== kube-state-metrics-sa ==" >&2
 check "monitoring-api:kube-state-metrics-sa" "list pods -A" yes list pods -A
-check "monitoring-api:kube-state-metrics-sa" "delete pods -A" no delete pods -A
+check "monitoring-api:kube-state-metrics-sa" "list deployments -A" yes list deployments.apps -A
+negative_read_only_checks "monitoring-api:kube-state-metrics-sa"
 
 echo "== prometheus-sa ==" >&2
+check "monitoring-api:prometheus-sa" "list pods -A (Service Discovery)" yes list pods -A
 check "monitoring-api:prometheus-sa" "get nodes --subresource=metrics" yes \
   get nodes --subresource=metrics
-check "monitoring-api:prometheus-sa" "get nodes --subresource=proxy" no \
-  get nodes --subresource=proxy
-check "monitoring-api:prometheus-sa" "get secrets -A" no \
-  get secrets -A
+check "monitoring-api:prometheus-sa" "get /metrics (non-resource)" yes get /metrics
+negative_read_only_checks "monitoring-api:prometheus-sa"
+
+echo "== API를 쓰지 않는 SA (Negative) ==" >&2
+check "monitoring-api:grafana-sa" "list pods -n monitoring-api" no -n monitoring-api list pods
+check "monitoring-api:alertmanager-sa" "list pods -n monitoring-api" no -n monitoring-api list pods
+check "monitoring-node:node-exporter-sa" "list pods -A" no list pods -A
 
 echo "== transaction-api-sa / fds-engine-sa (Negative) ==" >&2
 check "fds-app:transaction-api-sa" "list pods -n fds-app" no -n fds-app list pods

@@ -265,10 +265,17 @@ spec:
               app: fds-engine
       ports:
         - { protocol: TCP, port: 9090 }
+    # node-exporter는 hostNetwork Pod라 namespaceSelector로는 매칭되지 않는다(Pod IP가
+    # 아니라 Node IP로 수신). Worker 3대 Node IP를 개별로 명시한다. DaemonSet에 CP
+    # toleration이 없어 CP에는 node-exporter가 뜨지 않는다. baseline §11.5에 따라 이
+    # 규칙만으로 9100 통제를 판정하지 않고 Node Host Firewall(HEP/GNP) 증적과 함께 본다.
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: monitoring-node
+        - ipBlock:
+            cidr: 10.1.93.105/32  # k8s-worker01
+        - ipBlock:
+            cidr: 10.1.93.107/32  # k8s-worker02
+        - ipBlock:
+            cidr: 10.1.93.108/32  # k8s-worker03
       ports:
         - { protocol: TCP, port: 9100 }
     - to:

@@ -79,7 +79,8 @@ spec:
           env:
             # app/db.py가 기동 시 DATABASE_URL 필수(없으면 KeyError로 즉시 크래시,
             # 2026-09-22 실배포 시 CrashLoopBackOff로 발견). Secret은 이 파일이 만들지
-            # 않으며, DB 비밀번호는 P1-DB-01 담당(이권욱)이 별도 채널로 관리한다.
+            # 않으며, DB 비밀번호는 P1-DB-01 담당(이재환)이 별도 채널로 관리한다.
+            # 생성: scripts/create-secrets-safe.sh db-url <database-url-file>
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -247,9 +248,21 @@ spec:
       containers:
         - name: prometheus
           image: prom/prometheus:<실제-버전>
+          # args를 지정하면 이미지 기본 CMD(--config.file, --storage.tsdb.path)가 통째로
+          # 대체된다. 두 값을 명시하지 않으면 작업 디렉터리 기준 prometheus.yml을 찾다가 기동에 실패한다.
           args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
             - --storage.tsdb.retention.time=15d
             - --storage.tsdb.retention.size=16GB  # PVC 20Gi(Lead 결정 #10)의 80%
+          # LimitRange 기본 limit(512Mi)이 적용되지 않도록 명시한다. 초기값 — MON Lead 확정 필요.
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
@@ -259,6 +272,9 @@ spec:
           volumeMounts:
             - name: tsdb-data
               mountPath: /prometheus
+            - name: prometheus-config   # P1-MON-01 소유 ConfigMap (scrape/remote_write 설정)
+              mountPath: /etc/prometheus
+              readOnly: true
           ports:
             - containerPort: 9090
           readinessProbe:
@@ -276,6 +292,9 @@ spec:
         - name: tsdb-data
           persistentVolumeClaim:
             claimName: prometheus-pvc
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -429,6 +448,10 @@ spec:
       containers:
         - name: kube-state-metrics
           image: registry.k8s.io/kube-state-metrics/kube-state-metrics:<실제-버전>
+          # 06-rbac.yaml kube-state-metrics-role과 같은 범위만 수집한다. 기본값은 secrets 등
+          # RBAC 밖 리소스까지 조회해 Forbidden을 반복한다(Secret 읽기 금지 — baseline §8).
+          args:
+            - --resources=pods,nodes,namespaces,services,endpoints,configmaps,persistentvolumeclaims,persistentvolumes,replicationcontrollers,resourcequotas,deployments,replicasets,daemonsets,statefulsets,jobs,cronjobs
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
@@ -470,20 +493,41 @@ spec:
       automountServiceAccountToken: false  # D-SEC-01 §4: K8s API 호출 없음, hostPath로 OS 정보 직접 읽음
       hostNetwork: true
       hostPID: true
+      # Namespace PSA enforce=privileged는 hostNetwork/hostPID/hostPath 허용을 위한 예외다.
+      # 컨테이너 자체는 restricted 수준(non-root, seccomp, drop ALL, RO rootfs)을 유지한다
+      # (baseline §8 Monitoring Security Boundary, audit/warn=restricted).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534   # nobody — prom/node-exporter 이미지 기본 사용자. 승인 digest로 재확인
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: node-exporter
           image: prom/node-exporter:<실제-버전>
+          # baseline §8 "불필요 Collector 비활성", P1-MON-01 AC 6 "Collector 목록 Evidence".
+          # 이 노드 구성에 없는 장치/파일시스템 Collector를 끈다. 최종 목록은 MON Lead 확정.
           args:
             - --path.rootfs=/host/root
+            - --no-collector.wifi
+            - --no-collector.infiniband
+            - --no-collector.fibrechannel
+            - --no-collector.nfs
+            - --no-collector.nfsd
+            - --no-collector.zfs
+            - --no-collector.btrfs
+            - --no-collector.tapestats
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           volumeMounts:
             - name: host-root
               mountPath: /host/root
               readOnly: true
+              mountPropagation: HostToContainer  # 호스트 하위 마운트(/proc,/sys,데이터 디스크) 반영
           ports:
             - containerPort: 9100
               hostPort: 9100
