@@ -20,7 +20,7 @@
 #
 # 사용법:
 #   ./create-secrets-safe.sh harbor-pull <robot-name> <harbor-secret-file>   # 운영 기준 robot$worker (pull-only)
-#   ./create-secrets-safe.sh db-url <database-url-file>                        # transaction-api-db-credentials / DATABASE_URL
+#   ./create-secrets-safe.sh db-url <database-url-file>                        # transaction-api-db-credentials / DATABASE_URL (SSL 파라미터 필수)
 #   ./create-secrets-safe.sh grafana-admin <grafana-password-file>
 #   ./create-secrets-safe.sh cicd-token <audience> [duration]   # TokenRequest, stdout 미출력, 파일로만 저장
 #
@@ -122,6 +122,23 @@ cmd_db_url() {
   stage_value "$urlfile"
   grep -Eq '^postgres(ql)?(\+[a-z0-9]+)?://[^[:space:]@]+@10\.1\.93\.55:5432/[^[:space:]/]+$' "$STAGED" \
     || die "DATABASE_URL 형식/대상 오류: postgresql[+driver]://<user>:<password>@10.1.93.55:5432/<db> 형식이어야 합니다 (값은 출력하지 않음)"
+  # db01 pg_hba.conf는 fdsdb에 hostssl(scram-sha-256)만 허용한다(DB 담당 확인, PR #7 리뷰 2026-09-25).
+  # SSL을 켜는 파라미터가 없으면 드라이버 기본값에 맡겨지고, disable/allow면 앱 기동 시점에야
+  # 접속이 거부되므로 Secret 생성 전에 거른다. 비밀번호가 없는 '/<db>?…' 부분만 읽는다.
+  local query param ssl_params=0
+  query="$(sed -n 's|^.*@10\.1\.93\.55:5432/[^?]*?||p' "$STAGED")"
+  local -a params=()
+  [[ -n "$query" ]] && IFS='&' read -r -a params <<< "$query"
+  for param in "${params[@]}"; do
+    case "$param" in
+      sslmode=require|sslmode=verify-ca|sslmode=verify-full|ssl=require|ssl=verify-ca|ssl=verify-full)
+        ssl_params=$((ssl_params + 1)) ;;
+      sslmode=*|ssl=*)
+        die "DATABASE_URL SSL 설정 오류: ${param%%=*}은 require/verify-ca/verify-full만 허용합니다 (db01은 hostssl만 허용)" ;;
+    esac
+  done
+  (( ssl_params > 0 )) \
+    || die "DATABASE_URL에 SSL 파라미터가 없습니다: ?sslmode=require(libpq/psycopg) 또는 ?ssl=require(asyncpg) 등을 지정하십시오 (db01은 hostssl만 허용)"
 
   kubectl create secret generic transaction-api-db-credentials \
     --namespace fds-app \
@@ -186,7 +203,7 @@ case "${1:-}" in
 사용법: $0 <command> [args]
 
   harbor-pull <robot-name> <harbor-secret-file>   (운영 기준 robot\$worker)
-  db-url <database-url-file>
+  db-url <database-url-file>             (postgresql[+driver]://…@10.1.93.55:5432/<db>?sslmode=require 등)
   grafana-admin <grafana-password-file>
   cicd-token <audience> [duration=1h]
 
