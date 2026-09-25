@@ -1,116 +1,96 @@
 # P1-SEC-01 — SEC-01~08 Revision 대응 기록
 
-> 1차 대응 리뷰: `fds-project-baseline#19` 실제 지적 댓글 (issuecomment-5633339292, GWONUK, 2026-09-11).
-> 이전 PR 코멘트에 5627308483(하영님 구현 제출 댓글)으로 잘못 링크했던 부분은 정정한다.
-> 2차 재검토: issuecomment-5644891728 (GWONUK, 2026-09-12), 판정 HOLD / Revision Required, 대상 HEAD 4454098.
-> 이 문서는 PR 제출 시점의 대응 상태를 기록한다. Runtime PASS/FAIL 판정은 이 PR이 부여하지 않으며,
-> 이권욱님 최종 승인과 실제 클러스터(P1-K8S-01 Platform Ready) 이후의 Runtime 인수로 별도 확정한다.
+대응 리뷰: [fds-project-baseline#19](https://github.com/321Team/fds-project-baseline/issues/19) SEC-01~08 (GWONUK, 2026-09-11 최초 지적) 및 이후 PR #7 리뷰.
+연결 결정: [#19 Lead 결정 — PR #7 범위 조정](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5807412036), [infra-kubernetes#35 Lead 결정 — 회전 스킵](https://github.com/321Team/infra-kubernetes/issues/35#issuecomment-5807977867).
 
-## 대응 요약 (2차 반영 후)
+상태값은 baseline 리뷰 관례(OPEN → FIXED_PENDING_REVIEW → CLOSED_STATIC)를 따른다. 이 PR 제출만으로 CLOSED로 전환하지 않으며, 독립 Reviewer의 HEAD 검토 후 판정한다. 코드 상태(STATIC)와 Runtime AC 인수는 별개다.
 
-| ID | 수준 | 1차 리뷰 지적 | 2차 재검토 지적 (HEAD 4454098) | 수정 파일 | 상태 |
-|---|---|---|---|---|---|
-| SEC-01 | Critical | identity 우선 재작성 = 평문 저장, static Pod mount 미제출 | 키 내용/길이/CP 동일성 미검증, 구조적 mount 대조 아님, 실제 재시작 미확인, 무한 대기, raw 검증기가 구 키도 PASS | ~~`scripts/rotate-secretbox-key.sh`~~ → 범위 조정(아래) | 원 지적(평문 저장)은 실제 최초 구성으로 해소. 회전 스크립트는 PR 범위 제외·분리 추적 |
-| SEC-02 | High | TokenRequest stdout, `--docker-password`, `--from-literal` 노출 경로 | umask 늦음, 고정 /tmp 경로, set -e로 정리 미도달 | `scripts/create-secrets-safe.sh` (회전 스크립트 해당분은 분리 추적) | FIXED_PENDING_REVIEW (2차) |
-| SEC-03 | High | RETIRED된 IF-24 허용, 현행 IF-06B 미반영 | 방향 수정 인정(CLOSED_STATIC), monitor01 실주소는 baseline §6.4 재확인으로 해소(10.250.10.30) | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (3차, TLS/Auth/Payload 계약 자체는 여전히 P1-MON-01 소관) |
-| SEC-04 | High | selector/labels 누락, Monitoring image 누락 | selector/labels 인정(PARTIAL), Service 80→8000(IF-02A) 위반, "완성" 주장 철회 필요 | `manifests/02-securitycontext.yaml` | 1차 FIXED, 2차 IF-02A 포트 수정 완료 / 나머지(UID·PVC 등) BLOCKED_INPUT |
-| SEC-05 | High | Default Deny 이후 DNS/API discovery/kubelet egress 불완전 | monitoring-api DNS 허용 없음, API endpoint 미완성 | `manifests/03-networkpolicy.yaml` | FIXED_PENDING_REVIEW (2차) |
-| SEC-06 | Critical | eth0 고정이 실측과 불일치, Bootstrap/canary 절차 없음 | 1개 파일에 GNP+HEP 3개 혼재로 canary 순서 붕괴, Bootstrap 규칙 자체 모순(BGP Disabled인데 TCP179) | ~~`manifests/calico/*.yaml`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md`~~ → 범위 조정(아래) | 원 지적(eth0 고정, Bootstrap/canary 부재)은 P1-K8S-01 v4 적용(ens160 HEP, 노드별 전환)으로 해소. 저장소 정본은 v4 편입 PR로 이관 |
-| SEC-07 | High | 테스트 대상 IP 오류(.109) | nc/curl 부재·부분 실패·timeout을 PASS로 오판 | `scripts/verify-probe-failover.sh` | FIXED_PENDING_REVIEW (2차) |
-| SEC-08 | High | `auth can-i` TYPE/NAME과 subresource 구문 혼동 | API 통신 오류를 "no"로 오인해 전체 PASS | `scripts/verify-rbac.sh` | FIXED_PENDING_REVIEW (2차) |
+## 현재 상태 (이 문서가 속한 HEAD 기준)
 
-상태값은 baseline 리뷰 관례(OPEN → FIXED_PENDING_REVIEW → CLOSED_STATIC)를 따른다.
-이 PR 제출만으로 CLOSED로 전환하지 않으며, 독립 Reviewer의 HEAD 검토 후 판정한다.
-2026-09-13 기준 SEC-01/02/04/05/06/07/08은 2차 수정을, SEC-03은 baseline §6.4 재확인으로
-3차 수정(monitor01 IP 10.250.10.30 확정 반영)을 제출했다. 8개 항목 전체 코드 대응 완료.
+| ID | 수준 | 이 PR의 대응 | 상태 | Runtime / 잔여 |
+|---|---|---|---|---|
+| SEC-01 | Critical | PR 범위 제외(회전 스크립트 삭제). 원 지적(identity 우선 = 평문 저장)은 2026-09-22 최초 구성(`secretbox → identity`)으로 해소 | 원 지적 해소 / 회전 **미대응** | raw etcd `k8s:enc:secretbox:v1:key1:` 확인(아래 Evidence). 키 회전·rollback 증거 없음. `key1` 노출 이력은 잔여 위험(아래) |
+| SEC-02 | High | `scripts/create-secrets-safe.sh` — 파일 기반 생성, xtrace 거부, trap 정리. Robot 이름 인자화(운영 `robot$worker`), DB Secret을 `transaction-api-db-credentials`/`DATABASE_URL`로 정정, 값 파일 끝 줄바꿈 제거 | FIXED_PENDING_REVIEW | 9/22 실제 Secret은 수동 생성. 이 스크립트 자체는 Runtime 미실행 |
+| SEC-03 | High | `manifests/03-networkpolicy.yaml` — IF-24 제거, IF-06B `10.250.10.30/32:443` | CLOSED_STATIC | TLS/Auth/Payload 계약은 P1-MON-01 소관 |
+| SEC-04 | High | `manifests/02-securitycontext.yaml` — selector/labels, Service 80→8000(IF-02A), 앱 UID/GID/digest 확정 | App 2개 적용 / Monitoring 5개 BLOCKED_INPUT | Monitoring 이미지 digest·UID 미확정. 이 파일은 APP/MON 원본에 적용할 참고 patch |
+| SEC-05 | High | `manifests/03-networkpolicy.yaml` — namespace 공통 DNS, KSM→CP:6443, Prometheus→Worker kubelet 10250, **Prometheus→Worker node-exporter 9100을 Node IP ipBlock으로 수정**(hostNetwork라 namespaceSelector 미매칭) | FIXED_PENDING_REVIEW | 9/22 적용본의 9100 규칙은 namespaceSelector여서 실효가 없었고 운영은 MON 보완 정책(`allow-prometheus-egress-node-exporter`)으로 동작. baseline §11.5에 따라 9100은 Host Firewall과 함께 판정 |
+| SEC-06 | Critical | PR 범위 제외(`manifests/calico/*`, ROLLOUT runbook 삭제). 원 지적(eth0 고정, Bootstrap/canary 부재)은 P1-K8S-01 v4 적용(ens160 HEP, 노드별 전환)으로 해소 | 원 지적 해소 | HEP/GNP 저장소 정본: main `ops/p1-k8s-01-v4/` ([PR #26](https://github.com/321Team/infra-kubernetes/pull/26), 병합 `eb55f2e`). 적용 증적: [fds-project-evidence#28](https://github.com/321Team/fds-project-evidence/pull/28) |
+| SEC-07 | High | `scripts/verify-probe-failover.sh` 3차 — exit code 계약(0/1/2/3) 일치, Pod 경로를 python3 TCP + DNS 대조군으로 교체(TIMEOUT만 차단 후보), probe-failover를 EndpointSlice ready 폴링으로 교체 | FIXED_PENDING_REVIEW | Runtime 미실행. NodePort 30080 Service가 아직 없어 allow-flow/호스트 대조군은 Service 생성 전까지 NOT VERIFIED |
+| SEC-08 | High | `scripts/verify-rbac.sh` — stdout·rc 쌍 판정, 쓰기 실패 중단. P1-MON-01 AC 7에 맞춰 Prometheus·KSM 공통 부정 검사(Secret 읽기·쓰기 Verb·nodes/proxy)와 API 미사용 SA 부정 검사 추가 | FIXED_PENDING_REVIEW | Runtime 미실행 |
 
 ## 범위 조정 — 2026-09-24 (P1-SEC-01 Lead 이하영)
 
-실제 운영 클러스터에 적용되지 않은 두 묶음을 이 PR에서 제외한다. 아래 SEC-01·SEC-06 항목별 설명은 당시 제출 이력으로 보존한다.
+실제 운영 클러스터에 적용되지 않은 두 묶음을 이 PR에서 제외했다(커밋 `c9ec46d`).
 
-| 제외 파일 | 이유 | 이후 추적 |
+| 제외 파일 | 이유 | 이후 |
 |---|---|---|
-| `scripts/rotate-secretbox-key.sh` | 기존 config 존재를 전제한 회전 도구. 2026-09-22 Secretbox는 최초 구성 수동 절차로 적용했고(provider `secretbox → identity`, raw etcd에서 `k8s:enc:secretbox:v1:key1:` 확인) 이 스크립트는 실행되지 않음. 리뷰 B1~B4는 이 파일에 한정 | 별도 Issue/PR. B1~B4 그대로 인계, 운영 회전 전 독립 리뷰 필수. 노출 이력 키의 회전 필요성은 유지 |
-| `manifests/calico/*`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | 실제 HEP/GNP는 P1-K8S-01 v4 패키지로 적용됨. 이 파일들은 미적용 후보이며 실제 정책과 불일치(NodePort selector, CP1 NTP 등) | [infra-kubernetes PR #26](https://github.com/321Team/infra-kubernetes/pull/26)(v4 코드), [fds-project-evidence PR #28](https://github.com/321Team/fds-project-evidence/pull/28)(적용 상태 증적) |
+| `scripts/rotate-secretbox-key.sh` | 기존 config를 전제한 회전 도구. 9/22 Secretbox는 최초 구성 수동 절차로 적용했고 이 스크립트는 실행되지 않음. 리뷰 B1~B4는 이 파일에 한정 | [#35](https://github.com/321Team/infra-kubernetes/issues/35)에 인계 후 **2026-09-24 Lead 결정으로 스킵(not planned)**. 회전 도구와 키 회전은 진행하지 않는다. 필요 시 #35 재개 |
+| `manifests/calico/*`, `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md` | 실제 HEP/GNP는 P1-K8S-01 v4 패키지로 적용. 후보 파일은 실제 정책과 불일치 | main `ops/p1-k8s-01-v4/` (PR #26 병합). NodePort 30080 GNP는 [PR #36](https://github.com/321Team/infra-kubernetes/pull/36) |
 
-`docs/evidence/P1-SEC-01/GATE2_RUNTIME_EXECUTION_20260922.md`의 제외 파일 언급은 당시 실행 기록으로 보존한다. 이 조정은 SEC AC 해석 변경을 포함하므로 [fds-project-baseline#19](https://github.com/321Team/fds-project-baseline/issues/19)에 Lead 결정으로 별도 기록한다.
+남은 파일 중 9/22에 실제 적용된 것은 `01-namespace`, `03-networkpolicy`(12개), `05-limitrange`, `06-rbac`, `02-securitycontext`의 앱 Deployment/Service 2쌍이다. `04-storage`(SELinux 사전 준비 미완), `02`의 Monitoring 5개, 스크립트 3개는 Runtime 미적용·미실행이며 코드 상태로만 검토한다.
 
-## 항목별 변경 내용
+## 잔여 위험 — Secretbox `key1`
 
-### SEC-01 — etcd Secretbox 키 회전 (Critical)
+- 9/22 최초 구성 때 CP 간 파일 전송 경로가 없어 키를 콘솔로 수동 입력했다. 키 값은 CP 3대의 shell history와 당시 작업 세션 기록에 평문으로 남았다.
+- history 정리 증적은 control02/03만 있다(`06-history-cleanup-confirmed.txt`). control01 정리는 미확인이다.
+- baseline §8은 Secretbox 키를 "root-only·Git/Evidence 제외·**백업/회전 대상**"으로 관리하도록 정한다. #35 스킵 결정과 이 요구가 충돌하므로, #19에 위험 수용 결정(범위·기한·승인자)을 기록하거나 #35를 재개해야 한다. 이 PR은 이 결정을 대신하지 않는다.
+
+## 사후 확인 필요 (Runtime, 이 PR 범위 밖)
+
+- `kube-apiserver.yaml.bak-preenc` 백업 위치: `/etc/kubernetes/manifests/` 안이면 kubelet이 static Pod 파일로 읽을 수 있으므로 밖으로 옮긴다.
+- 9/22 적용본과 저장소 파일의 동일성: 적용 시 줄 수만 대조했다. `kubectl diff -f manifests/<file>`로 재대조한다(NetworkPolicy 12개는 9/24 운영 스냅샷과 일치 확인).
+- NodePort 30080 Service를 만들 때 `externalTrafficPolicy: Local`이어야 `transaction-api-allow`의 `10.1.93.50/32` ingress와 맞는다(Cluster면 출발지가 Node IP로 SNAT됨).
+- CI/CD Runner는 `get/update/patch`만 가지므로 `kubectl rollout status`(watch 필요)는 Forbidden이다. P1-CICD-01 Workflow에서 사용하지 않는지 확인한다.
+
+## 항목별 이력 (당시 제출 기준, 현재 상태는 위 표)
+
+### SEC-01 — etcd Secretbox (Critical)
 
 - 기존: `identity`를 provider 1번째로 올려 재작성 → 사실상 평문 저장 경로였음.
-- 수정: `scripts/rotate-secretbox-key.sh`가 6단계(`add-key → verify-decrypt → promote-key →
-  rewrite-secrets → verify-encryption → remove-old-key`)로 분리, 각 단계 수동 확인 후 진행.
-- static Pod manifest의 `--encryption-provider-config` 플래그·volume/mount 연결을 `add-key`
-  단계에서 스크립트가 직접 grep 검증.
-- 원문 비노출 검증은 hexdump grep 대신 Python으로 raw bytes를 파싱해 `k8s:enc:secretbox:v1:<key>:`
-  접두어와 key name을 정확히 추출 (16바이트 행 경계 오판 방지).
+- 2~3차: 회전 스크립트(`add-key → … → remove-old-key`)를 제출했으나 9/24 범위 조정으로 삭제. 마지막 버전은 [`2d35809`](https://github.com/321Team/infra-kubernetes/blob/2d35809313c70731c58d210b37ef29ed0a300883/scripts/rotate-secretbox-key.sh).
 
 ### SEC-02 — Secret 노출 경로 (High)
 
-- `scripts/create-secrets-safe.sh`: TokenRequest 결과는 stdout이 아닌 임시 파일(권한 600)로만 저장.
-  Harbor/DB/Grafana 비밀번호는 `--from-literal`/`--docker-password` 대신 파일 기반(`--from-file`,
-  직접 구성한 `dockerconfigjson`)으로 생성해 argv/ps 노출 경로 제거.
-- xtrace(`bash -x`) 실행 시 스크립트 자체가 거부하도록 가드 추가.
-- `trap cleanup EXIT INT TERM`으로 중단 시 임시 파일 자동 폐기(`shred -u`).
+- TokenRequest 결과는 stdout이 아닌 임시 파일(권한 600)로만 저장. Harbor/DB/Grafana 값은 `--from-literal`/`--docker-password` 대신 파일 기반으로 생성해 argv/ps 노출 경로 제거.
+- xtrace 실행 거부, `trap cleanup EXIT INT TERM`으로 임시 파일 `shred -u`.
+- 4차(PR #7 리뷰): Robot 이름 인자화, DB Secret 이름·키 정정(`db-url`), 값 파일 끝 줄바꿈 제거·여러 줄 거부.
 
-### SEC-03 — IF-24 → IF-06B 전환 (High)
+### SEC-03 — IF-24 → IF-06B (High)
 
-- baseline 근거: `FDS_Project_Implementation_Baseline_v3.1.18.md` L1063 "IF-24 ... RETIRED",
-  L1002 D34 "IF-06B 유지".
-- `manifests/03-networkpolicy.yaml`: `alertmanager-allow`의 monitor01 egress(Webhook) 제거,
-  별도 `prometheus-remote-write-allow`(IF-06B, Prometheus → monitor01 TCP 443)로 교체.
+- baseline `IF-24 RETIRED`, D34 `IF-06B 유지`. `alertmanager-allow`의 monitor01 egress 제거, `prometheus-remote-write-allow`(→ `10.250.10.30/32:443`)로 교체.
 
 ### SEC-04 — 미완성 Manifest (High)
 
-- `manifests/02-securitycontext.yaml`: 6 Deployment + 1 DaemonSet 전체에 `spec.selector`,
-  `template.metadata.labels` 추가. Monitoring 5개 워크로드에 `image` 필드 명시(버전은
-  `<실제-버전>` placeholder — 실측 확인 전 적용 금지).
-- transaction-api/fds-engine에 대응 Service 추가로 독립 apply 가능하도록 완성.
+- 6 Deployment + 1 DaemonSet에 selector/labels, Service 80→8000(IF-02A).
+- 9/22 앱 2개 UID 10001 / GID 999 / Harbor digest 실측 반영, `DATABASE_URL` secretKeyRef 추가.
+- PR #7 리뷰: Prometheus `--config.file`/`--storage.tsdb.path`·resources, KSM `--resources` 제한, node-exporter non-root·seccomp·RO rootfs·Collector 제한 보강(Monitoring은 여전히 참고 patch).
 
-### SEC-05 — Default Deny egress 구멍 (High)
+### SEC-05 — Default Deny egress (High)
 
-- `manifests/03-networkpolicy.yaml`: DNS(UDP/TCP 53, kube-dns Pod 경로), kubelet(10250, Host 경로
-  — `<Worker-Node-CIDR>` ipBlock으로 명시), IF-06B Remote Write(443)를 각각 분리된
-  NetworkPolicy로 완성. `namespaceSelector`만으로 hostNetwork 경로를 커버하지 못하는 문제를
-  ipBlock 병행으로 해결.
+- namespace 공통 DNS(UDP/TCP 53), KSM→CP 6443, Prometheus→Worker kubelet 10250(Worker 개별 IP).
+- PR #7 리뷰: node-exporter가 hostNetwork라 namespaceSelector 규칙이 매칭되지 않음을 확인하고 Worker Node IP ipBlock으로 수정.
 
-### SEC-06 — Calico HEP eth0 매핑 (Critical)
+### SEC-06 — Calico HEP (Critical)
 
-- `manifests/04-calico-hep-gnp.yaml`: `interfaceName`을 `<실제-NIC-이름>` placeholder로 변경,
-  적용 전 `ip -o link show`로 실측 필수.
-- `docs/runbooks/P1-SEC-01_HEP_GNP_ROLLOUT.md`: Bootstrap Allow → canary Worker → Worker 확대 →
-  CP → firewalld 최종 비활성화 순서와 각 단계 회귀시험·롤백 절차를 문서화.
+- 2~3차 후보 manifest·ROLLOUT runbook은 9/24 범위 조정으로 삭제. 운영 정본은 v4 패키지.
 
-### SEC-07 — 테스트 대상 IP 오류 (High)
+### SEC-07 — Probe/Deny 검증 (High)
 
-- `scripts/verify-probe-failover.sh`: `10.1.93.109:30080` → 실제 Worker(`10.1.93.105/107/108`)로 교체.
-- `allow-flow`/`deny-flow`/`probe-failover` 3개 서브커맨드로 분리, "도구 부재"와 "정책 차단
-  성공"을 구분해 기록(WARN vs PASS/FAIL). 모든 Endpoint 제외 시에만 503이 강제된다는 점을
-  주석으로 명시하고 해석을 단정하지 않음.
+- 1~2차: 대상 IP 교정, 도구 부재·부분 성공을 PASS로 보지 않음, 대조군 도입.
+- 3차(PR #7 리뷰): 위 표 참조.
 
-### SEC-08 — `auth can-i` 구문 오류 (High)
+### SEC-08 — RBAC 검증 (High)
 
-- `scripts/verify-rbac.sh`: `nodes/metrics` 같은 TYPE/NAME 결합 대신 `--subresource=metrics`
-  플래그로 교정. 예상 거부(`no`)의 non-zero exit code를 정상 케이스로 처리(`set -e` 미사용)하고
-  결과를 TSV로 기록해 Evidence화.
+- 1~2차: `--subresource` 구문, stdout·rc 쌍 판정, TSV 쓰기 실패 중단, API timeout.
+- 3차(PR #7 리뷰): 부정 검사 확대(위 표).
 
-## 남은 미확정 값 (이 PR이 채우지 않음)
+## 남은 미확정 값
 
-아래는 baseline 원본이 명시한 사전확인(§3) 완료 전까지 placeholder로 유지한다. 실측값 확보 후
-별도 커밋으로 반영하며, 이번 PR에서 임의로 채우지 않는다:
-
-- `<실제-버전>` — P1-K8S-01 Platform Ready 후 `kubectl version`으로 확인할 K8s Minor Version
-- `<확인된-UID>` / `<확인된-GID>` — 각 워크로드 공식 이미지의 non-root 지원 UID/GID
-- `<approved-digest>` — transaction-api/fds-engine의 Harbor Trivy 스캔 통과 후 SHA-256 Digest
-- `<실제-NIC-이름>` — Worker 3대의 실제 네트워크 인터페이스명
-- ~~`<monitor01-실제-IP>`~~ — baseline §6.4에서 10.250.10.30으로 확정, 반영 완료 (3차 수정)
-- ~~`<Worker-Node-CIDR>`~~ — baseline §6.2에서 개별 IP(10.1.93.105/107/108)로 확정, 반영 완료 (2차 수정)
-- `<PVC용량의-80%>` — Prometheus PVC 실제 용량 확정 후 계산
+- Monitoring 5개 `<실제-버전>` / `<확인된-UID>` / `<확인된-GID>` — 승인 Harbor digest 확정 후 해당 digest의 실제 identity로 반영.
+- Prometheus resources 초기값 — MON Lead 확정.
+- node-exporter 비활성 Collector 목록 — MON Lead 확정(P1-MON-01 AC 6 Evidence).
 
 ## Evidence
 
-이 PR 자체는 코드/스크립트 변경이며 Runtime 실행 증적을 포함하지 않는다. 실제 실행 결과는
-`docs/evidence/P1-SEC-01/` 경로(별도 Evidence 저장 위치)에 SHA-256과 함께 수집하며, 이
-Revision Notes에는 식별자와 참조만 남긴다 (README "소스와 증적" 원칙).
+- 9/22 Runtime 실행 기록: `docs/evidence/P1-SEC-01/GATE2_RUNTIME_EXECUTION_20260922.md`(당시 기록 보존). 정본 사본은 [fds-project-evidence#33](https://github.com/321Team/fds-project-evidence/pull/33)(병합 `455d1c1`)이며, 원본 로그 제출은 [evidence#34](https://github.com/321Team/fds-project-evidence/issues/34)에서 추적한다.
+- 이 문서는 식별자와 참조만 남긴다. 원본 로그·비밀값은 포함하지 않는다.
