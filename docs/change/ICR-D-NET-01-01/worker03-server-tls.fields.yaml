@@ -1,0 +1,3 @@
+# Review-only field merge specification; NOT a complete config or API manifest.
+# Merge into worker03 local KubeletConfiguration only after the linked runbook gates.
+serverTLSBootstrap: true
