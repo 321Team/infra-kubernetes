@@ -1,6 +1,6 @@
 # ICR-D-NET-01-01 scrape fix — local validation (review response 2)
 # date: 2026-09-26T05:43:00Z
-# base: 5b30e191f74c530506f739bfcce64d657e0a5669 (+ working tree changes in this commit)
+# base: 6590a30121932c6c7f2dcd941c49b173a89fab44 (+ working tree changes in this commit)
 Python 3.11.15
 PyYAML 6.0.1
 $ python3 tests/validate.py -v

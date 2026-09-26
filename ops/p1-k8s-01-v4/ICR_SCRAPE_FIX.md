@@ -46,6 +46,7 @@ Worker별 새 규칙의 source:
   | node-exporter | `.105/.107:9100` = 2 (`.108`은 이미 UP) | UP 기대 |
 
   node-exporter target은 Worker 3대뿐이다(DaemonSet에 CP toleration 없음). 따라서 적용 후 기대치는 **최대 14/20 UP**이다. PR #31이 적용되지 않았다면 12/20이다. **별도 결정 항목:** MON AC "Target 전부 UP"을 위해 CP 6개 target을 어떻게 처리할지 정해야 한다. 선택지는 CP GNP에 Worker 노드 IP → TCP 10250 ingress를 추가하는 것과 Prometheus scrape 대상에서 CP를 제외하는 것이다. 담당은 K8S/SEC Lead와 MON Lead이며, 이 PR의 범위가 아니다.
+- **10250 소비자는 현재 Prometheus뿐이다.** 클러스터에 metrics-server가 없다(Deployment 0건, `v1beta1.metrics.k8s.io` APIService NotFound — 이재환 [MON 확인](https://github.com/321Team/infra-kubernetes/pull/39#issuecomment-5843620571), 2026-09-26 콘솔 제출). 나중에 metrics-server나 HPA를 도입하면, 그 Pod가 도는 노드를 이 규칙의 source에 넣을지 다시 판단해야 한다.
 - **worker03 kubelet serving 인증서 IP SAN 문제는 별개다.** 10250을 열어도 worker03 target은 PR #31(serverTLSBootstrap)이 적용되기 전까지 TLS 오류로 DOWN일 수 있다.
 
 ## 3. PR #27 canary와의 관계
