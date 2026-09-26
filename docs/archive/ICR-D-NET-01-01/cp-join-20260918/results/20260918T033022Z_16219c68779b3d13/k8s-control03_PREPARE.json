@@ -1,0 +1,30 @@
+{
+  "automatic_reset": false,
+  "backup_path": "/var/lib/fds/cp-join/16219c68779b3d13/private-backup/etc-kubernetes",
+  "baseline_inventory": [
+    {
+      "gid": 0,
+      "kind": "directory",
+      "mode": 493,
+      "mtime_ns": 1787196632000000000,
+      "path": "manifests",
+      "uid": 0
+    }
+  ],
+  "cleanup": "NOT_NEEDED_CP3_EMPTY",
+  "configuration_mutation": false,
+  "created_at": "2026-09-18T03:31:56.855183+00:00",
+  "ip": "10.1.93.104",
+  "job_id": "16219c68779b3d13",
+  "join_attempted": false,
+  "node": "k8s-control03",
+  "schema": "fds.cp-join-node-candidate.v1",
+  "state": "PREPARED",
+  "status": "PREPARED",
+  "updated_at": "2026-09-18T03:31:56.857479+00:00",
+  "versions": {
+    "containerd": "v2.3.5",
+    "kubeadm": "v1.36.4",
+    "kubelet": "v1.36.4"
+  }
+}

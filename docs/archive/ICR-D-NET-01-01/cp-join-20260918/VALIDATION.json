@@ -1,0 +1,25 @@
+{
+  "schema": "fds.cp-join-candidate-validation.v1",
+  "status": "STATIC_MOCK_PASS_RUNTIME_NOT_EXECUTED",
+  "tests_passed": 38,
+  "tests_failed": 0,
+  "suites": {
+    "handoff": 12,
+    "node": 13,
+    "controller": 9,
+    "credential": 4
+  },
+  "embedded_helpers_byte_equal": true,
+  "python_compile": "PASS",
+  "runner_sha256": "460b5f8603fe2798e6f379b85efd5cb56926fd9f37308fb961c204e14c6d8147",
+  "vm_join_tested": false,
+  "systemd_live_transfer_tested": false,
+  "etcd_failure_recovery_tested": false,
+  "automatic_member_remove_or_reset": false,
+  "onsite_key_available": false,
+  "limitations": [
+    "Failure paths preserve connectivity and evidence; destructive member/quorum recovery remains operator procedure.",
+    "New combined source/retention scope requires owner review before onsite execute.",
+    "Runtime persistence across reload/reboot is not established."
+  ]
+}

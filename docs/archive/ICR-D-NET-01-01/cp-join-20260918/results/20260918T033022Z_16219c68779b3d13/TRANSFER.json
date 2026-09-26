@@ -1,0 +1,18 @@
+{
+  "cp1_accepted": false,
+  "handoff_receipt_sha256": "9029c16573132813cb63b125fc099d7ceeace7868652087693e4189b8a6af6e1",
+  "independent_result_acceptance": "PENDING",
+  "job_id": "c564ae97530dfe80",
+  "join_may_start": true,
+  "legacy_timer_active": false,
+  "runtime_persistence": "NOT_ESTABLISHED",
+  "runtime_sha256": "5bd288c327fd1224b9bc60f2973cd6456d4681b8007a952e37632ee101e71457",
+  "scope": {
+    "cp1_runtime_ownership_transfer": true,
+    "deadline": "NO_AUTOMATIC_WITHDRAWAL",
+    "failure": "PHASE_OWNED_RECOVERY_ONLY",
+    "join": true,
+    "success": "RETAIN_JOINED_CLUSTER_AND_RUNTIME"
+  },
+  "status": "CP1_JOIN_RUNTIME_RETAINED"
+}
