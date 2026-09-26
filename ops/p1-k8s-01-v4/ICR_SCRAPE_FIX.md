@@ -31,12 +31,21 @@ Worker별 새 규칙의 source:
 - **노드 신원 허용이다.** SNAT 후 source는 노드 IP이므로, 이 규칙은 Prometheus만이 아니라 다른 Worker 노드에서 나오는 모든 트래픽(해당 노드의 다른 Pod 포함)에 9100/10250을 연다.
   - **Pod 단위 제한은 일부 namespace에만 있다.** P1-SEC-01 `03-networkpolicy.yaml`(PR #7 HEAD `4e58239`, 9/22 적용분)의 default-deny egress는 `fds-app`·`monitoring-node`·`monitoring-api` 3개 namespace뿐이다. 그 밖의 namespace(`kube-system`, `default`, Calico 등)의 Pod는 egress 제한이 없어 **다른 Worker의 9100/10250에 도달할 수 있다.** 운영 NetworkPolicy 17개 전체를 여기서 다시 열거하지는 않았으므로, 적용 직전 스냅샷으로 확인한다.
   - **실제로 늘어나는 노출:** 지금도 모든 Pod는 자기 노드의 9100에 도달할 수 있다(Pod→자기 Host는 HEP를 거치지 않음). 이 변경으로 도달 범위가 "자기 노드"에서 "Worker 3대 전체"로 넓어진다. node-exporter가 내보내는 것은 호스트 자원 지표뿐이고, node-exporter SA에는 API 권한이 없다(이재환 [MON 의견](https://github.com/321Team/infra-kubernetes/pull/39#issuecomment-5843357366), 2026-09-26 조회).
-  - **10250:** kubelet 인증·인가가 추가 방어선이다. 실측 근거는 worker03 1대뿐이다(anonymous=false, webhook=true, authorization=Webhook — [`KUBELET_TLS_WORKER03_20260924.md`](https://github.com/321Team/infra-kubernetes/blob/main/docs/change/ICR-D-NET-01-01/KUBELET_TLS_WORKER03_20260924.md), PR #31). worker01·02는 **같은 설정이라고 가정**한 것이며 실측하지 않았다.
+  - **10250:** kubelet 인증·인가가 추가 방어선이다. 실측 근거는 worker03 1대뿐이다(anonymous=false, webhook=true, authorization=Webhook — [`KUBELET_TLS_WORKER03_20260924.md`](https://github.com/321Team/infra-kubernetes/blob/bac062d9e764dc8f519a70b8e1aaf95ff3f27c8c/docs/change/ICR-D-NET-01-01/KUBELET_TLS_WORKER03_20260924.md), PR #31). worker01·02는 **같은 설정이라고 가정**한 것이며 실측하지 않았다.
   - **수용 기록:** 9100 무인증 노출 확대는 MON Lead가 수용했다([의견](https://github.com/321Team/infra-kubernetes/pull/39#issuecomment-5843357366)). K8S/SEC 관점의 수용은 독립 리뷰에서 판단한다.
 - **Prometheus 위치에 묶지 않았다.** Prometheus Pod가 다른 Worker로 재배치되어도 동작하도록 Worker 3대를 모두 source로 둔다. 특정 노드로 고정하는 안(PR #27 canary처럼 `.108`만)은 재스케줄 시 다시 장애가 난다.
 - **자기 노드는 제외했다.** 같은 노드의 Pod→Host 트래픽은 이 HostEndpoint(ens160)를 지나지 않는다.
 - **Egress는 바꾸지 않았다.** 이 GNP는 `applyOnForward: false`이고 Pod 트래픽은 forward 경로이므로 Host Egress 규칙의 대상이 아니다. PR23 counter의 worker03 egress Allow 증가도 이와 모순되지 않는다. 적용 후 worker03 egress DROP이 관측되면 이 가정이 틀린 것이므로 중단한다(§4).
-- **CP 대상 scrape는 범위 밖이다.** 14 DOWN 중 CP 노드 target이 있는지는 확인하지 않았다. CP GNP의 10250 ingress는 CP 3대만 허용하므로, CP kubelet/node-exporter scrape가 필요하면 별도 결정이 필요하다.
+- **CP 대상 scrape는 이 PR로 해소되지 않는다.** 2026-09-26 04:43Z `up` 조회(미병합 [fds-project-evidence#47](https://github.com/321Team/fds-project-evidence/pull/47) head `bc7d0bc`, `evidence/P1-MON-01/received-20260926T0445Z/run3-mon17fast/prom-queries.txt`)에서 20 target 중 6 UP / 14 DOWN이다.
+
+  | DOWN 구분 | target | 이 PR 적용 후 |
+  |---|---|---|
+  | CP kubelet·cadvisor | `.102/.103/.104:10250` × 2 job = 6 | **DOWN 유지.** CP GNP의 10250 ingress는 CP 3대만 허용 |
+  | Worker kubelet·cadvisor | `.105/.107:10250` × 2 = 4 | UP 기대 |
+  | worker03 kubelet·cadvisor | `.108:10250` × 2 = 2 | PR #31(serving TLS) 적용 전에는 TLS IP SAN 오류로 DOWN 가능 |
+  | node-exporter | `.105/.107:9100` = 2 (`.108`은 이미 UP) | UP 기대 |
+
+  node-exporter target은 Worker 3대뿐이다(DaemonSet에 CP toleration 없음). 따라서 적용 후 기대치는 **최대 14/20 UP**이다. PR #31이 적용되지 않았다면 12/20이다. **별도 결정 항목:** MON AC "Target 전부 UP"을 위해 CP 6개 target을 어떻게 처리할지 정해야 한다. 선택지는 CP GNP에 Worker 노드 IP → TCP 10250 ingress를 추가하는 것과 Prometheus scrape 대상에서 CP를 제외하는 것이다. 담당은 K8S/SEC Lead와 MON Lead이며, 이 PR의 범위가 아니다.
 - **worker03 kubelet serving 인증서 IP SAN 문제는 별개다.** 10250을 열어도 worker03 target은 PR #31(serverTLSBootstrap)이 적용되기 전까지 TLS 오류로 DOWN일 수 있다.
 
 ## 3. PR #27 canary와의 관계
@@ -52,7 +61,7 @@ Worker별 새 규칙의 source:
 1. §5의 #26 재실행 조건 3건 해소.
 2. 정확한 HEAD의 독립 리뷰 승인과 K8S/SEC Lead의 실행 기록(SHA·담당·창·회수 책임).
 3. 적용 직전 운영 GNP `fds-k8s-host-k8s-worker0{1,2,3}`의 현재 spec을 보관하고 `kubectl diff` 결과가 **추가 규칙 1개**만인지 확인한다. 다른 차이(9/22 out-of-band 수정 등)가 있으면 중단한다.
-4. Positive: Worker별 `.105/.107/.108:9100`, `:10250` target이 서로 다른 post-change scrape 2회에서 health=up.
+4. Positive: 서로 다른 post-change scrape 2회에서 node-exporter `.105/.107/.108:9100` 3/3과 kubelet·cadvisor `.105/.107:10250` 4/4가 health=up이어야 한다. `.108:10250` 2개는 PR #31 적용 여부에 따라 판정하며, 미적용이면 TLS 오류로 따로 기록한다. CP `.102~.104:10250` 6개는 DOWN 유지가 기대값이다(§2). 전체 기대치는 14/20(PR #31 적용 시) 또는 12/20이다.
 5. Negative: CP(`.102`), LB(`.109`), 관리 SSH source(`10.250.10.10`) 또는 외부 승인 source에서 Worker 9100 접속이 차단되는지 확인한다. Worker 9101 등 다른 포트가 계속 차단되는지 확인한다. 시험 source는 승인된 것만 쓴다.
 6. Regression: Gate 2 9/9 기존 시험, VXLAN 4789, SSH 22, API 6443 경로가 유지되는지 확인한다.
 7. 복구: 보관한 GNP spec을 재적용한다(HEP·failsafe는 건드리지 않음).
