@@ -269,12 +269,12 @@ class OperationalTests(unittest.TestCase):
 
     def test_audit_rc1_exact_no_matches_on_stderr_is_zero_avc(self):
         # Runtime reproduction on all six audit-4.2.1-3.el10 nodes, 2026-09-26.
-        r = self.audit_query((1, '', '<no matches>\\n'))
+        r = self.audit_query((1, '', '<no matches>\n'))
         self.assertEqual((r['status'], r['no_matches'], r['avc_query']),
                          ('NO_AVC_REVIEW_REQUIRED', True, 'NO_MATCH'))
 
     def test_audit_rc1_mixed_stdout_and_no_matches_stderr_is_error(self):
-        r = self.audit_query((1, 'partial output\\n', '<no matches>\\n'))
+        r = self.audit_query((1, 'partial output\n', '<no matches>\n'))
         self.assertEqual((r['status'], r['no_matches'], r['avc_query']),
                          ('HOLD', False, 'ERROR'))
 
