@@ -1,0 +1,21 @@
+{
+  "configuration_mutation": false,
+  "firewall": {
+    "cp_rules": 6,
+    "lb_rules": 1,
+    "mutation": false,
+    "state": "EXISTING_RUNTIME_RULES_PRESENT"
+  },
+  "job_id": "16219c68779b3d13",
+  "join_readiness": "CONTROLLER_CLUSTER_AND_HANDOFF_CHECK_REQUIRED",
+  "manifest_count": 3,
+  "node": "k8s-control02",
+  "schema": "fds.cp-join-node-candidate.v1",
+  "state": "PREPARE_CHECKS_PASS",
+  "status": "PREPARE_CHECKS_PASS",
+  "versions": {
+    "containerd": "v2.3.5",
+    "kubeadm": "v1.36.4",
+    "kubelet": "v1.36.4"
+  }
+}

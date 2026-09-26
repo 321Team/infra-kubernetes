@@ -1,0 +1,141 @@
+{
+  "api_ready": true,
+  "endpoint_health": [
+    {
+      "endpoint": "https://10.1.93.102:2379",
+      "health": true,
+      "took": "5.702462ms"
+    },
+    {
+      "endpoint": "https://10.1.93.103:2379",
+      "health": true,
+      "took": "8.9809ms"
+    },
+    {
+      "endpoint": "https://10.1.93.104:2379",
+      "health": true,
+      "took": "37.182929ms"
+    }
+  ],
+  "endpoint_status": [
+    {
+      "Endpoint": "https://10.1.93.102:2379",
+      "Status": {
+        "dbSize": 4046848,
+        "dbSizeInUse": 2506752,
+        "dbSizeQuota": 2147483648,
+        "downgradeInfo": {},
+        "header": {
+          "cluster_id": 4016449463138308410,
+          "member_id": 1755679419291778130,
+          "raft_term": 6,
+          "revision": 742034
+        },
+        "leader": 1755679419291778130,
+        "raftAppliedIndex": 1113661,
+        "raftIndex": 1113661,
+        "raftTerm": 6,
+        "storageVersion": "3.6.0",
+        "version": "3.6.8"
+      }
+    },
+    {
+      "Endpoint": "https://10.1.93.104:2379",
+      "Status": {
+        "dbSize": 4046848,
+        "dbSizeInUse": 2457600,
+        "dbSizeQuota": 2147483648,
+        "downgradeInfo": {},
+        "header": {
+          "cluster_id": 4016449463138308410,
+          "member_id": 8667064845340811211,
+          "raft_term": 6,
+          "revision": 742034
+        },
+        "leader": 1755679419291778130,
+        "raftAppliedIndex": 1113661,
+        "raftIndex": 1113661,
+        "raftTerm": 6,
+        "storageVersion": "3.6.0",
+        "version": "3.6.8"
+      }
+    },
+    {
+      "Endpoint": "https://10.1.93.103:2379",
+      "Status": {
+        "dbSize": 4046848,
+        "dbSizeInUse": 2449408,
+        "dbSizeQuota": 2147483648,
+        "downgradeInfo": {},
+        "header": {
+          "cluster_id": 4016449463138308410,
+          "member_id": 13644800064703665051,
+          "raft_term": 6,
+          "revision": 742034
+        },
+        "leader": 1755679419291778130,
+        "raftAppliedIndex": 1113661,
+        "raftIndex": 1113661,
+        "raftTerm": 6,
+        "storageVersion": "3.6.0",
+        "version": "3.6.8"
+      }
+    }
+  ],
+  "members": [
+    {
+      "client_urls": [
+        "https://10.1.93.102:2379"
+      ],
+      "id": "1755679419291778130",
+      "learner": false,
+      "name": "k8s-control01",
+      "peer_urls": [
+        "https://10.1.93.102:2380"
+      ]
+    },
+    {
+      "client_urls": [
+        "https://10.1.93.104:2379"
+      ],
+      "id": "8667064845340811211",
+      "learner": false,
+      "name": "k8s-control03",
+      "peer_urls": [
+        "https://10.1.93.104:2380"
+      ]
+    },
+    {
+      "client_urls": [
+        "https://10.1.93.103:2379"
+      ],
+      "id": "13644800064703665051",
+      "learner": false,
+      "name": "k8s-control02",
+      "peer_urls": [
+        "https://10.1.93.103:2380"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "control_plane": true,
+      "name": "k8s-control01",
+      "ready": true,
+      "uid": "75735bd5-937a-463f-a93f-a8e7e51fa7a1"
+    },
+    {
+      "control_plane": true,
+      "name": "k8s-control02",
+      "ready": true,
+      "uid": "dc01d1a4-037a-4870-8349-46f8ac8cd666"
+    },
+    {
+      "control_plane": true,
+      "name": "k8s-control03",
+      "ready": true,
+      "uid": "999f59ae-63fa-4693-aa2a-dea0504c3c7d"
+    }
+  ],
+  "observed_at": "2026-09-18T03:33:36.720131+00:00"
+}

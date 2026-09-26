@@ -1,0 +1,20 @@
+{
+  "schema": "fds.cp-join-operation-contract.v1",
+  "operator": "GWONUK",
+  "reviewer": "hayeounglee",
+  "targets": ["k8s-control02", "k8s-control03"],
+  "existing_cp1_job": "c564ae97530dfe80",
+  "cleanup": "BACKUP_ETC_KUBERNETES_AND_QUARANTINE_THREE_PINNED_CP2_MANIFESTS",
+  "join": "CP2_THEN_CP3_WITH_NORMAL_KUBEADM_PREFLIGHT",
+  "cp1_runtime_ownership_transfer": true,
+  "success": "RETAIN_JOINED_CLUSTER_AND_RUNTIME",
+  "failure": "PHASE_OWNED_RECOVERY_ONLY",
+  "deadline": "NO_AUTOMATIC_WITHDRAWAL",
+  "retention_end": "EXPLICIT_REPLACEMENT_PROTECTION_HANDOFF_OR_MEMBERSHIP_AWARE_WITHDRAWAL",
+  "independent_acceptance": "PENDING",
+  "permanent_promotion": false,
+  "worker_join": false,
+  "automatic_reset": false,
+  "automatic_etcd_member_removal": false,
+  "automatic_snapshot_restore": false
+}
