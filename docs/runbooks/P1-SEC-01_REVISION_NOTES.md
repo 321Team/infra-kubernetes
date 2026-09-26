@@ -10,7 +10,7 @@
 | ID | 수준 | 이 PR의 대응 | 상태 | Runtime / 잔여 |
 |---|---|---|---|---|
 | SEC-01 | Critical | PR 범위 제외(회전 스크립트 삭제). 원 지적(identity 우선 = 평문 저장)은 2026-09-22 최초 구성(`secretbox → identity`)으로 해소 | 원 지적 해소 / 회전 **미대응** | raw etcd `k8s:enc:secretbox:v1:key1:` 확인(아래 Evidence). 키 회전·rollback 증거 없음. `key1` 노출 이력은 잔여 위험(아래) |
-| SEC-02 | High | `scripts/create-secrets-safe.sh` — 파일 기반 생성, xtrace 거부, trap 정리. Robot 이름 인자화(운영 `robot$worker`), DB Secret을 `transaction-api-db-credentials`/`DATABASE_URL`로 정정, 값 파일 끝 줄바꿈 제거 | FIXED_PENDING_REVIEW | 9/22 실제 Secret은 수동 생성. 이 스크립트 자체는 Runtime 미실행 |
+| SEC-02 | High | `scripts/create-secrets-safe.sh` — 파일 기반 생성, xtrace 거부, trap 정리. Robot 이름 인자화(운영 `robot$worker`), DB Secret을 `transaction-api-db-credentials`/`DATABASE_URL`로 정정(SSL 파라미터 `require`/`verify-*` 필수 — db01 hostssl), 값 파일 끝 줄바꿈 제거 | FIXED_PENDING_REVIEW | 9/22 실제 Secret은 수동 생성. 이 스크립트 자체는 Runtime 미실행 |
 | SEC-03 | High | `manifests/03-networkpolicy.yaml` — IF-24 제거, IF-06B `10.250.10.30/32:443` | CLOSED_STATIC | TLS/Auth/Payload 계약은 P1-MON-01 소관 |
 | SEC-04 | High | `manifests/02-securitycontext.yaml` — selector/labels, Service 80→8000(IF-02A), 앱 UID/GID/digest 확정 | App 2개 적용 / Monitoring 5개 BLOCKED_INPUT | Monitoring 이미지 digest·UID 미확정. 이 파일은 APP/MON 원본에 적용할 참고 patch |
 | SEC-05 | High | `manifests/03-networkpolicy.yaml` — namespace 공통 DNS, KSM→CP:6443, Prometheus→Worker kubelet 10250, **Prometheus→Worker node-exporter 9100을 Node IP ipBlock으로 수정**(hostNetwork라 namespaceSelector 미매칭) | FIXED_PENDING_REVIEW | 9/22 적용본의 9100 규칙은 namespaceSelector여서 실효가 없었고 운영은 MON 보완 정책(`allow-prometheus-egress-node-exporter`)으로 동작. baseline §11.5에 따라 9100은 Host Firewall과 함께 판정 |
@@ -54,6 +54,7 @@
 - TokenRequest 결과는 stdout이 아닌 임시 파일(권한 600)로만 저장. Harbor/DB/Grafana 값은 `--from-literal`/`--docker-password` 대신 파일 기반으로 생성해 argv/ps 노출 경로 제거.
 - xtrace 실행 거부, `trap cleanup EXIT INT TERM`으로 임시 파일 `shred -u`.
 - 4차(PR #7 리뷰): Robot 이름 인자화, DB Secret 이름·키 정정(`db-url`), 값 파일 끝 줄바꿈 제거·여러 줄 거부.
+- 4차 보강(이재환 리뷰 2026-09-25, DB 담당 확인): db01 `pg_hba.conf`가 `hostssl … fds_app … scram-sha-256`만 허용하므로 `db-url`은 `sslmode=`/`ssl=` 중 `require`·`verify-ca`·`verify-full`이 있어야 하고, 없거나 `disable`·`allow`·`prefer` 등이면 Secret 생성 전에 거부한다. 계정명(`fds_app`)은 URL 입력값이며 스크립트에 고정하지 않는다.
 
 ### SEC-03 — IF-24 → IF-06B (High)
 
@@ -94,3 +95,10 @@
 
 - 9/22 Runtime 실행 기록: `docs/evidence/P1-SEC-01/GATE2_RUNTIME_EXECUTION_20260922.md`(당시 기록 보존). 정본 사본은 [fds-project-evidence#33](https://github.com/321Team/fds-project-evidence/pull/33)(병합 `455d1c1`)이며, 원본 로그 제출은 [evidence#34](https://github.com/321Team/fds-project-evidence/issues/34)에서 추적한다.
 - 이 문서는 식별자와 참조만 남긴다. 원본 로그·비밀값은 포함하지 않는다.
+
+
+## 2026-09-27 최신 보완
+
+- `create-secrets-safe.sh db-url`: db01 `hostssl` 계약에 맞춰 `sslmode=require|verify-ca|verify-full` 또는 동등 `ssl=` 값만 허용한다. SSL 파라미터 없음/disable/allow/prefer는 Secret 생성 전에 거부한다.
+- APP/HA 정합: P1-HA-01 #22의 "Replica 3개 Worker 분산" AC에 맞춰 이 참고 manifest의 `transaction-api`, `fds-engine`을 각각 `replicas: 3`으로 조정했다. 이 변경은 Runtime 적용 완료를 의미하지 않는다.
+- Host GNP 9100/10250 소스 정식화는 PR #39가 main에 병합됐으나 Runtime APPLY는 별도 Gate다. 이 PR의 NetworkPolicy Runtime 결과와 구분한다.

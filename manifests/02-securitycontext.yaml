@@ -54,7 +54,7 @@ metadata:
   labels:
     app: transaction-api
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: transaction-api
@@ -147,7 +147,7 @@ metadata:
   labels:
     app: fds-engine
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: fds-engine
