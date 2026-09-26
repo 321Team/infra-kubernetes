@@ -1,0 +1,29 @@
+# NodePort 30080 preDNAT 후보. p1-k8s-01-v4 Worker HEP(fds.example/role=worker) 전용.
+# 구 manifests/calico HEP/Bootstrap과 조합 적용하지 말 것.
+# v4 자동 배포 편입 미완료. Runtime 적용·양성/음성 인수 아님.
+#
+# 9/22 k8s-control01 실측: order 50, preDNAT true, applyOnForward true,
+# selector "fds.example/role == 'worker'", edge01 10.1.93.50/32 Allow + TCP30080 Deny.
+# 관련: infra-kubernetes#21/#23, fds-project-baseline#19,
+# pullrequestreview-5274034835, fds-project-evidence#28(이 GNP는 Gate2 최종 스냅샷 미포함).
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: nodeport-30080-allow
+spec:
+  selector: fds.example/role == 'worker'
+  order: 50
+  applyOnForward: true
+  preDNAT: true
+  types: ["Ingress"]
+  ingress:
+    - action: Allow
+      protocol: TCP
+      source:
+        nets: ["10.1.93.50/32"]
+      destination:
+        ports: [30080]
+    - action: Deny
+      protocol: TCP
+      destination:
+        ports: [30080]
