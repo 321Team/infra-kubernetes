@@ -91,15 +91,42 @@ class PolicyTests(unittest.TestCase):
             (self.w, 'ingress', 'TCP', '10.1.93.102', '10.1.93.105', 179, False),
             (self.w, 'ingress', 4, '10.1.93.102', '10.1.93.105', None, False),
             (self.w, 'egress', 'UDP', '10.1.93.105', '192.0.2.123', 123, True),
-            (self.w, 'egress', 'UDP', '10.1.93.105', '192.0.2.124', 123, False)]
+            (self.w, 'egress', 'UDP', '10.1.93.105', '192.0.2.124', 123, False),
+            # ICR-D-NET-01-01 cross-node scrape: worker peers only, 9100/10250 only.
+            (self.w, 'ingress', 'TCP', '10.1.93.108', '10.1.93.105', 9100, True),
+            (self.w, 'ingress', 'TCP', '10.1.93.108', '10.1.93.105', 10250, True),
+            (self.w, 'ingress', 'TCP', '10.1.93.107', '10.1.93.105', 9100, True),
+            (self.w, 'ingress', 'TCP', '10.1.93.105', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.102', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.55', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.108', '10.1.93.105', 9101, False),
+            (self.w, 'ingress', 'UDP', '10.1.93.108', '10.1.93.105', 9100, False),
+            (self.w, 'egress', 'TCP', '10.1.93.105', '10.1.93.107', 9100, False),
+            (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 9100, False),
+            (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 10250, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.109', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.109', '10.1.93.105', 10250, False),
+            (self.w, 'ingress', 'TCP', '10.250.10.10', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.250.10.10', '10.1.93.105', 10250, False)]
         for proto in ('UDP', 'TCP'):
             for dns in ('10.1.93.52', '10.1.93.53'):
                 cases.append((self.w, 'egress', proto, '10.1.93.105', dns, 53, True))
             cases.append((self.w, 'egress', proto, '10.1.93.105', '8.8.8.8', 53, False))
-        self.assertEqual(len(cases), 29)
+        self.assertEqual(len(cases), 44)
         for policy, direction, proto, src, dst, port, expect in cases:
             with self.subTest(direction=direction, src=src, dst=dst, port=port):
                 self.assertEqual(allows(policy, direction, proto, src, dst, port), expect)
+
+    def test_worker_scrape_rule_excludes_self_and_precedes_deny(self):
+        for name in ('k8s-worker01', 'k8s-worker02', 'k8s-worker03'):
+            ing = render.policies(self.c, name)[0]['spec']['ingress']
+            scrape = [r for r in ing if r.get('destination', {}).get('ports') == [9100, 10250]]
+            self.assertEqual(len(scrape), 1)
+            own = self.c['nodes'][name]['ip'] + '/32'
+            self.assertEqual(sorted(scrape[0]['source']['nets']),
+                             sorted(x for x in render.WORKERS if x != own))
+            self.assertEqual(ing[-1], {'action': 'Deny'})
+            self.assertLess(ing.index(scrape[0]), len(ing) - 1)
 
     def test_failsafe_does_not_reopen_dns_or_worker_cp_ports(self):
         for name in render.ORDER:

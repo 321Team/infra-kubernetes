@@ -18,6 +18,7 @@ IPS = dict(zip(ORDER, ['10.1.93.105', '10.1.93.107', '10.1.93.108',
                        '10.1.93.102', '10.1.93.103', '10.1.93.104']))
 NODES = [x + '/32' for x in IPS.values()]
 CP = [IPS[x] + '/32' for x in ORDER if 'control' in x]
+WORKERS = [IPS[x] + '/32' for x in ORDER if 'worker' in x]
 DNS = ['10.1.93.52/32', '10.1.93.53/32']
 SSH = '10.250.10.10/32'
 LB = '10.1.93.109/32'
@@ -135,6 +136,15 @@ def policies(c, name):
                 'selector': selector}, 'destination': {'ports': [6443]}})
     else:
         out.append(rule('TCP', ['10.1.93.54/32'], [443], 'egress'))
+        # ICR-D-NET-01-01: Prometheus Pod traffic to another worker's node IP leaves
+        # through natOutgoing and arrives with the sending worker's node IP as source
+        # (evidence PR23 counters). Allow only node-exporter 9100 and kubelet 10250
+        # from the other workers. This is node identity, not a Prometheus-only grant;
+        # the own node is excluded because Pod-to-local-host traffic does not cross
+        # this HostEndpoint. Egress is unchanged: forwarded Pod traffic is outside
+        # applyOnForward=false host policy.
+        peers = [x for x in WORKERS if x != n['ip'] + '/32']
+        ing.append(rule('TCP', peers, [9100, 10250], 'ingress'))
     if n['api_egress_nets']:
         out.append(rule('TCP', n['api_egress_nets'], [6443], 'egress'))
     if n['registry_nets']:
