@@ -45,17 +45,27 @@ def classify_ausearch(r):
     """Classify one ausearch result as OK, NO_MATCH or ERROR.
 
     ausearch exits 1 both for "no matching events" and for real failures, so
-    rc alone cannot tell them apart. Only the exact '<no matches>' text with
-    rc=1 and empty stderr counts as zero events. rc=1 with empty stdout, any
-    stderr, or any other rc is a query failure and must never read as 0 AVC.
+    rc alone cannot tell them apart. audit-4.2.1-3.el10 was observed in the
+    2026-09-26 six-node runtime precheck to emit the exact '<no matches>'
+    sentinel on stderr (rc=1, empty stdout), while existing fixtures emit the
+    same sentinel on stdout. Accept only either exact single-channel form.
+    Any other stderr/output combination remains ERROR so real query failures
+    can never be interpreted as zero AVC events.
     """
     text = (r.stdout or '').strip()
     err = (r.stderr or '').strip()
-    if r.returncode not in (0, 1) or err:
-        return 'ERROR'
+
     if r.returncode == 1:
-        return 'NO_MATCH' if text == '<no matches>' else 'ERROR'
-    return 'OK' if text and text != '<no matches>' else 'ERROR'
+        if text == '<no matches>' and not err:
+            return 'NO_MATCH'
+        if err == '<no matches>' and not text:
+            return 'NO_MATCH'
+        return 'ERROR'
+
+    if r.returncode == 0 and text and not err:
+        return 'OK'
+
+    return 'ERROR'
 
 
 def filter_by_window(raw_text, start, end):
