@@ -1,6 +1,6 @@
-# ICR-D-NET-01-01 scrape fix — local validation
-# date: 2026-09-25T05:00:24Z
-# base: 4e0c2c4071c36e37e3bd533b685a655b45d93008 (+ working tree changes in this commit)
+# ICR-D-NET-01-01 scrape fix — local validation (review response)
+# date: 2026-09-26T05:25:40Z
+# base: 2b4d0e890f5fa6a69718e4a1795a6de20bf7bea4 (+ working tree changes in this commit)
 Python 3.11.15
 PyYAML 6.0.1
 $ python3 tests/validate.py -v
@@ -41,7 +41,7 @@ test_roles_api_reciprocity_and_workload_scope (__main__.PolicyTests.test_roles_a
 test_worker_scrape_rule_excludes_self_and_precedes_deny (__main__.PolicyTests.test_worker_scrape_rule_excludes_self_and_precedes_deny) ... ok
 
 ----------------------------------------------------------------------
-Ran 23 tests in 0.099s
+Ran 23 tests in 0.115s
 
 OK
 $ python3 -m compileall -q code tests && bash -n code/cockpit.sh

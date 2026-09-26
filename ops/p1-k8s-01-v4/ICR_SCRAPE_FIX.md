@@ -14,7 +14,7 @@
 |---|---|
 | `code/render.py` | Worker GNP ingress에 `TCP 9100, 10250` ← **다른 Worker 노드 IP/32**(자기 노드 제외) 규칙 1개를 명시적 Deny 앞에 추가. CP GNP·Egress·Felix failsafe·HEP는 변경 없음 |
 | `policy_templates/k8s-worker0{1,2,3}.gnp.yaml.in` | 위 renderer로 재생성한 열람본. 기존 renderer로 기존 템플릿 6개를 byte 단위로 재현할 수 있음을 먼저 확인한 뒤 같은 방법으로 생성 |
-| `tests/validate.py` | flow matrix 29→40건(허용 3, 거부 8). Worker별 source 집합·자기 노드 제외·Deny 앞 위치 검사 1건 추가 |
+| `tests/validate.py` | flow matrix 29→44건(허용 3, 거부 12). Worker별 source 집합·자기 노드 제외·Deny 앞 위치 검사 1건 추가 |
 | `PACKAGE_SHA256SUMS` | 패키지 전체 파일 해시 목록(아래 §5) |
 | `validation/icr-scrape-fix-unit-tests.txt` | 이번 로컬 시험 로그 |
 
@@ -28,7 +28,11 @@ Worker별 새 규칙의 source:
 
 ### 설계 판단과 한계
 
-- **노드 신원 허용이다.** SNAT 후 source는 노드 IP이므로, 이 규칙은 Prometheus만이 아니라 다른 Worker 노드에서 나오는 모든 트래픽(해당 노드의 다른 Pod 포함)에 9100/10250을 연다. Pod 단위 제한은 Kubernetes NetworkPolicy(`monitoring-api` egress, P1-SEC-01 `03-networkpolicy.yaml`)가 맡는다. 10250은 kubelet 인증·인가(anonymous=false, Webhook)가 추가 방어선이다. 9100(node-exporter)은 인증이 없으므로 이 확대를 리뷰에서 명시적으로 수용해야 한다.
+- **노드 신원 허용이다.** SNAT 후 source는 노드 IP이므로, 이 규칙은 Prometheus만이 아니라 다른 Worker 노드에서 나오는 모든 트래픽(해당 노드의 다른 Pod 포함)에 9100/10250을 연다.
+  - **Pod 단위 제한은 일부 namespace에만 있다.** P1-SEC-01 `03-networkpolicy.yaml`(PR #7 HEAD `4e58239`, 9/22 적용분)의 default-deny egress는 `fds-app`·`monitoring-node`·`monitoring-api` 3개 namespace뿐이다. 그 밖의 namespace(`kube-system`, `default`, Calico 등)의 Pod는 egress 제한이 없어 **다른 Worker의 9100/10250에 도달할 수 있다.** 운영 NetworkPolicy 17개 전체를 여기서 다시 열거하지는 않았으므로, 적용 직전 스냅샷으로 확인한다.
+  - **실제로 늘어나는 노출:** 지금도 모든 Pod는 자기 노드의 9100에 도달할 수 있다(Pod→자기 Host는 HEP를 거치지 않음). 이 변경으로 도달 범위가 "자기 노드"에서 "Worker 3대 전체"로 넓어진다. node-exporter가 내보내는 것은 호스트 자원 지표뿐이고, node-exporter SA에는 API 권한이 없다(이재환 [MON 의견](https://github.com/321Team/infra-kubernetes/pull/39#issuecomment-5843357366), 2026-09-26 조회).
+  - **10250:** kubelet 인증·인가가 추가 방어선이다. 실측 근거는 worker03 1대뿐이다(anonymous=false, webhook=true, authorization=Webhook — [`KUBELET_TLS_WORKER03_20260924.md`](https://github.com/321Team/infra-kubernetes/blob/main/docs/change/ICR-D-NET-01-01/KUBELET_TLS_WORKER03_20260924.md), PR #31). worker01·02는 **같은 설정이라고 가정**한 것이며 실측하지 않았다.
+  - **수용 기록:** 9100 무인증 노출 확대는 MON Lead가 수용했다([의견](https://github.com/321Team/infra-kubernetes/pull/39#issuecomment-5843357366)). K8S/SEC 관점의 수용은 독립 리뷰에서 판단한다.
 - **Prometheus 위치에 묶지 않았다.** Prometheus Pod가 다른 Worker로 재배치되어도 동작하도록 Worker 3대를 모두 source로 둔다. 특정 노드로 고정하는 안(PR #27 canary처럼 `.108`만)은 재스케줄 시 다시 장애가 난다.
 - **자기 노드는 제외했다.** 같은 노드의 Pod→Host 트래픽은 이 HostEndpoint(ens160)를 지나지 않는다.
 - **Egress는 바꾸지 않았다.** 이 GNP는 `applyOnForward: false`이고 Pod 트래픽은 forward 경로이므로 Host Egress 규칙의 대상이 아니다. PR23 counter의 worker03 egress Allow 증가도 이와 모순되지 않는다. 적용 후 worker03 egress DROP이 관측되면 이 가정이 틀린 것이므로 중단한다(§4).
@@ -38,7 +42,7 @@ Worker별 새 규칙의 source:
 ## 3. PR #27 canary와의 관계
 
 - PR #27은 `.108 → .105:9100` 한 경로만 여는 임시 canary GNP(order 90)다. 이 정식안은 그것을 대체한다.
-- 정식안 적용 시점에 canary 객체가 남아 있으면, PR #27 절차대로 UID·resourceVersion precondition으로 먼저 회수한다. 두 정책을 병행 상시 운영하지 않는다.
+- **순서: 정식안 적용·확인 → canary 회수.** 두 정책 모두 Allow라 충돌하지 않는다. canary를 먼저 회수하면 정식안 적용 전까지 `.108→.105:9100` scrape가 다시 끊긴다. 정식안의 Positive(§4-4)를 확인한 뒤 PR #27 절차대로 UID·resourceVersion precondition으로 canary를 회수하고, 회수 기록을 적용 기록에 남긴다. 두 정책을 병행 상시 운영하지 않는다.
 - canary로 얻은 Positive/Negative 결과는 이 정식안의 사전 근거로 쓸 수 있다. 다만 정식안은 source와 port가 더 넓으므로 음성 시험을 다시 해야 한다(§4).
 
 ## 4. 적용 전·후 조건 (이 PR 범위 밖, 담당 Lead 실행)
@@ -49,7 +53,7 @@ Worker별 새 규칙의 source:
 2. 정확한 HEAD의 독립 리뷰 승인과 K8S/SEC Lead의 실행 기록(SHA·담당·창·회수 책임).
 3. 적용 직전 운영 GNP `fds-k8s-host-k8s-worker0{1,2,3}`의 현재 spec을 보관하고 `kubectl diff` 결과가 **추가 규칙 1개**만인지 확인한다. 다른 차이(9/22 out-of-band 수정 등)가 있으면 중단한다.
 4. Positive: Worker별 `.105/.107/.108:9100`, `:10250` target이 서로 다른 post-change scrape 2회에서 health=up.
-5. Negative: CP(`.102`) 또는 외부 승인 source에서 Worker 9100 접속이 차단되는지 확인한다. Worker 9101 등 다른 포트가 계속 차단되는지 확인한다.
+5. Negative: CP(`.102`), LB(`.109`), 관리 SSH source(`10.250.10.10`) 또는 외부 승인 source에서 Worker 9100 접속이 차단되는지 확인한다. Worker 9101 등 다른 포트가 계속 차단되는지 확인한다. 시험 source는 승인된 것만 쓴다.
 6. Regression: Gate 2 9/9 기존 시험, VXLAN 4789, SSH 22, API 6443 경로가 유지되는지 확인한다.
 7. 복구: 보관한 GNP spec을 재적용한다(HEP·failsafe는 건드리지 않음).
 
@@ -94,7 +98,7 @@ cat /tmp/ausearch-yesterday.err
 | 단계 | 결과 |
 |---|---|
 | 기존 renderer의 템플릿 재현 | 6/6 byte 동일 (변경 전 HEAD `4e0c2c4`) |
-| `python3 tests/validate.py` | 23/23 PASS (`validation/icr-scrape-fix-unit-tests.txt`) |
+| `python3 tests/validate.py` | 23/23 PASS (`validation/icr-scrape-fix-unit-tests.txt`). 리뷰 대응 후 flow matrix 40→44건 |
 | 변이 시험 | `render.py`만 변경 전으로 되돌리면 flow matrix 3건 + 신규 검사 1건 FAIL → 새 시험이 변경을 실제로 검출함 |
 | `python3 -m compileall -q code tests`, `bash -n code/cockpit.sh` | PASS |
 | `tests/check-crd.py` | NOT RUN (Calico upstream CRD 파일 미보유). 추가 규칙은 기존 규칙과 같은 필드(protocol/source.nets/destination.ports)만 사용 |

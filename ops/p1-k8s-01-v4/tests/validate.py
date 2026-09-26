@@ -103,12 +103,16 @@ class PolicyTests(unittest.TestCase):
             (self.w, 'ingress', 'UDP', '10.1.93.108', '10.1.93.105', 9100, False),
             (self.w, 'egress', 'TCP', '10.1.93.105', '10.1.93.107', 9100, False),
             (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 9100, False),
-            (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 10250, False)]
+            (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 10250, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.109', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.1.93.109', '10.1.93.105', 10250, False),
+            (self.w, 'ingress', 'TCP', '10.250.10.10', '10.1.93.105', 9100, False),
+            (self.w, 'ingress', 'TCP', '10.250.10.10', '10.1.93.105', 10250, False)]
         for proto in ('UDP', 'TCP'):
             for dns in ('10.1.93.52', '10.1.93.53'):
                 cases.append((self.w, 'egress', proto, '10.1.93.105', dns, 53, True))
             cases.append((self.w, 'egress', proto, '10.1.93.105', '8.8.8.8', 53, False))
-        self.assertEqual(len(cases), 40)
+        self.assertEqual(len(cases), 44)
         for policy, direction, proto, src, dst, port, expect in cases:
             with self.subTest(direction=direction, src=src, dst=dst, port=port):
                 self.assertEqual(allows(policy, direction, proto, src, dst, port), expect)
