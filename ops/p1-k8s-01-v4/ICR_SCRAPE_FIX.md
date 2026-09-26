@@ -1,6 +1,6 @@
 # ICR-D-NET-01-01 — Worker 간 9100/10250 scrape 정식 수정안
 
-상태: **초안 / 독립 리뷰 전 / APPLY HOLD / RUNTIME NOT RUN**. 이 문서와 코드 변경은 운영 적용 승인이 아니다.
+상태: **독립 리뷰 승인 이력 있음 / APPLY HOLD / RUNTIME NOT RUN**. 이 문서와 코드 변경은 운영 적용 승인이 아니다. 최신 main 통합 후에는 새 HEAD 재리뷰가 필요하다.
 
 ## 1. 문제
 
@@ -74,8 +74,8 @@ Worker별 새 규칙의 source:
 | 조건 | 이 PR | 상태 |
 |---|---|---|
 | 패키지 전체 해시 목록 | `PACKAGE_SHA256SUMS` 신설. 자기 자신을 뺀 패키지 내 **모든 파일**(기존 `SHA256SUMS`가 빠뜨린 `SCRIPT_MODIFICATION_HISTORY.md`, `REVIEW_FIX_SHA256SUMS`, `MODIFIED_SHA256SUMS`, `validation/review-fix-unit-tests.txt`, 그리고 기존 `SHA256SUMS` 자체 포함). 기존 `SHA256SUMS`는 v4.0 원본 기록이라 수정하지 않는다(현재 5개 불일치는 저장소 편입 시 README 갱신과 §4 리뷰 수정 4파일 때문이며 예상된 결과) | 이 PR로 해소(리뷰 대기) |
-| `ausearch -ts yesterday` 실측 | 아래 읽기 전용 확인 절차를 명시. **실행은 하지 않았다** | 미해소 — 담당 이하영 |
-| CP1 GNP UDP 123 out-of-band 규칙 정리·NTP 목적지 확정 | 이 PR 범위 밖 | 미해소 — 담당 이하영 |
+| `ausearch -ts yesterday` 실측 | 2026-09-27 KST 6/6 노드(`audit-4.2.1-3.el10`) read-only 확인. 공통 `rc=1 / stdout empty / stderr exact <no matches>`이며 #42 수정 계약으로 `NO_MATCH` 판정 | **해소 — 6/6 PASS** |
+| CP1 GNP UDP 123 out-of-band 규칙 정리·NTP 목적지 확정 | control01 live GNP UDP/123 Allow가 `162.159.200.1/32`, `162.159.200.123/32`; chrony selected source `.123`, Leap Normal, offset 약 0.15ms 확인 | **해소 — live 정합 PASS** |
 
 ### `ausearch -ts yesterday` 읽기 전용 확인 절차
 
@@ -99,7 +99,8 @@ cat /tmp/ausearch-yesterday.err
 |---|---|
 | rc=0, stdout 비어 있지 않음, stderr 빈 파일 | PASS (`OK`) |
 | rc=1, stdout 정확히 `<no matches>`, stderr 빈 파일 | PASS (`NO_MATCH`) |
-| 그 외(stderr 있음, rc=1+빈 stdout, rc∉{0,1}) | FAIL — 자정을 넘는 작업창 금지. 창을 UTC 자정 이후 시작·같은 날 종료로 한정하거나 코드 수정 필요 |
+| rc=1, stdout 빈 파일, stderr 정확히 `<no matches>` | PASS (`NO_MATCH`) — audit-4.2.1-3.el10 6대 실측 형태 |
+| 그 외(다른 stderr, stdout/stderr 혼합 내용, rc∉{0,1}) | FAIL — `ERROR/HOLD` |
 
 결과(rc·바이트 수·stderr 원문·`rpm -q audit`)를 evidence 저장소에 남긴다. AVC 본문은 필요한 범위만 보관한다.
 
@@ -108,9 +109,9 @@ cat /tmp/ausearch-yesterday.err
 | 단계 | 결과 |
 |---|---|
 | 기존 renderer의 템플릿 재현 | 6/6 byte 동일 (변경 전 HEAD `4e0c2c4`) |
-| `python3 tests/validate.py` | 23/23 PASS (`validation/icr-scrape-fix-unit-tests.txt`). 리뷰 대응 후 flow matrix 40→44건 |
+| `python3 tests/validate.py` | 기존 PR 로컬 23/23 PASS. 최신 main(#42 포함)+#39 no-commit 통합 회귀는 2026-09-27 KST **25 tests OK, skipped=1(root-required cockpit)**, failures/errors 0 |
 | 변이 시험 | `render.py`만 변경 전으로 되돌리면 flow matrix 3건 + 신규 검사 1건 FAIL → 새 시험이 변경을 실제로 검출함 |
 | `python3 -m compileall -q code tests`, `bash -n code/cockpit.sh` | PASS |
 | `tests/check-crd.py` | NOT RUN (Calico upstream CRD 파일 미보유). 추가 규칙은 기존 규칙과 같은 필드(protocol/source.nets/destination.ports)만 사용 |
-| renderer 실제 출력 생성 | NOT RUN — `runtime-input.json` 실측 입력 미완(설계상 생성 차단) |
+| renderer 실제 출력 생성 | NOT RUN — 최신 main 통합 및 새 HEAD 재리뷰 후 진행 |
 | server-side dry-run / Runtime / CI | NOT RUN |
