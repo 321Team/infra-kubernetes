@@ -219,6 +219,24 @@ spec:
       port: 9090
       targetPort: 9090
 ---
+# ══════════════════════════════════════════════════════════════════════════
+# 참고용 — apply 금지 (infra-kubernetes#7 리뷰 2번, supreme33-kr MON Lead)
+#
+# 아래 prometheus/alertmanager/grafana/kube-state-metrics/node-exporter 5개
+# Deployment/DaemonSet은 monitoring-api/monitoring-node 워크로드 소유자인
+# infra-monitoring과 이름이 겹친다. 실제 배포 원본은 infra-monitoring이며,
+# 이 파일을 클러스터에 kubectl apply 하면 그쪽에서 이미 운영 중인 객체를
+# placeholder(image/UID/GID 미확정) 값으로 덮어쓸 수 있다.
+#
+# 이 블록은 P1-SEC-01 SecurityContext/RBAC 설계 의도를 남겨두는 참고자료일
+# 뿐이며, 실제 적용 대상은 infra-monitoring의 아래 파일이다:
+#   prometheus           -> kubernetes/monitoring/prometheus.yaml
+#   alertmanager          -> kubernetes/monitoring/alertmanager-deploy.yaml
+#   grafana                -> kubernetes/monitoring/grafana.yaml
+#   kube-state-metrics    -> kubernetes/monitoring/kube-state-metrics.yaml
+#   node-exporter          -> kubernetes/monitoring/node-exporter.yaml
+# SA/RBAC 원본도 동일하게 infra-monitoring 쪽으로 옮겼다(06-rbac.yaml 참고).
+# ══════════════════════════════════════════════════════════════════════════
 apiVersion: apps/v1
 kind: Deployment
 metadata:

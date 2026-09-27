@@ -1,14 +1,26 @@
 # P1-SEC-01 / D-SEC-01 §4(RBAC/ServiceAccount) 반영.
 #
-# 02-securitycontext.yaml의 7개 Deployment/DaemonSet이 이미 아래 ServiceAccount
-# 이름을 serviceAccountName으로 참조하고 있었지만(transaction-api-sa, fds-engine-sa,
-# prometheus-sa, alertmanager-sa, grafana-sa, kube-state-metrics-sa, node-exporter-sa),
-# 정작 ServiceAccount/Role/ClusterRole 오브젝트 자체가 이 저장소 어디에도 없었다.
-# scripts/verify-rbac.sh가 검증하는 대상이 실존하도록 이 파일에서 생성한다.
+# 02-securitycontext.yaml의 Deployment/DaemonSet이 아래 ServiceAccount 이름을
+# serviceAccountName으로 참조한다(transaction-api-sa, fds-engine-sa,
+# kube-state-metrics-sa, node-exporter-sa). scripts/verify-rbac.sh가 검증하는
+# 대상이 실존하도록 이 파일에서 생성한다.
+#
+# 2026-09-27 정정 (infra-kubernetes#7 리뷰 2번, supreme33-kr MON Lead):
+# monitoring-api ServiceAccount/RBAC(prometheus-sa/prometheus-role/prometheus-binding,
+# alertmanager-sa, grafana-sa)는 infra-monitoring이 소스이므로 이 파일에서 제거한다.
+# infra-monitoring#20에 동일 목적의 SA/RBAC가 있다:
+#   - kubernetes/monitoring/prometheus-rbac.yaml (ServiceAccount prometheus-sa,
+#     ClusterRole/Binding prometheus-sa-kubelet-metrics — nodes/metrics get만)
+#   - kubernetes/monitoring/monitoring-api-serviceaccounts.yaml (alertmanager-sa,
+#     grafana-sa — RBAC 없음, automountServiceAccountToken: false)
+# 이 PR을 병합 후 apply해도 infra-monitoring 쪽 객체와 이름이 겹치는 리소스를
+# 만들지 않는다. kube-state-metrics-sa/node-exporter-sa는 infra-monitoring과
+# 정의가 동일해 유지한다(중복이지만 값 불일치 위험 없음).
 #
 # D-SEC-01 원칙: "Prometheus와 kube-state-metrics는 ClusterRole을 공유하지 않는다."
-# 두 ClusterRole 모두 secrets에 대한 get/list/watch를 포함하지 않으며(§4 명시적 금지
-# 사항), nodes/proxy도 부여하지 않는다(kubelet 프록시를 통한 컨테이너 우회 명령 차단).
+# kube-state-metrics ClusterRole은 secrets에 대한 get/list/watch를 포함하지 않으며
+# (§4 명시적 금지 사항), nodes/proxy도 부여하지 않는다(kubelet 프록시를 통한 컨테이너
+# 우회 명령 차단).
 ---
 # ── K8s API를 호출하지 않는 ServiceAccount (RBAC 불필요, Pod identity 목적만) ──
 apiVersion: v1
@@ -30,20 +42,6 @@ kind: ServiceAccount
 metadata:
   name: node-exporter-sa
   namespace: monitoring-node
-automountServiceAccountToken: false
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: alertmanager-sa
-  namespace: monitoring-api
-automountServiceAccountToken: false
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: grafana-sa
-  namespace: monitoring-api
 automountServiceAccountToken: false
 ---
 # ── kube-state-metrics-sa: 클러스터 Object Discovery 전용 ClusterRole ──────────
@@ -82,44 +80,6 @@ subjects:
 roleRef:
   kind: ClusterRole
   name: kube-state-metrics-role
-  apiGroup: rbac.authorization.k8s.io
----
-# ── prometheus-sa: Service Discovery + kubelet/API metrics 전용 ClusterRole ──
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: prometheus-sa
-  namespace: monitoring-api
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: prometheus-role
-rules:
-  # 1. Service Discovery (파드/노드/서비스 탐색용)
-  - apiGroups: [""]
-    resources: ["pods", "services", "endpoints", "namespaces", "nodes"]
-    verbs: ["get", "list", "watch"]
-  # 2. kubelet 지표 수집 (nodes/metrics만 — nodes/proxy는 부여하지 않음)
-  - apiGroups: [""]
-    resources: ["nodes/metrics"]
-    verbs: ["get"]
-  # 3. API Server 자체 지표 수집 (non-resource URL)
-  - nonResourceURLs: ["/metrics"]
-    verbs: ["get"]
-  # secrets, nodes/proxy, create/update/patch/delete — 명시적 금지 (D-SEC-01 §4). 부여하지 않음.
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: prometheus-binding
-subjects:
-  - kind: ServiceAccount
-    name: prometheus-sa
-    namespace: monitoring-api
-roleRef:
-  kind: ClusterRole
-  name: prometheus-role
   apiGroup: rbac.authorization.k8s.io
 ---
 # ── cicd-runner-sa: fds-app Namespace 내 지정 Deployment 2개만 갱신 가능 ──────
