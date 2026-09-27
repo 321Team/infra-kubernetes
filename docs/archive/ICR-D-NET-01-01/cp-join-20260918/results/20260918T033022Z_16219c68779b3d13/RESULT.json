@@ -1,0 +1,17 @@
+{
+  "cp1_transferred": true,
+  "current_node": "k8s-control03",
+  "ended_at": "2026-09-18T03:33:37.219319+00:00",
+  "independent_acceptance": "PENDING",
+  "job_id": "16219c68779b3d13",
+  "nodes_joined": [
+    "k8s-control02",
+    "k8s-control03"
+  ],
+  "recovery_complete": null,
+  "schema": "fds.cp-join-controller-result.v1",
+  "source_commit": "bab9608557205b3bf5294b729d0960517d7a2847",
+  "stage": "CREDENTIAL_REVOCATION",
+  "started_at": "2026-09-18T03:30:22.441707+00:00",
+  "status": "THREE_CP_READY_RUNTIME_RETAINED_REVIEW_REQUIRED"
+}

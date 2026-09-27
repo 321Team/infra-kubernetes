@@ -1,0 +1,9 @@
+{
+  "job_id": "c564ae97530dfe80",
+  "join_may_start": false,
+  "legacy_timer_active": true,
+  "legacy_withdraw_at": "2026-09-18T15:15:00+09:00",
+  "runtime_sha256": "5bd288c327fd1224b9bc60f2973cd6456d4681b8007a952e37632ee101e71457",
+  "status": "CP1_HANDOFF_NOT_COMMITTED",
+  "timer_mutation_attempted": false
+}

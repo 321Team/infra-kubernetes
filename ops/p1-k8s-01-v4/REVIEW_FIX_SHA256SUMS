@@ -1,0 +1,4 @@
+b430db8546b4b0c601fddcaac8ecd5e1ebfc8c700ec29d06743280e7ba720772  code/audit-window.py
+b8d6eea85ab46643efc4bb91fe120daa0c023be4abbd7e3eae9b18d9116498e0  code/cluster-change.py
+8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f  code/node-evidence.py
+e9310f73a87d5aa52927145ed9683e41348ac18208b7eb490e6a19bc16cc5bb3  tests/validate.py

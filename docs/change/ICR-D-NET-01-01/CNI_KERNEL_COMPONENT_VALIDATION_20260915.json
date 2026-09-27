@@ -1,0 +1,68 @@
+{
+  "schema": "fds.cni-kernel-component-local-validation.v1",
+  "date_utc": "2026-09-15T10:09:42.477460+00:00",
+  "parent_head": "cb7fc695c294273bfd17106b89bcddf310e29750",
+  "scope": "LOCAL_STATIC_MOCK_BOUNDARIES_ONLY",
+  "unittest": {
+    "command": "python3 -m unittest discover -s tests -p 'test_cni_*.py' -v",
+    "total": 117,
+    "passed": 117,
+    "original_diagnostic": 83,
+    "preparation": 6,
+    "new_component": 28,
+    "real_linux_firewall_integration": false,
+    "log_sha256": "bc5330ca9fa1b7671abdd3665832b7ca7deceab3e82f2d19cc9943b861a57bfd"
+  },
+  "syntax_parse": "PASS",
+  "default_plan": {
+    "mode": "PLAN_ONLY",
+    "scope": "KERNEL_COMPONENT_ONLY",
+    "scenarios": [
+      "normal",
+      "kill",
+      "deadline",
+      "cleanup-retry",
+      "reboot"
+    ],
+    "source_hashes": {
+      "run-cni-kernel-integration.py": "939f58f54a36dacac8216b14f4437493e9cf18745b06f5b30532ffed3de26ee5",
+      "cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+      "cp1-cni-diagnostic-node.py": "574d2160360e924f2eb74f40c04b6059dc4b459c09cedf2d93c7d1b61cc6e486",
+      "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+    },
+    "requires_reviewed_lab_decision": true,
+    "production_qualification_supported": false
+  },
+  "unit_verify": {
+    "status": "PARTIAL_TOOL_CHECK",
+    "returncode": 1,
+    "stdout": "",
+    "stderr": "fds-ki-aaaaaaaaaaaaaaaa-firewall.service: Command /usr/sbin/firewalld is not executable: No such file or directory\n",
+    "scope": "Unit static parse only; missing firewalld binary in this environment prevents a full verify success. No service started."
+  },
+  "environment": {
+    "pid1": "supervisord",
+    "effective_capabilities_hex": "0000000000000000"
+  },
+  "sources_sha256": {
+    "scripts/run-cni-kernel-integration.py": "939f58f54a36dacac8216b14f4437493e9cf18745b06f5b30532ffed3de26ee5",
+    "scripts/cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+    "scripts/cp1-cni-diagnostic-node.py": "574d2160360e924f2eb74f40c04b6059dc4b459c09cedf2d93c7d1b61cc6e486",
+    "scripts/node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+  },
+  "production_sources_unchanged": true,
+  "production_source_bundle_sha256": "a53374c6d6bb113ff86b3f94659757df56e241e4f5e7b42386b107db19079a01",
+  "runtime_component_executed": false,
+  "full_linux_integration_executed": false,
+  "ci_reported_pass": false,
+  "qualification_created": false,
+  "acceptance_criteria_credit": false,
+  "remaining": [
+    "Independent review of new component source",
+    "Additional VMware capability/tool/source binding inspect",
+    "Actual normal component run and packet/trace/cleanup review",
+    "Actual remaining component recovery scenarios",
+    "Physical VM NIC/tunnel/Calico fixture and production adapter/recovery integration",
+    "Full seven-flow/six-recovery evidence and independent qualification review"
+  ]
+}

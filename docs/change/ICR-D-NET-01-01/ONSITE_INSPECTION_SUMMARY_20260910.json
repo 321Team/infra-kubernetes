@@ -1,0 +1,145 @@
+{
+  "schema": "fds.onsite-inspection-review.v1",
+  "execution_source_commit": "afc246d2db041c68de5014972107484dad122558",
+  "outer_archive_sha256": "e3e2d9c40f4fd57f8a445ca52e6756f81c455c4ad1ddbc9aa00689009857966b",
+  "outer_manifest_files": {
+    "ENVIRONMENT.json": "484c99a08b6cd60bf4aaf438452659d136788910f098fe4fcf354729f2a821ec",
+    "FDS_CP1_Canary_8b86bj66.tar.gz": "f50bf0c2da85de698b1276e40de38d4396d617ad07255e3e009062cb296036e5",
+    "FDS_CP1_Canary_8b86bj66.tar.gz.sha256": "15138a47996df4713f86b66372a6de50a72fd0c7448ca781dd56fdcf8c86348e",
+    "INSPECT.json": "b73cf6d62354f04a68514caaa526a3428582fce90f8b61ca9e8d265683a2ae08",
+    "INSPECT.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "INSPECT.stdout.log": "41877d5550827eebd769de1d1f8471d4134a2aba5ca01dadef78086fe3cd9ee7",
+    "INSPECT_RESULT.json": "fcd501675125c76bc23bea64cd4e80c46011a5533204ce54ce7a86c7e0dedb3c",
+    "LINUX_TEST.json": "dec833e3d9d9ac8c9801b5521d61c580bbcfa0975493427eb01cbcec1500d4fb",
+    "LINUX_TEST.stderr.log": "a596f2076c1ea6edd97ab93739d1fefb765398926fede79dc06120c5a09e8a81",
+    "LINUX_TEST.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "RESULT.json": "8029823584660ef822b9a4a0c533d9b25aeaa461b95d4a2779d376a3379c9c5e",
+    "SOURCE_LOCK.json": "fe69df022915584a349cff528d76906029e49ca173a5ddbef3664de00105a49c",
+    "collect-pr2-onsite.py": "c954d15e3fd69ecc883ac6ca41bb5daaeaa3456e7294e1dbca5b8c44ec580264"
+  },
+  "inner_archive_sha256": "f50bf0c2da85de698b1276e40de38d4396d617ad07255e3e009062cb296036e5",
+  "inner_manifest_files": {
+    "REQUEST.json": "0f3f1e12d67d497c09c0652c8d11a6bce8dfbb11f79c862c9ff170b80c2970c8",
+    "RESULT.json": "fcd501675125c76bc23bea64cd4e80c46011a5533204ce54ce7a86c7e0dedb3c",
+    "k8s-control01.json": "f426c298653b4a51c36395672bd1393609199767998e233dde32e06ace33d0c2",
+    "k8s-control02.json": "18c0fc2c3f1d09b009dec0cc8f724c9f3a19b09d1adb89fa45c7af621401ff85",
+    "k8s-control03.json": "b4823bd7509500a46a44027bf703f91d0be1ee1ef58afaed63d14b370354f5c8"
+  },
+  "runtime_applied": false,
+  "general_queries": 37,
+  "snapshot_queries": 78,
+  "queries_rc0": 115,
+  "failed_queries": 0,
+  "truncated_query_outputs": 0,
+  "targets": {
+    "k8s-control01": {
+      "created_at": "2026-09-10T10:15:57.964101+00:00",
+      "ended_at": "2026-09-10T10:16:01.816660+00:00",
+      "status": "INSPECTED_REVIEW_REQUIRED",
+      "canary_inputs_complete": true,
+      "before_sha256": "18d316967c24a16506734833f0bada6bb8febf86b0327bf35ed7a538871e3864",
+      "gaps": [],
+      "failed_queries": [],
+      "transport": "PASS",
+      "evidence_sha256": "f426c298653b4a51c36395672bd1393609199767998e233dde32e06ace33d0c2",
+      "query_count": 20,
+      "snapshot_query_count": 26,
+      "tcp_to_cp1": [
+        {
+          "port": 2379,
+          "connected": true,
+          "errno": null
+        },
+        {
+          "port": 2380,
+          "connected": true,
+          "errno": null
+        },
+        {
+          "port": 10250,
+          "connected": true,
+          "errno": null
+        }
+      ],
+      "topology_sha256": "b4eb4932d00f53396e2fd55e704eb4246ce6a3d4a963d1029472f16c43e0c4af",
+      "node_count": 1,
+      "member_count": 1,
+      "learner_count": 0
+    },
+    "k8s-control02": {
+      "created_at": "2026-09-10T10:16:02.380727+00:00",
+      "ended_at": "2026-09-10T10:16:05.478384+00:00",
+      "status": "INSPECTED_REVIEW_REQUIRED",
+      "canary_inputs_complete": false,
+      "before_sha256": "881f54336ac6e0687720b975bc6e0eb0d719beed81050f96886629f0c752092e",
+      "gaps": [],
+      "failed_queries": [],
+      "transport": "PASS",
+      "evidence_sha256": "18c0fc2c3f1d09b009dec0cc8f724c9f3a19b09d1adb89fa45c7af621401ff85",
+      "query_count": 9,
+      "snapshot_query_count": 26,
+      "tcp_to_cp1": [
+        {
+          "port": 2379,
+          "connected": false,
+          "errno": 113
+        },
+        {
+          "port": 2380,
+          "connected": false,
+          "errno": 113
+        },
+        {
+          "port": 10250,
+          "connected": false,
+          "errno": 113
+        }
+      ]
+    },
+    "k8s-control03": {
+      "created_at": "2026-09-10T10:16:06.005007+00:00",
+      "ended_at": "2026-09-10T10:16:09.082270+00:00",
+      "status": "INSPECTED_REVIEW_REQUIRED",
+      "canary_inputs_complete": false,
+      "before_sha256": "5a56c0c2cafca98f831eaaddd096ceb43292b3c5e90b6873457eec10261a0baa",
+      "gaps": [],
+      "failed_queries": [],
+      "transport": "PASS",
+      "evidence_sha256": "b4823bd7509500a46a44027bf703f91d0be1ee1ef58afaed63d14b370354f5c8",
+      "query_count": 8,
+      "snapshot_query_count": 26,
+      "tcp_to_cp1": [
+        {
+          "port": 2379,
+          "connected": false,
+          "errno": 113
+        },
+        {
+          "port": 2380,
+          "connected": false,
+          "errno": 113
+        },
+        {
+          "port": 10250,
+          "connected": false,
+          "errno": 113
+        }
+      ]
+    }
+  },
+  "calico": {
+    "hostendpoints": 0,
+    "globalnetworkpolicies": 0,
+    "calico_node_observed": "1/1 Running",
+    "ippool_modes": [
+      {
+        "ipipMode": "Never",
+        "vxlanMode": "CrossSubnet",
+        "natOutgoing": true
+      }
+    ],
+    "bgp_and_mtu_acceptance": "NOT_VERIFIED"
+  },
+  "cp2_residual_note": "Three control-plane manifests remain; standard etcd/kubelet paths absent. Original join phase and nonstandard data path unverified.",
+  "comparison_to_jvgkgfm9": "All three observed firewall/NM snapshots, CP1 topology, TCP result rows and CP2 residual metadata match at the two collection times."
+}

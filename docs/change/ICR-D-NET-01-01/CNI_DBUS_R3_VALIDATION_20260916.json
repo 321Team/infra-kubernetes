@@ -1,0 +1,57 @@
+{
+  "schema": "fds.cni-dbus-r3-validation.v1",
+  "parent_head": "5f9dd61f551b3a88029d6112e2b66b9cefa91634",
+  "source_hashes": {
+    "run-cni-kernel-integration.py": "48e0e800dfad4679d10d604436a3ec5c433925b45f98659aaf562ba59e18bed9",
+    "cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+    "cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+  },
+  "kernel_bundle_sha256": "e3930449699c963b367109f87191122f47e9e20b306a60f0dbd091a9144794c6",
+  "previous_runtime": {
+    "job_id": "3271fd1489888551",
+    "start_kst": "2026-09-16T15:22:17.073694+09:00",
+    "evidence_archive": "FDS_CNI_Kernel_Component_a5qduh17.tar.gz",
+    "evidence_archive_sha256": "52908e90636fbfb838160e42e8c9b813ee7cf8ff8fa54bd3b18111a54994bd18",
+    "inner_files_verified": 18,
+    "status": "COMPONENT_FAILED_REVIEW_REQUIRED",
+    "root_cause": "dbus-daemon rejects bus-global allow user inside per-user policy",
+    "flows_measured": 0,
+    "pcap_trace_files": 0,
+    "cleanup_complete": true,
+    "recovery_disarmed": true,
+    "fixture_namespaces_absent": true,
+    "host_before_after_equal": true,
+    "recovery_pending": false,
+    "independent_recovery_exercised": false
+  },
+  "static": "Python AST and source hashes PASS",
+  "mock": {
+    "run": 211,
+    "passed": 211,
+    "skipped": 0,
+    "command": "python3 -B -m unittest discover -s tests -p 'test_cni*.py' -v"
+  },
+  "local_dbus_process": {
+    "version": "1.14.10",
+    "run": 3,
+    "passed": 1,
+    "skipped": 2,
+    "passed_case": "original per-user connection rule rejected by real dbus-daemon",
+    "blocked_cases": [
+      "corrected daemon readiness/name ownership",
+      "default admission deny with root exception removed"
+    ],
+    "blocker": "AF_UNIX socket creation returns EPERM in this execution environment",
+    "initial_probe_result": "1 parser reproduction passed; 2 socket-backed cases failed on environment EPERM before readiness",
+    "command": "python3 -B -m unittest discover -s tests -p 'test_dbus_config_runtime.py' -v"
+  },
+  "nonroot_client_runtime": "NOT_TESTED: setuid is denied in this environment",
+  "new_source_target_vm_inspect": "PENDING",
+  "new_source_target_vm_runtime": "NOT_RUN",
+  "new_source_independent_review": "PENDING",
+  "ci": "NOT_VERIFIED",
+  "merge": "NOT_PERFORMED",
+  "execution_approved": false,
+  "acceptance_criteria_credit": false
+}

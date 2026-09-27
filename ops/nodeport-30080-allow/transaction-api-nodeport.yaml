@@ -1,0 +1,29 @@
+# IF-02 edge01 10.1.93.50/32 → Worker .105/.107/.108 TCP 30080 → transaction-api (P1-SEC-01 #19)
+#
+# D18(DEC-P1-ENTRY-01): 접근 제한 NodePort + externalTrafficPolicy: Local.
+#   Local로 edge01 출발지(10.1.93.50)를 Pod까지 보존한다. 실제 Client 주소는 edge의 X-Forwarded-For.
+#   Local에서는 transaction-api Ready Pod가 없는 Worker로 들어온 요청은 응답하지 않는다(정상).
+#   edge는 Worker별 /readyz 점검으로 정상 Worker에만 보내야 한다.
+# 접근 제한은 같은 디렉터리의 GNP nodeport-30080-allow(.50/32만 Allow, 나머지 30080 Deny)가 한다.
+#
+# 기존 ClusterIP Service `transaction-api`(80/9091)는 바꾸지 않는다. 외부 진입용 Service를 따로 둔다.
+# Port 80 → Pod 8000은 D18 "Edge→Service80→Pod8000"과 기존 ClusterIP의 http 포트를 따른다.
+# 적용·시험 절차: TEST_30080.md. 병합은 적용이 아니다.
+apiVersion: v1
+kind: Service
+metadata:
+  name: transaction-api-nodeport
+  namespace: fds-app
+  labels:
+    app: transaction-api
+spec:
+  type: NodePort
+  externalTrafficPolicy: Local
+  selector:
+    app: transaction-api
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
+      nodePort: 30080

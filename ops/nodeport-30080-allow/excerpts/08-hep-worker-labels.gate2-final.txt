@@ -1,0 +1,7 @@
+# source: fds-project-evidence main 11e28a82
+# path: evidence/P1-K8S-01/gate2-final-20260922/08-hep-full.yaml
+# blob: 08b7d09305f39237d9d340be519d23b1ab042c33
+# extracted: Worker HEP 3개의 name/node/IP/NIC/role만. 전문은 evidence 저장소.
+# fds-k8s-k8s-worker01 node=k8s-worker01 ip=10.1.93.105 nic=ens160 role=worker package=p1-k8s-01-v4
+# fds-k8s-k8s-worker02 node=k8s-worker02 ip=10.1.93.107 nic=ens160 role=worker package=p1-k8s-01-v4
+# fds-k8s-k8s-worker03 node=k8s-worker03 ip=10.1.93.108 nic=ens160 role=worker package=p1-k8s-01-v4

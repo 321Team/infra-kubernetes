@@ -63,3 +63,5 @@ NTP 설정 읽기는 root 소유·안전한 권한의 `/etc/chrony.conf`, `/etc/
 4. #14에 필요한 최소 정책 후보와 NTP 승인 공란을 정리하고 #10에 클러스터 잔여 조건을 연결한다. 자동 apply나 이슈 종료는 하지 않는다.
 
 공식 조회 동작: [chronyc](https://chrony-project.org/doc/4.6/chronyc.html), [chrony.conf](https://chrony-project.org/doc/4.6/chrony.conf.html), [firewall-cmd](https://firewalld.org/documentation/man-pages/firewall-cmd.html).
+
+2026-09-14 locale 보완: controller 자식 환경은 Ansible이 요구하는 `C.UTF-8`을 사용한다. plain `C`로 인한 원격 접속 전 인벤토리 조회 중단을 수정했다. [원인·검증·재개 절차](../change/ICR-D-NET-01-01/CONTROLLER_UTF8_FIX_20260914.md).

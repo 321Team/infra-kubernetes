@@ -1,0 +1,47 @@
+{
+  "schema": "fds.cni-daemon-fix-validation.v1",
+  "date": "2026-09-16",
+  "parent_head": "164f8d5514add1c845657e1abc500ababf37b1e9",
+  "source_hashes": {
+    "run-cni-kernel-integration.py": "2d7df5f612d731b78ca0285d609efd16d548def62979121077b23eef0d3414b8",
+    "cni_diag_core.py": "286d7075bf9dbbbebf3378e59b493db9ac1f842e73573bd62dbdbb3e975e2d59",
+    "cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+  },
+  "kernel_bundle_sha256": "aee40de6b7c203a3eb6811a03baadda0f58cd503d87253deceb62cd462d38765",
+  "static": {
+    "python_ast": "PASS",
+    "default_plan_only": "PASS",
+    "unit_directives": "PASS_WITH_EXECSTART_SUBSTITUTED",
+    "unit_parser": "systemd 255 (255.4-1ubuntu8.17)",
+    "unit_parser_limitation": "ExecStart replaced with /usr/bin/true for directive parsing only; target is systemd-257-33.el10; no unit started"
+  },
+  "mock": {
+    "tests_run": 202,
+    "tests_passed": 202,
+    "existing_regressions": 170,
+    "daemon_and_export_regressions": 32,
+    "command": "python3 -B -m unittest discover -s tests -p test_cni*.py -v"
+  },
+  "runtime": {
+    "revised_source": "NOT_RUN",
+    "previous_job": "e97d5bbe64efd9cb",
+    "previous_result": "COMPONENT_FAILED_REVIEW_REQUIRED",
+    "six_flows": "NOT_MEASURED",
+    "target_policy_access_vectors": "PENDING_FRESH_INSPECT",
+    "runtime_bind_and_daemons": "NOT_TESTED"
+  },
+  "ci": "NOT_VERIFIED",
+  "independent_review_of_revised_source": "PENDING",
+  "merge": "NOT_PERFORMED",
+  "execution_approval": "NOT_GRANTED_FOR_REVISED_SOURCE",
+  "production_qualification": false,
+  "acceptance_criteria_credit": false,
+  "authorizes_cp1_acceptance": false,
+  "authorizes_cp2_change": false,
+  "remaining": [
+    "TimeoutStopSec=5 vs self-cleanup race: separate runtime validation pending",
+    "Target installed-policy checks and actual service initialization pending",
+    "New source review, fresh inspect/decision and additional normal execution decision required"
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "actual_formatted_objects": {
+    "fds-cp1-egress": "fds-cp1-egress\n  disable: no\n  priority: -1\n  target: CONTINUE\n  ingress-zones: fds-cp1-min\n  egress-zones: ANY\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" destination ipset=\"fds-cp1-out4\" accept\n\trule family=\"ipv6\" destination ipset=\"fds-cp1-out6\" accept",
+    "fds-cp1-local": "fds-cp1-local\n  disable: no\n  priority: -2\n  target: CONTINUE\n  ingress-zones: fds-cp1-min\n  egress-zones: fds-cp1-min\n  services: \n  ports: \n  protocols: \n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" source address=\"10.244.246.64/26\" destination address=\"10.244.246.64/26\" accept",
+    "fds-cp1-min": "fds-cp1-min\n  target: default\n  ingress-priority: 0\n  egress-priority: 0\n  icmp-block-inversion: no\n  interfaces: \n  sources: \n  services: dhcpv6-client ssh\n  ports: \n  protocols: \n  forward: no\n  masquerade: no\n  forward-ports: \n  source-ports: \n  icmp-blocks: \n  rich rules: \n\trule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"10250\" protocol=\"tcp\" accept\n\trule family=\"ipv4\" source address=\"10.1.93.102/32\" port port=\"2379-2380\" protocol=\"tcp\" accept\n\trule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"10250\" protocol=\"tcp\" accept\n\trule family=\"ipv4\" source address=\"10.1.93.103/32\" port port=\"2379-2380\" protocol=\"tcp\" accept\n\trule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"10250\" protocol=\"tcp\" accept\n\trule family=\"ipv4\" source address=\"10.1.93.104/32\" port port=\"2379-2380\" protocol=\"tcp\" accept\n\trule family=\"ipv4\" source address=\"10.1.93.109/32\" port port=\"6443\" protocol=\"tcp\" accept",
+    "fds-cp1-out4": "fds-cp1-out4\n  type: hash:net,iface\n  options: family=inet\n  entries: 0.0.0.0/1,ens160 128.0.0.0/1,ens160",
+    "fds-cp1-out6": "fds-cp1-out6\n  type: hash:net,iface\n  options: family=inet6\n  entries: 8000::/1,ens160 ::/1,ens160"
+  },
+  "checks": [
+    "parser/config/roundtrip: fds-cp1-min",
+    "CLI formatter/state comparison: fds-cp1-min",
+    "parser/config/roundtrip: fds-cp1-local",
+    "CLI formatter/state comparison: fds-cp1-local",
+    "parser/config/roundtrip: fds-cp1-egress",
+    "CLI formatter/state comparison: fds-cp1-egress",
+    "parser/config/roundtrip: fds-cp1-out4",
+    "CLI formatter/state comparison: fds-cp1-out4",
+    "parser/config/roundtrip: fds-cp1-out6",
+    "CLI formatter/state comparison: fds-cp1-out6",
+    "staged zone unbound, no sources, forward=false",
+    "bound cali+ accepted by config validator and state comparison",
+    "rejected: missing dependency services/ssh",
+    "rejected: missing dependency ipsets/fds-cp1-out4",
+    "rejected: missing dependency ipsets/fds-cp1-out6",
+    "rejected: missing dependency zones/fds-cp1-min",
+    "rejected: invalid ipset network",
+    "rejected: same interface in two zones"
+  ],
+  "checks_passed": 18,
+  "independent_review": "REQUEST_PENDING",
+  "limitations": [
+    "XML parsers and config checks executed locally; CP1 host was not accessed",
+    "Settings/formatter AST selection bypasses DBus exception decorator only",
+    "No DBus daemon, nft kernel, systemd timer, packet flow or acceptance execution"
+  ],
+  "probe_sha256": "83081e7201b550cf8001abfd839209be764ea67940bec2e26061b074bfe10618",
+  "result": "PASS",
+  "runtime_bundle_sha256": "e2b98fdc22cd15d8577b0df8b45f9d841e1beb1b41e953cbe2e7dfd42979ac33",
+  "runtime_sources_changed": false,
+  "schema": "fds.cp1-minimal-xml-validation.v1",
+  "tested_runtime_commit": "c2efad4309cce7f3cad990979ddefb4383520447",
+  "unit_tests": {
+    "errors": 0,
+    "failures": 0,
+    "passed": 130,
+    "skipped": 0
+  },
+  "upstream_sha256": {
+    "config/services/dhcpv6-client.xml": "34d4b9a6c6345b4d55a3c9665170eacb8ca861c93100c4702bd37ab1fc29255f",
+    "config/services/ssh.xml": "89ead377d6d529a217c7c31a623232d257d2f2763be3b8c35c31601068213ac8",
+    "src/firewall/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "src/firewall/client.py": "5fde6a95d034a185f9dc0227b33ee1da14ae65fe4fb9f327334b646d9a31a4ca",
+    "src/firewall/command.py": "d38d88eb5b5bd5a434637f409e44d76a849c65884dd6b7f17ea183245a7371fa",
+    "src/firewall/config/__init__.py.in": "97d68269ed0448b1d270ca51c07fcd608f847c3a981f66bf92ae168f760d7cf1",
+    "src/firewall/config/dbus.py": "6ed2dcb2c0ae5d6d3829efda41a423b887238b406d2b54b65458e2d28e418686",
+    "src/firewall/core/base.py": "a3de6f03effff506fd9715da65225d94a4bb361a59ef1e7d4fa7e795fa914982",
+    "src/firewall/core/icmp.py": "e9119ec0cc18ced1f3c3de813fd18e969dbdf6d8ea7865def40467d716367f7f",
+    "src/firewall/core/io/io_object.py": "b2f8ae8c96198c785df7a71e6072f1f4610110b742db8ddf3e6a0520470719ae",
+    "src/firewall/core/io/ipset.py": "6e7b399ad49a35c0e214d87fcfeb670ddc1d7fd493352482b36d7705a360c053",
+    "src/firewall/core/io/policy.py": "d279a93208cffbcdbc5e8405d0910a3dfa12eb7d711484fd97a899038cfd4916",
+    "src/firewall/core/io/service.py": "90f2ab5a49c6d3f4f7f5fe9b2154d2a093cbde2f7bf54068b9039cfcd973a939",
+    "src/firewall/core/io/zone.py": "9c6b165d452b9b929b10b26f5cf594a2de63acc075a2e777d88af693a90b5fc5",
+    "src/firewall/core/ipset.py": "a0e75786031135f72f74b1e54cd47ec83a2220bcb940b60fe5ceed3e01b4dcb3",
+    "src/firewall/core/logger.py": "024c37fcc06eddc21b1661214fe3918795fcbba58640dff4a8c4bd2fb3a27d7d",
+    "src/firewall/core/prog.py": "c21199fe69444e0ab6844bc63dde500bdc57844c5374c1f429267bc97a8159e9",
+    "src/firewall/core/rich.py": "a7c6f10632122fbb3b10eab8219b93452229d98a173f1eacfca01182953bc4f6",
+    "src/firewall/errors.py": "ed8ad97121b70abf09a7197f7460d2081c2b30eb5cfc484c1faa9e879d42c856",
+    "src/firewall/functions.py": "effb5c89fede743e7350e2c32e61f5f23b7f1a907d1d061462880869d9d993e0"
+  },
+  "upstream_tag": "v2.4.3"
+}

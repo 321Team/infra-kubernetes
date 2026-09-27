@@ -1,0 +1,22 @@
+test_disarm_does_not_delete_or_reload_running_work_definition (r5_tests.FinalizationTests.test_disarm_does_not_delete_or_reload_running_work_definition) ... FAIL
+
+======================================================================
+FAIL: test_disarm_does_not_delete_or_reload_running_work_definition (r5_tests.FinalizationTests.test_disarm_does_not_delete_or_reload_running_work_definition)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/scratch/3d8cc40c919f/cni_capture_r5_20260916/tests/test_cni_capture_finalization.py", line 153, in test_disarm_does_not_delete_or_reload_running_work_definition
+    self.assertEqual({p.name for p in self.units.iterdir()}, set(self.docs))
+AssertionError: Items in the second set but not the first:
+'fds-ki-aaaaaaaaaaaaaaaa-c.service'
+'fds-ki-aaaaaaaaaaaaaaaa-firewall.service'
+'fds-ki-aaaaaaaaaaaaaaaa-b.service'
+'fds-ki-aaaaaaaaaaaaaaaa-recover.service'
+'fds-ki-aaaaaaaaaaaaaaaa-a.service'
+'fds-ki-aaaaaaaaaaaaaaaa-recover.timer'
+'fds-ki-aaaaaaaaaaaaaaaa-bus.service'
+'fds-ki-aaaaaaaaaaaaaaaa-work.service'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.006s
+
+FAILED (failures=1)

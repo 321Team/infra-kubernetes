@@ -1,0 +1,18 @@
+{
+  "schema": "fds.cp1-minimal-analysis-validation.v1",
+  "base_commit": "ed53205fb142c86715281cbe4eca6a44b0171c90",
+  "classification": "STATIC_MOCK_AND_EXISTING_EVIDENCE_REPLAY",
+  "tests": 94,
+  "new_tests": 33,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "existing_archive_sha256": "81a4210a2aaddf69d508fd9d166589630b17d87f6209658dc919a1bb1b18cb39",
+  "existing_archive_expected_flows": 5,
+  "existing_archive_passed_flows": 3,
+  "actual_runtime_rerun": false,
+  "production_consumer_connected": false,
+  "cp1_accepted": false,
+  "ci_executed": false,
+  "pr13_modified": false
+}

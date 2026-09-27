@@ -41,8 +41,11 @@
 
 ## 검토 기록
 
-- 독립 Reviewer / 검토 HEAD / PASS·HOLD / 근거 링크:
+- 변경 분류(README '변경 분류'): 코드·실행 설정 / 문서·증적만 / 혼합 / Pre-check
+- 코드·혼합인 경우 독립 Reviewer / 검토 HEAD / PASS·HOLD / 근거 링크:
+- 문서·증적만인 경우 책임 Lead / 검토 HEAD / 판단·근거 링크:
+- Pre-check인 경우 `REVIEW=NOT PERFORMED (Pre-check)` / 책임 티켓 / 담당 Lead:
 - 이권욱 최종 승인 / 승인 HEAD / APPROVED·HOLD / 근거 링크:
 - 병합 후 기록: 승인 HEAD / 병합 커밋 / 실행 결과 연결:
 
-새 커밋이 추가되면 변경 영향에 맞춰 재검토하고 새 HEAD의 판정을 남긴다. 작성자가 자신의 독립 Reviewer를 겸하지 않는다.
+새 커밋이 추가되면 변경 영향에 맞춰 재검토하고 새 HEAD의 판정을 남긴다. 코드·혼합 PR에서 작성자가 자신의 독립 Reviewer를 겸하지 않는다. `fds-project-evidence`의 PR은 분류와 관계없이 독립 리뷰를 유지한다.

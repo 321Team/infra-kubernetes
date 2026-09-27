@@ -1,0 +1,61 @@
+{
+  "schema": "fds.cni-zone-r4-validation.v1",
+  "parent_head": "d015e540ae49c2ee57c708e8dce6c9212825b0ff",
+  "source_hashes": {
+    "run-cni-kernel-integration.py": "48e0e800dfad4679d10d604436a3ec5c433925b45f98659aaf562ba59e18bed9",
+    "cni_diag_core.py": "4ef4ff77199851851cdc091088ee22679343b51f327f9e69fbd1e9147dc54bb9",
+    "cp1-cni-diagnostic-node.py": "ad87c109bf799a3994beed92fe6d95576de392c9633edf9a744361ea8758cd03",
+    "node-firewall.py": "93b8ede35524a11c92e302d40d91f3b3034584e74a364b2f58a03f50ff8438fa"
+  },
+  "kernel_bundle_sha256": "1109fe8e2370fdfe09e49300f39d1e1e0f5b732c36ac7b8e55404996bffc507c",
+  "production_executor_bundle_sha256": "d6b2ab46297e8892ac966225f0e9a5ecb37724e1ceee0d94af4468a0d83bb74d",
+  "runtime_evidence": {
+    "job_id": "d6c7e1e672c418ca",
+    "archive": "FDS_CNI_Kernel_Component_cmr271f5.tar.gz",
+    "archive_sha256": "b1b63bbda9172fb20c1a4389ae581da1955224abfb7e11bb7ac4143ec59bacaa",
+    "internal_files_verified": 20,
+    "source_files_matched": 4,
+    "started_at_kst": "2026-09-16T16:50:53.366247+09:00",
+    "completed_at_kst": "2026-09-16T16:51:10.951899+09:00",
+    "collected_at_kst": "2026-09-16T17:00:09.162409+09:00",
+    "status": "COMPONENT_FAILED_REVIEW_REQUIRED",
+    "create_zone_command_exit_code": 0,
+    "diff": [
+      {
+        "path": "/permanent/zones/fds-cni-trial/forward",
+        "expected": "no",
+        "actual": "yes"
+      }
+    ],
+    "shared_transaction_restored": false,
+    "cleanup_complete": true,
+    "recovery_disarmed": true,
+    "fixture_namespaces_absent": true,
+    "host_before_after_equal": true,
+    "recovery_pending": false,
+    "component_flows_measured": 0,
+    "pcap_trace_files": 0,
+    "nonroot_admission_tested": false,
+    "uuid_plaintext_pattern_matches": 0
+  },
+  "static": "Python AST, PLAN_ONLY and SHA256 manifest PASS",
+  "mock": {
+    "command": "python3 -B -m unittest discover -s tests -p 'test_cni*.py' -v",
+    "run": 220,
+    "passed": 220,
+    "skipped": 0,
+    "prior_tests": 211,
+    "added_fault_position_tests": 2,
+    "added_zone_import_tests": 7,
+    "fault_injection_cases": 50,
+    "reboot_boundary_subcases": 4
+  },
+  "red_reproduction": "Legacy file import simulator makes old d015e54 transaction fail at create-permanent-zone",
+  "new_source_vm_inspect": "NOT_RUN",
+  "new_source_vm_runtime": "NOT_RUN",
+  "new_source_independent_review": "PENDING",
+  "ci": "NOT_VERIFIED",
+  "merge": "NOT_PERFORMED",
+  "execution_approved": false,
+  "acceptance_criteria_credit": false
+}

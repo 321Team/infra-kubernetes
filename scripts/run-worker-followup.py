@@ -29,9 +29,17 @@ KEY_FINGERPRINT = "SHA256:VPGV/RGA8TrwO/3FC4YPxGzRNhBWuB+9hCzPV5plkws"
 SOURCE_IP = "10.250.10.10"
 
 
+def controller_env():
+    # Keep the user's approved executable search path, but do not forward arbitrary tool/credential settings.
+    result = {k: os.environ[k] for k in ("HOME", "USER", "LOGNAME", "PATH") if k in os.environ}
+    # Ansible requires a UTF-8 locale; plain C makes locale.getlocale()[1] None.
+    result.update(LANG="C.UTF-8", LC_ALL="C.UTF-8")
+    return result
+
+
 def run(argv, cwd=None, input=None, timeout=30, env=None):
     return subprocess.run(argv, cwd=cwd, input=input, text=True, capture_output=True,
-                          timeout=timeout, env=env)
+                          timeout=timeout, env=controller_env() if env is None else env)
 
 
 def checked(argv, cwd=None, env=None):
@@ -83,7 +91,7 @@ def preflight():
     origin = checked(["git", "remote", "get-url", "origin"], ANSIBLE_REPO)
     node.need(re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)321Team/infra-ansible(?:\.git)?", origin), "Ansible origin differs")
     node.need(not checked(["git", "status", "--porcelain", "--untracked-files=no", "--", "ansible.cfg", "inventory"], ANSIBLE_REPO), "Ansible configuration/inventory is modified")
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("ANSIBLE_", "PYTHON"))}
+    env = controller_env()
     env.update(ANSIBLE_CONFIG=str(ANSIBLE_REPO / "ansible.cfg"), ANSIBLE_HOST_KEY_CHECKING="True")
     raw = checked(["ansible-inventory", "-i", str(ANSIBLE_REPO / "inventory/hosts.yml"), "--list"], ANSIBLE_REPO, env)
     validate_inventory(json.loads(raw))
@@ -119,14 +127,14 @@ def remote_request(name, request):
     result = None
     try:
         identity_code = "import os,pwd,socket,json;print(json.dumps({'user':pwd.getpwuid(os.getuid()).pw_name,'hostname':socket.gethostname().split('.')[0],'connection':os.environ.get('SSH_CONNECTION','').split()}))"
-        result = run(ssh_argv(name, ["/usr/bin/python3", "-c", identity_code]), timeout=40)
+        result = run(ssh_argv(name, ["/usr/bin/python3", "-I", "-c", identity_code]), timeout=40)
         node.need(result.returncode == 0, "SSH identity failed; rc=" + str(result.returncode) + "; " + node.redact(result.stderr))
         identity = json.loads(result.stdout)
         connection = identity.get("connection", [])
         node.need(identity["user"] == "svc_ansible" and identity["hostname"] == name and len(connection) == 4 and connection[0] == SOURCE_IP and connection[2] == node.NODES[name], "SSH session identity differs")
         phase = "SUDO_PYTHON"
         payload = "REQUEST = " + repr(request) + "\n" + NODE_SOURCE.read_text()
-        result = run(ssh_argv(name, ["sudo", "-n", "/usr/bin/python3", "-"]), input=payload, timeout=720)
+        result = run(ssh_argv(name, ["sudo", "-n", "/usr/bin/python3", "-I", "-"]), input=payload, timeout=720)
         node.need(result.returncode == 0, "remote process failed; rc=" + str(result.returncode) + "; " + node.redact(result.stderr))
         phase = "RESULT_PARSE"
         data = json.loads(result.stdout)

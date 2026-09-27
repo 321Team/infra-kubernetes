@@ -1,0 +1,16 @@
+# REVIEW TEMPLATE ONLY. Do not apply. Complete runtime-input.json and run code/render.py.
+# Additional observed API/registry paths are generated only from reviewed inputs.
+apiVersion: crd.projectcalico.org/v1
+kind: HostEndpoint
+metadata:
+  name: fds-k8s-k8s-worker01
+  labels:
+    fds.example/package: p1-k8s-01-v4
+    fds.example/bootstrap: p1-k8s-01-v4
+    fds.example/node: k8s-worker01
+    fds.example/role: worker
+spec:
+  node: k8s-worker01
+  interfaceName: REQUIRED_MEASURED_INTERFACE
+  expectedIPs:
+  - 10.1.93.105

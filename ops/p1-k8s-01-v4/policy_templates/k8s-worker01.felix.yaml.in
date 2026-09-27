@@ -1,0 +1,15 @@
+# REVIEW TEMPLATE ONLY. Do not apply. Complete runtime-input.json and run code/render.py.
+# Additional observed API/registry paths are generated only from reviewed inputs.
+apiVersion: crd.projectcalico.org/v1
+kind: FelixConfiguration
+metadata:
+  name: node.k8s-worker01
+spec:
+  failsafeInboundHostPorts:
+  - protocol: tcp
+    port: 22
+    net: 10.250.10.10/32
+  failsafeOutboundHostPorts:
+  - protocol: tcp
+    port: 6443
+    net: 10.1.93.109/32

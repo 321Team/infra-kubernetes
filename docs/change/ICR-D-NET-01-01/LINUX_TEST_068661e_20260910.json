@@ -1,0 +1,23 @@
+{
+  "scope": "Codex local Linux mock tests; not ansible01 or CP1 runtime validation",
+  "platform": "Linux-6.18.35-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "source_commit": "068661e076de02669170d3582f3d596d6e1a8eb3",
+  "source_blob_checks": "15/15 MATCH",
+  "started_at": "2026-09-10T08:56:05.009798+00:00",
+  "ended_at": "2026-09-10T08:56:05.161166+00:00",
+  "command": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "tests",
+    "-p",
+    "test_cp_canary.py",
+    "-v"
+  ],
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "test_inspection_hash_and_expiry_are_enforced (test_cp_canary.ControllerTests.test_inspection_hash_and_expiry_are_enforced) ... ok\ntest_inventory_scope_rejected (test_cp_canary.ControllerTests.test_inventory_scope_rejected) ... ok\ntest_partial_archive_has_verified_manifest (test_cp_canary.ControllerTests.test_partial_archive_has_verified_manifest) ... ok\ntest_ssh_error_retains_phase_and_redacts_token (test_cp_canary.ControllerTests.test_ssh_error_retains_phase_and_redacts_token) ... ok\ntest_collection_summary_exposes_diagnostic_gaps (test_cp_canary.PolicyRegressionTests.test_collection_summary_exposes_diagnostic_gaps) ... ok\ntest_full_snapshot_uses_policy_name_list_and_retains_raw_queries (test_cp_canary.PolicyRegressionTests.test_full_snapshot_uses_policy_name_list_and_retains_raw_queries) ... ok\ntest_inactive_and_permanent_policies_are_preserved (test_cp_canary.PolicyRegressionTests.test_inactive_and_permanent_policies_are_preserved) ... ok\ntest_malformed_name_list_stops_before_policy_lookup (test_cp_canary.PolicyRegressionTests.test_malformed_name_list_stops_before_policy_lookup) ... ok\ntest_policy_query_failure_is_retained_and_not_ignored (test_cp_canary.PolicyRegressionTests.test_policy_query_failure_is_retained_and_not_ignored) ... ok\ntest_failed_durable_intent_prevents_mutation (test_cp_canary.TransactionTests.test_failed_durable_intent_prevents_mutation) ... ok\ntest_full_apply_and_reverse_rollback (test_cp_canary.TransactionTests.test_full_apply_and_reverse_rollback) ... ok\ntest_initial_canary_rejects_existing_second_member (test_cp_canary.TransactionTests.test_initial_canary_rejects_existing_second_member) ... ok\ntest_new_membership_blocks_rollback (test_cp_canary.TransactionTests.test_new_membership_blocks_rollback) ... ok\ntest_partial_failure_rolls_back_only_confirmed_adds (test_cp_canary.TransactionTests.test_partial_failure_rolls_back_only_confirmed_adds) ... ok\ntest_preexisting_rule_never_removed (test_cp_canary.TransactionTests.test_preexisting_rule_never_removed) ... ok\ntest_raced_existing_rule_does_not_claim_ownership (test_cp_canary.TransactionTests.test_raced_existing_rule_does_not_claim_ownership) ... ok\ntest_rollback_firewall_drift_blocks_removal (test_cp_canary.TransactionTests.test_rollback_firewall_drift_blocks_removal) ... ok\ntest_snapshot_drift_before_apply_changes_nothing (test_cp_canary.TransactionTests.test_snapshot_drift_before_apply_changes_nothing) ... ok\ntest_uncertain_timeout_refuses_automatic_rollback (test_cp_canary.TransactionTests.test_uncertain_timeout_refuses_automatic_rollback) ... ok\n\n----------------------------------------------------------------------\nRan 19 tests in 0.053s\n\nOK\n"
+}

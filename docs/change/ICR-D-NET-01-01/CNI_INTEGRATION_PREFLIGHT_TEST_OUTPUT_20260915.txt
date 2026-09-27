@@ -1,0 +1,11 @@
+test_archive_hashes_and_unexecuted_matrix (test_cni_integration_preflight.Boundaries.test_archive_hashes_and_unexecuted_matrix) ... ok
+test_container_and_unprivileged_host_are_blocked (test_cni_integration_preflight.Boundaries.test_container_and_unprivileged_host_are_blocked) ... ok
+test_default_plan_does_not_query_or_write (test_cni_integration_preflight.Boundaries.test_default_plan_does_not_query_or_write) ... ok
+test_incomplete_queries_cannot_look_ready (test_cni_integration_preflight.Boundaries.test_incomplete_queries_cannot_look_ready) ... ok
+test_matching_platform_never_becomes_qualification_or_isolation_proof (test_cni_integration_preflight.Boundaries.test_matching_platform_never_becomes_qualification_or_isolation_proof) ... ok
+test_missing_binary_does_not_launch_process (test_cni_integration_preflight.Boundaries.test_missing_binary_does_not_launch_process) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.007s
+
+OK

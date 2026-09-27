@@ -1,0 +1,33 @@
+{
+  "schema": "fds.cni-integration-preparation-validation.v1",
+  "date_utc": "2026-09-15",
+  "review_reference": "https://github.com/321Team/infra-kubernetes/pull/11#issuecomment-5675589656",
+  "implementation_commit": "101cdb28248839f88ca8f7e33d3c0a505bb55218",
+  "preparation_tests": {
+    "stage": "STATIC_MOCK",
+    "passed": 6,
+    "log": "CNI_INTEGRATION_PREFLIGHT_TEST_OUTPUT_20260915.txt"
+  },
+  "local_collection": {
+    "stage": "PREPARATION_ONLY",
+    "status": "PREPARATION_BLOCKED",
+    "exit_code": 2,
+    "archive_sidecar_internal_hashes_verified": true,
+    "systemd_pid1": false,
+    "cap_net_admin": false,
+    "cap_net_raw": false
+  },
+  "existing_executor_sources_unchanged": true,
+  "existing_83_tests_rerun": false,
+  "ci_executed": false,
+  "isolated_runtime_integration_executed": false,
+  "production_changes": false,
+  "qualification_created": false,
+  "acceptance_criteria_credit": false,
+  "remaining": [
+    "Isolated VM identity/network preparation",
+    "Reviewed actual integration entry and fixture/source boundary",
+    "Actual Linux packet and independent recovery testing",
+    "Exact source review, qualification evidence review, execution decision"
+  ]
+}
