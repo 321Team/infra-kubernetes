@@ -117,8 +117,11 @@ def obj(kind, name, spec, labels=None):
 
 def policies(c, name):
     n, cp = c['nodes'][name], 'control' in name
+    # CP kubelet scrape is sourced from a Worker node after pod natOutgoing/SNAT.
+    # Keep Worker kubelet ingress unchanged here; Worker cross-node scrape is the
+    # separate ICR rule below. CP 10250 accepts only the six known node /32s.
     ing = [rule('TCP', [SSH], [22], 'ingress'),
-           rule('TCP', CP, [10250], 'ingress'),
+           rule('TCP', NODES if cp else CP, [10250], 'ingress'),
            rule('UDP', NODES, [4789], 'ingress')]
     out = [rule('TCP', [LB], [6443], 'egress'),
            rule('UDP', NODES, [4789], 'egress'),

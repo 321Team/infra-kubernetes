@@ -103,7 +103,10 @@ class PolicyTests(unittest.TestCase):
             (self.w, 'ingress', 'UDP', '10.1.93.108', '10.1.93.105', 9100, False),
             (self.w, 'egress', 'TCP', '10.1.93.105', '10.1.93.107', 9100, False),
             (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 9100, False),
-            (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 10250, False),
+            # CP kubelet scrape: Prometheus pod SNAT arrives as a Worker node IP.
+            (self.cp, 'ingress', 'TCP', '10.1.93.108', '10.1.93.102', 10250, True),
+            (self.cp, 'ingress', 'TCP', '10.1.93.109', '10.1.93.102', 10250, False),
+            (self.cp, 'ingress', 'TCP', '10.250.10.10', '10.1.93.102', 10250, False),
             (self.w, 'ingress', 'TCP', '10.1.93.109', '10.1.93.105', 9100, False),
             (self.w, 'ingress', 'TCP', '10.1.93.109', '10.1.93.105', 10250, False),
             (self.w, 'ingress', 'TCP', '10.250.10.10', '10.1.93.105', 9100, False),
@@ -112,10 +115,21 @@ class PolicyTests(unittest.TestCase):
             for dns in ('10.1.93.52', '10.1.93.53'):
                 cases.append((self.w, 'egress', proto, '10.1.93.105', dns, 53, True))
             cases.append((self.w, 'egress', proto, '10.1.93.105', '8.8.8.8', 53, False))
-        self.assertEqual(len(cases), 44)
+        self.assertEqual(len(cases), 46)
         for policy, direction, proto, src, dst, port, expect in cases:
             with self.subTest(direction=direction, src=src, dst=dst, port=port):
                 self.assertEqual(allows(policy, direction, proto, src, dst, port), expect)
+
+    def test_cp_kubelet_10250_allows_nodes_but_etcd_stays_cp_only(self):
+        for name in ('k8s-control01', 'k8s-control02', 'k8s-control03'):
+            ing = render.policies(self.c, name)[0]['spec']['ingress']
+            kubelet = [r for r in ing if r.get('destination', {}).get('ports') == [10250]]
+            self.assertEqual(len(kubelet), 1)
+            self.assertEqual(sorted(kubelet[0]['source']['nets']), sorted(render.NODES))
+            etcd = [r for r in ing if r.get('destination', {}).get('ports') == [2379, 2380]]
+            self.assertEqual(len(etcd), 1)
+            self.assertEqual(sorted(etcd[0]['source']['nets']), sorted(render.CP))
+            self.assertEqual(ing[-1], {'action': 'Deny'})
 
     def test_worker_scrape_rule_excludes_self_and_precedes_deny(self):
         for name in ('k8s-worker01', 'k8s-worker02', 'k8s-worker03'):

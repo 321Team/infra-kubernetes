@@ -25,7 +25,10 @@ spec:
   - action: Allow
     protocol: TCP
     source:
-      nets: &id001
+      nets:
+      - 10.1.93.105/32
+      - 10.1.93.107/32
+      - 10.1.93.108/32
       - 10.1.93.102/32
       - 10.1.93.103/32
       - 10.1.93.104/32
@@ -56,7 +59,10 @@ spec:
   - action: Allow
     protocol: TCP
     source:
-      nets: *id001
+      nets: &id001
+      - 10.1.93.102/32
+      - 10.1.93.103/32
+      - 10.1.93.104/32
     destination:
       ports:
       - 2379
