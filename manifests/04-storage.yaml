@@ -1,0 +1,119 @@
+# P1-SEC-01 / Monitoring static local Storage — StorageClass/PV/PVC 신설.
+#
+# 반영 요청 근거: supreme33-kr issuecomment-5697415810, GWONUK issuecomment-5697483242.
+# 용량은 Lead 결정(fds-project-baseline#10 issuecomment-5697547621) 값을 그대로 사용:
+#   Prometheus 20Gi / Grafana 5Gi / Alertmanager 2Gi (합계 27Gi)
+# 지정 Worker: k8s-worker03(10.1.93.108) — 실측 /home XFS 가용 약 163G로 여유 확인됨.
+#
+# static local PV 정본 요구(WaitForFirstConsumer + Retain + nodeAffinity)에서
+# 필수 nodeAffinity는 PersistentVolume.spec.nodeAffinity다 (GWONUK 지적).
+# 각 host path(/home/fds-local-pv/{prometheus,grafana,alertmanager})는 실제 적용 전
+# k8s-worker03에 디렉터리 생성·owner/mode·SELinux persistent fcontext 설정이 선행되어야
+# 하며, 이 매니페스트 자체가 해당 디렉터리를 만들어주지 않는다.
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fds-local-retain
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: prometheus-pv
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fds-local-retain
+  local:
+    path: /home/fds-local-pv/prometheus
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["k8s-worker03"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-pvc
+  namespace: monitoring-api
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fds-local-retain
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: grafana-pv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fds-local-retain
+  local:
+    path: /home/fds-local-pv/grafana
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["k8s-worker03"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-pvc
+  namespace: monitoring-api
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fds-local-retain
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: alertmanager-pv
+spec:
+  capacity:
+    storage: 2Gi
+  volumeMode: Filesystem
+  accessModes: ["ReadWriteOnce"]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fds-local-retain
+  local:
+    path: /home/fds-local-pv/alertmanager
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: ["k8s-worker03"]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alertmanager-pvc
+  namespace: monitoring-api
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: fds-local-retain
+  resources:
+    requests:
+      storage: 2Gi

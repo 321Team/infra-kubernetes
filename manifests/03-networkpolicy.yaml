@@ -1,0 +1,371 @@
+# P1-SEC-01 / SEC-03, SEC-05 수정
+#
+# SEC-03 (High) — fds-project-baseline#19 SEC-03:
+#   RETIRED된 IF-24(Alertmanager Webhook -> monitor01)를 허용하던 alertmanager-allow를
+#   현행 IF-06B(Prometheus Remote Write -> monitor01, TCP 443)로 교체.
+#   baseline 근거: FDS_Project_Implementation_Baseline_v3.1.18.md L1063 "IF-24 ... RETIRED / P1 N/A",
+#                  L1002 D34 "IF-06B 유지".
+#
+# SEC-05 (High) — fds-project-baseline#19 SEC-05:
+#   Default Deny 이후 DNS/API discovery/Remote Write egress가 불완전했던 문제 보완.
+#   namespaceSelector만으로는 hostNetwork/API DNAT 경로를 보장하지 못하므로
+#   Host 경로(kubelet 10250)와 Pod 경로(kube-dns, kubernetes.default.svc)를 구분해 명시.
+#
+# monitor01 IP는 baseline §6.4에서 10.250.10.30으로 확정됐다 (SEC-03 참조, 아래).
+#
+# 2차 수정 (SEC-05, GWONUK 재검토 issuecomment-5644891728):
+#   - monitoring-api 네임스페이스 전체에 DNS(53) egress가 빠져있던 문제 보완 (아래
+#     monitoring-api-dns-allow 신설). CoreDNS 조회 없이는 Service 이름 기반 통신이 불가능.
+#   - kube-state-metrics의 API discovery 목적지를 namespaceSelector(default)에서
+#     baseline(FDS_Project_Implementation_Baseline_v3.1.18.md L498-500) 확정 CP 노드
+#     IP(10.1.93.102~104) 기준 ipBlock으로 교체. kube-apiserver는 kubeadm 클러스터에서
+#     kube-system 네임스페이스의 hostNetwork Static Pod로 떠서 Node IP를 그대로 쓰므로,
+#     Service(kubernetes.default.svc)의 ClusterIP 뒤 실제 Endpoint는 CP Node IP:6443이다.
+#   - prometheus의 kubelet(10250) 목적지를 <Worker-Node-CIDR> 추정값 대신 baseline
+#     확정 Worker 개별 IP(10.1.93.105/107/108) 3개로 명시 (넓은 CIDR 대체 금지 원칙).
+#
+# 독립 리뷰 왕복 (supreme33-kr pullrequestreview-5222381683 → GWONUK issuecomment-5697392102
+# → supreme33-kr issuecomment-5697508915/5697600122) 최종 정리:
+#   - metrics 9091/9090은 정본 계약대로 유지(앱 측 전용 listener 구현·merge 완료,
+#     supreme33-kr/fds-msa#5). 한때 8000/8001로 낮췄던 수정은 철회.
+#   - Grafana Ingress는 추가하지 않음 — ClusterIP + 승인 관리단말 port-forward 전용이
+#     정본 의도된 설계(GWONUK 반려, supreme33-kr 제안 철회).
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: fds-app
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: monitoring-node
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: monitoring-api
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+---
+# ── fds-app ──────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: transaction-api-allow
+  namespace: fds-app
+spec:
+  podSelector:
+    matchLabels:
+      app: transaction-api
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.1.93.50/32   # edge01 — §3.6 실측 Source IP 검증 후 확정
+      ports:
+        - { protocol: TCP, port: 8000 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring-api
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - { protocol: TCP, port: 9091 }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: fds-engine
+      ports:
+        - { protocol: TCP, port: 8001 }
+    - to:
+        - ipBlock:
+            cidr: 10.1.93.55/32  # db01
+      ports:
+        - { protocol: TCP, port: 5432 }
+    # SEC-05: DNS는 Pod 경로 (kube-dns) — hostNetwork가 아니므로 namespaceSelector로 충분
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: fds-engine-allow
+  namespace: fds-app
+spec:
+  podSelector:
+    matchLabels:
+      app: fds-engine
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: transaction-api
+      ports:
+        - { protocol: TCP, port: 8001 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring-api
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - { protocol: TCP, port: 9090 }
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+  # fds-engine -> DB 직접 접근은 명시적으로 허용하지 않음 (Deny 유지, SEC-07 verify-probe-failover.sh deny-flow로 확인)
+---
+# ── monitoring-node / monitoring-api ────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: node-exporter-allow
+  namespace: monitoring-node
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring-api
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - { protocol: TCP, port: 9100 }
+---
+# SEC-05 2차 수정: monitoring-api 네임스페이스 전체에 DNS egress 공통 허용.
+# prometheus/alertmanager/grafana/kube-state-metrics 전부 CoreDNS 조회가 필요하며,
+# Default Deny 적용 후 이 규칙이 빠져있으면 Service 이름 기반 통신이 전부 실패한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-api-dns-allow
+  namespace: monitoring-api
+spec:
+  podSelector: {}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kube-state-metrics-allow
+  namespace: monitoring-api
+spec:
+  podSelector:
+    matchLabels:
+      app: kube-state-metrics
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - { protocol: TCP, port: 8080 }
+  egress:
+    # SEC-05 2차 수정: kubernetes.default.svc:443 (API discovery)의 실제 목적지는
+    # CP 3대(hostNetwork static Pod)다. namespaceSelector:default는 Service
+    # 리소스만 가리킬 뿐 실제 Endpoint(Node IP)로 트래픽을 매칭시키지 못하므로
+    # ipBlock으로 CP 개별 IP를 명시한다 (baseline L498-500 확정값).
+    - to:
+        - ipBlock:
+            cidr: 10.1.93.102/32  # k8s-control01
+        - ipBlock:
+            cidr: 10.1.93.103/32  # k8s-control02
+        - ipBlock:
+            cidr: 10.1.93.104/32  # k8s-control03
+      ports:
+        - { protocol: TCP, port: 6443 }
+    # DNS egress는 monitoring-api-dns-allow(네임스페이스 공통 정책)가 커버한다.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-allow
+  namespace: monitoring-api
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - { protocol: TCP, port: 9090 }
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: alertmanager
+      ports:
+        - { protocol: TCP, port: 9093 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fds-app
+          podSelector:
+            matchLabels:
+              app: transaction-api
+      ports:
+        - { protocol: TCP, port: 9091 }
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: fds-app
+          podSelector:
+            matchLabels:
+              app: fds-engine
+      ports:
+        - { protocol: TCP, port: 9090 }
+    # node-exporter는 hostNetwork Pod라 namespaceSelector로는 매칭되지 않는다(Pod IP가
+    # 아니라 Node IP로 수신). Worker 3대 Node IP를 개별로 명시한다. DaemonSet에 CP
+    # toleration이 없어 CP에는 node-exporter가 뜨지 않는다. baseline §11.5에 따라 이
+    # 규칙만으로 9100 통제를 판정하지 않고 Node Host Firewall(HEP/GNP) 증적과 함께 본다.
+    - to:
+        - ipBlock:
+            cidr: 10.1.93.105/32  # k8s-worker01
+        - ipBlock:
+            cidr: 10.1.93.107/32  # k8s-worker02
+        - ipBlock:
+            cidr: 10.1.93.108/32  # k8s-worker03
+      ports:
+        - { protocol: TCP, port: 9100 }
+    - to:
+        - podSelector:
+            matchLabels:
+              app: kube-state-metrics
+      ports:
+        - { protocol: TCP, port: 8080 }
+    # SEC-05 2차 수정: kubelet 10250은 Host 경로(hostNetwork)라 namespaceSelector로는
+    # 매칭되지 않는다. 넓은 CIDR 추정 대신 baseline 확정 Worker 개별 IP 3개를 명시
+    # (GWONUK 재검토: "필요한 6개 노드의 승인 목적지를 개별 범위로 입력하고 임의의
+    # 넓은 CIDR로 대체하지 않는다").
+    - to:
+        - ipBlock:
+            cidr: 10.1.93.105/32  # k8s-worker01
+        - ipBlock:
+            cidr: 10.1.93.107/32  # k8s-worker02
+        - ipBlock:
+            cidr: 10.1.93.108/32  # k8s-worker03
+      ports:
+        - { protocol: TCP, port: 10250 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alertmanager-allow
+  namespace: monitoring-api
+spec:
+  podSelector:
+    matchLabels:
+      app: alertmanager
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - { protocol: TCP, port: 9093 }
+  egress:
+    # SEC-03: IF-24(Webhook)는 RETIRED. Alertmanager egress는 IF-06B 계약을 따르지 않으며,
+    # Alertmanager -> monitor01 직접 회신 경로는 폐기됐다. Remote Write는 Prometheus가 직접 수행한다
+    # (아래 prometheus-remote-write-allow 참조). Alertmanager는 monitor01로의 egress 규칙을 갖지 않는다.
+    []
+---
+# SEC-03 2차 수정: monitor01 실제 IP 확정 (baseline §6.4 Network Design,
+# FDS_Project_Implementation_Baseline_v3.1.18.md L520-524):
+#   "Management VMnet: 10.250.10.0/24 ... monitor01 `.30`"
+# D-SEC-01 표기 ".30"은 10.1.93.x가 아니라 Management VMnet(10.250.10.0/24) 소속이다.
+# 물리 FDS VM(Kubernetes Node 포함)의 Return Route는 "10.250.10.0/24 via 10.1.93.58"
+# (baseline L527, mgmt-gw01 경유)이므로 Pod egress 목적지는 10.250.10.30이 맞다.
+#
+# IF-06B — Prometheus -> monitor01 Remote Write (TCP 443 HTTPS)
+# baseline IF-06B: "5분 이내 Loss Detection, TLS/Auth, Payload Allowlist, Return Path" 계약.
+# 이 NetworkPolicy는 Egress만 허용하며, TLS/Auth/Payload 계약 자체의 구현은 P1-MON-01 소관.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-remote-write-allow
+  namespace: monitoring-api
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.250.10.30/32  # monitor01 (Management VMnet, baseline §6.4 확정)
+      ports:
+        - { protocol: TCP, port: 443 }
+      # mgmt-gw01(10.1.93.58)은 물리 경로상 중간 홉(Return Route)이며 NetworkPolicy egress 목적지가 아님
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-allow
+  namespace: monitoring-api
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - { protocol: TCP, port: 9090 }
+  # Grafana -> K8s API / Application / DB 직접 접근 경로 없음 (Deny 유지)
+  # Ingress는 의도적으로 미개방 — ClusterIP + 승인 관리단말 kubectl port-forward만 허용
+  # (정본 D33/P1-MON, GWONUK 반려 issuecomment-5697392102, supreme33-kr 제안 철회 issuecomment-5697508915)
