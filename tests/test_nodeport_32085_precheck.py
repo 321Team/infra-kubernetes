@@ -1,6 +1,6 @@
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "ops/nodeport-30080-allow/field-collect-32085.sh"
 DOC = ROOT / "ops/nodeport-30080-allow/PRECHECK_32085.md"
 
