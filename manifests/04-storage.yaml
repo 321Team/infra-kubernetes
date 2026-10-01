@@ -10,26 +10,34 @@
 # 각 host path(/home/fds-local-pv/{prometheus,grafana,alertmanager})는 실제 적용 전
 # k8s-worker03에 디렉터리 생성·owner/mode·SELinux persistent fcontext 설정이 선행되어야
 # 하며, 이 매니페스트 자체가 해당 디렉터리를 만들어주지 않는다.
+#
+# 2026-10-01 정합: 현장(Runtime)에 실제 적용된 형상은 infra-monitoring
+# kubernetes/monitoring/pv-monitoring-storage.yaml 기준이다(StorageClass fds-local-storage,
+# PV *-data-pv, PVC prometheus-data/grafana-data/alertmanager-data). 이 파일의 이름을 현장에
+# 맞췄다. 운영 중인 PVC가 바인딩돼 있어 StorageClass 재생성 등 Runtime 변경은 하지 않는다.
+# 근거 증적: fds-project-evidence evidence/P1-K8S-01/sc-pv-20261001/ (CONFIG_DRIFT=OBSERVED).
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: fds-local-retain
+  name: fds-local-storage
 provisioner: kubernetes.io/no-provisioner
 volumeBindingMode: WaitForFirstConsumer
-reclaimPolicy: Retain
+# reclaimPolicy는 지정하지 않는다(API 기본값 Delete). 이 StorageClass는 no-provisioner라 동적 PV를 만들지
+# 않으며, 바인딩된 정적 PV의 실제 reclaim 동작은 아래 각 PV의 persistentVolumeReclaimPolicy: Retain이 결정한다.
+# 현장(Runtime)의 StorageClass가 이 값을 지정하지 않은 상태와 일치시키기 위함(drift 해소, 2026-10-01).
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: prometheus-pv
+  name: prometheus-data-pv
 spec:
   capacity:
     storage: 20Gi
   volumeMode: Filesystem
   accessModes: ["ReadWriteOnce"]
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: fds-local-retain
+  storageClassName: fds-local-storage
   local:
     path: /home/fds-local-pv/prometheus
   nodeAffinity:
@@ -43,11 +51,11 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: prometheus-pvc
+  name: prometheus-data
   namespace: monitoring-api
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: fds-local-retain
+  storageClassName: fds-local-storage
   resources:
     requests:
       storage: 20Gi
@@ -55,14 +63,14 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: grafana-pv
+  name: grafana-data-pv
 spec:
   capacity:
     storage: 5Gi
   volumeMode: Filesystem
   accessModes: ["ReadWriteOnce"]
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: fds-local-retain
+  storageClassName: fds-local-storage
   local:
     path: /home/fds-local-pv/grafana
   nodeAffinity:
@@ -76,11 +84,11 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: grafana-pvc
+  name: grafana-data
   namespace: monitoring-api
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: fds-local-retain
+  storageClassName: fds-local-storage
   resources:
     requests:
       storage: 5Gi
@@ -88,14 +96,14 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: alertmanager-pv
+  name: alertmanager-data-pv
 spec:
   capacity:
     storage: 2Gi
   volumeMode: Filesystem
   accessModes: ["ReadWriteOnce"]
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: fds-local-retain
+  storageClassName: fds-local-storage
   local:
     path: /home/fds-local-pv/alertmanager
   nodeAffinity:
@@ -109,11 +117,11 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: alertmanager-pvc
+  name: alertmanager-data
   namespace: monitoring-api
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: fds-local-retain
+  storageClassName: fds-local-storage
   resources:
     requests:
       storage: 2Gi

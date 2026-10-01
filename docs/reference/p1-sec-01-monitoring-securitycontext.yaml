@@ -95,7 +95,7 @@ spec:
       volumes:
         - name: tsdb-data
           persistentVolumeClaim:
-            claimName: prometheus-pvc
+            claimName: prometheus-data
         - name: prometheus-config
           configMap:
             name: prometheus-config
@@ -155,7 +155,7 @@ spec:
       volumes:
         - name: am-data
           persistentVolumeClaim:
-            claimName: alertmanager-pvc
+            claimName: alertmanager-data
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -223,7 +223,7 @@ spec:
       volumes:
         - name: grafana-data
           persistentVolumeClaim:
-            claimName: grafana-pvc
+            claimName: grafana-data
 ---
 apiVersion: apps/v1
 kind: Deployment
