@@ -199,13 +199,15 @@ def main():
         from render import evidence
         for item in r['evidence']:
             evidence(item, a.protection_receipt.resolve().parent)
+        # Validate everything read-only first. A refusal after the HEP was already
+        # deleted would leave a half-restored node, so no mutation happens before
+        # every check below has passed.
         if hep:
             recorded = json.loads((a.state / (node + '-hep-created.json')).read_text())
             need(hep['metadata']['uid'] == recorded['metadata']['uid'] and
                  hep['spec'] == recorded['spec'] and hep['metadata']['labels'] == recorded['metadata']['labels'],
                  'HEP drift: refuse deletion')
-            k.remove_exact('hostendpoints', hep)
-            need(k.get('hostendpoints.' + GROUP, hepname, True) is None, 'HEP still exists')
+        old = cur = None
         if fstate.exists():
             old = json.loads(fstate.read_text())
             cur = k.get('felixconfigurations.' + GROUP, felixname, True)
@@ -215,7 +217,16 @@ def main():
             need(all(cur.get('spec', {}).get(x) == intended[x] for x in FIELDS),
                  'failsafe drift or already restored; inspect before retry')
             if old is None:
-                need(set(cur.get('spec', {})) == set(FIELDS), 'new unrelated Felix fields: refuse deletion')
+                # Compare with the spec recorded right after creation, not with FIELDS alone:
+                # the API server can default extra fields (e.g. nftablesMode) when it creates the
+                # resource. Anything added or changed since creation is still refused.
+                need(cur.get('spec', {}) == after.get('spec', {}),
+                     'Felix spec changed since creation (unrelated fields): refuse deletion')
+        if hep:
+            k.remove_exact('hostendpoints', hep)
+            need(k.get('hostendpoints.' + GROUP, hepname, True) is None, 'HEP still exists')
+        if fstate.exists():
+            if old is None:
                 k.remove_exact('felixconfigurations', cur)
             else:
                 replacement = copy.deepcopy(cur)

@@ -180,3 +180,21 @@ except RuntimeError as e:
   - WEP 부재 시 Pod 라벨 검사(충돌 Pod 차단, 비대상 오류 전파)
 - 같은 fixture를 §1·§3 수정본(`b0d86e9`)에 돌리면 rc=1+빈 stdout과 rc=1+stderr 오류가 `NO_AVC_REVIEW_REQUIRED`로 나오고, 충돌 Pod가 있어도 preflight를 통과한다. 결함이 재현되고 이번 수정으로 막힌다.
 - 결과: 22개 중 21 통과, 1 skip(root 필요한 `cockpit.sh` 시험). 운영 노드 실측(STATIC/RUNTIME)은 하지 않았다.
+
+## 5. `cluster-change.py` rollback-node 점검 순서·Felix 기본값 필드 (2026-10-01, 운영 미배포)
+
+**발견 경위:** T19(복구) 최소 시험 준비 중 control01의 9/22 state(`/var/lib/fds/P1-K8S-01/gate2-state.json/`)와 현재 FelixConfiguration을 읽기 전용으로 대조해 발견했다. 실제 `rollback-node`는 실행하지 않았다.
+
+### 결함 5-1: Calico가 노드 Felix 리소스 생성 시 채우는 기본값 필드(`nftablesMode`)를 '관련 없는 필드'로 오판
+- `felix-before`가 `null`이면 `set(cur.spec) == set(FIELDS)`가 아니면 'new unrelated Felix fields: refuse deletion'으로 거부했다.
+- 현장 6대 모두 `felix-after.json`(생성 직후 기록)에 이미 `nftablesMode`가 있고 현재 값도 같다. 번들이 만든 spec은 failsafe 필드 2개뿐이므로, 이 필드는 API 서버가 생성 시 채운 것이다. 따라서 이 검사는 이 클러스터에서 **항상 거부**했다. 기존 단위시험은 spec이 failsafe 2개뿐인 합성 fixture라 발견하지 못했다.
+- 수정: 생성 직후 기록한 `felix-after.json`의 spec과 현재 spec이 같은지 비교한다. 생성 이후 추가·변경된 필드는 여전히 거부한다.
+
+### 결함 5-2: 점검 실패 시 HEP가 이미 삭제된 반쪽 복구 상태
+- 기존 순서는 HEP 삭제 → Felix 점검이었다. Felix 점검이 거부하면 HEP만 삭제된 채 중단됐다.
+- 수정: HEP drift 점검과 Felix 점검을 모두 읽기 전용으로 먼저 수행하고, 모두 통과한 뒤에만 HEP 삭제와 Felix 복원을 수행한다.
+
+### 시험
+- 추가: ① 기록 시점에 이미 있던 `nftablesMode`가 있어도 복구가 진행됨 ② 생성 이후 추가된 필드는 거부하며 **변경 호출이 0건**(HEP 미삭제). 두 시험은 수정 전 코드에서 각각 `ValueError: new unrelated Felix fields`와 `['hostendpoints'] != []`로 **실패**한다.
+- 이 환경(Windows, 작성자 로컬)에서 `tests.validate` 28개 중 10개는 이 변경 전후 모두 동일하게 에러다(audit 쿼리 시험 9개 `os.geteuid` 없음, 1개 cp949). 복구 관련 시험(기존 3 + 신규 2)은 통과. Linux에서의 전체 실행은 리뷰어 환경에서 확인 필요.
+- 운영 노드 실측은 하지 않았다. 배포된 `/opt/fds/P1-K8S-01-v4/code/`는 이 수정 반영 전 상태이며, 시험 전에 배포·해시 기록이 필요하다. `PACKAGE_SHA256SUMS` 등은 전달 당시 기록이므로 변경하지 않았다.
