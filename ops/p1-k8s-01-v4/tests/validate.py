@@ -202,7 +202,7 @@ class PolicyTests(unittest.TestCase):
 
 
 class OperationalTests(unittest.TestCase):
-    def rollback_scenario(self, receipt_mode):
+    def rollback_scenario(self, receipt_mode, recorded_extra=None, live_extra=None, refuse=False):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             gen, state = root / 'generated', root / 'state'
@@ -212,7 +212,7 @@ class OperationalTests(unittest.TestCase):
             _, hep, f = render.policies(c, node)
             hep['metadata'].update(uid='hep-uid', resourceVersion='11')
             felix = {'metadata': {'name': 'node.' + node, 'uid': 'felix-uid', 'resourceVersion': '12'},
-                     'spec': f['spec']}
+                     'spec': dict(f['spec'], **(recorded_extra or {}))}
             (gen / 'config.lock.json').write_text(json.dumps(c))
             (gen / 'felix' / (node + '.json')).write_text(json.dumps(f))
             lines = [hashlib.sha256(x.read_bytes()).hexdigest() + '  ' + str(x.relative_to(gen))
@@ -234,6 +234,7 @@ class OperationalTests(unittest.TestCase):
             class Fake:
                 h = copy.deepcopy(hep)
                 f = copy.deepcopy(felix)
+                f['spec'].update(live_extra or {})
                 def __init__(self, prefix): pass
                 def get(self, kind, name=None, optional=False):
                     if kind == 'namespace': return {'metadata': {'uid': c['cluster_uid']}}
@@ -250,7 +251,7 @@ class OperationalTests(unittest.TestCase):
                     '--state', str(state), '--kubeconfig', '/SYNTHETIC', '--context', 'SYNTHETIC']
             if receipt_mode != 'missing': args += ['--protection-receipt', str(rp)]
             with patch.object(change, 'Cluster', Fake), patch.object(sys, 'argv', args):
-                if receipt_mode in ('missing', 'wrong-node'):
+                if receipt_mode in ('missing', 'wrong-node') or refuse:
                     with self.assertRaises(ValueError): change.main()
                     self.assertEqual(actions, [])
                 else:
@@ -265,6 +266,18 @@ class OperationalTests(unittest.TestCase):
 
     def test_recovery_order_after_bound_protection_receipt(self):
         self.rollback_scenario('valid')
+
+    def test_rollback_accepts_api_defaulted_felix_field_recorded_at_creation(self):
+        # Real Calico adds nftablesMode when the node Felix resource is created; the state recorded
+        # right after creation contains it, so the rollback must still proceed.
+        self.rollback_scenario('valid', recorded_extra={'nftablesMode': 'Auto'},
+                               live_extra={'nftablesMode': 'Auto'})
+
+    def test_rollback_refuses_felix_field_added_after_creation_before_any_mutation(self):
+        # A field added after creation must be refused and, importantly, nothing may be mutated
+        # first (the HEP must not be deleted before the Felix check fails).
+        self.rollback_scenario('valid', recorded_extra={'nftablesMode': 'Auto'},
+                               live_extra={'logSeverityScreen': 'Debug'}, refuse=True)
 
     def audit_query(self, avc, markers=None, start=1790000000, end=1790000100, now=1790000200):
         """Run audit-window.py query against synthetic ausearch results; return result.json."""
