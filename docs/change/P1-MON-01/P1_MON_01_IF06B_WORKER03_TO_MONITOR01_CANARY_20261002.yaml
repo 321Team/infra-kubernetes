@@ -1,0 +1,24 @@
+# REVIEW CANDIDATE ONLY. Not authorized for runtime application.
+# Temporary diagnostic exception; see P1_MON_01_IF06B_WORKER03_CANARY_20261002.md.
+apiVersion: crd.projectcalico.org/v1
+kind: GlobalNetworkPolicy
+metadata:
+  name: p1-mon-if06b-worker03-to-monitor01-canary
+  annotations:
+    fds.example/purpose: "Temporary host-origin source-IP acceptance probe for IF-06B (.108 -> monitor01); not a permanent egress allow"
+spec:
+  tier: default
+  order: 90
+  selector: 'fds.example/bootstrap == "p1-k8s-01-v4" && fds.example/node == "k8s-worker03"'
+  applyOnForward: false
+  types:
+    - Egress
+  egress:
+    - action: Allow
+      protocol: TCP
+      destination:
+        nets:
+          - 10.250.10.30/32
+        ports:
+          - 443
+          - 8443
