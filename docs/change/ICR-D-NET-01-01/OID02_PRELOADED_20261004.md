@@ -1,6 +1,6 @@
 # OID-02 preloaded 입력 반영 — 2026-10-04
 
-상태: 코드 리뷰 후보 / Runtime HOLD. 범위: Phase 1, ICR OID-02.
+상태: PR #54 병합 완료 / 이미지 증빙 미완 / Runtime HOLD. 범위: Phase 1, ICR OID-02.
 
 ## 결정과 구현
 
@@ -25,9 +25,9 @@ MTU, interface, probe image, 노드별 승인 입력과 증빙 path/hash는 기�
 
 | 항목 | 현재 상태 / 다음 근거 |
 | --- | --- |
-| 모드·사유 | Owner가 preloaded 결정 |
+| 모드·사유 | Owner 결정 및 입력 반영 완료; 이미지 증빙 미완 |
 | 경로 승인 | B/IF-10 확대와 C/외부 egress를 사용하지 않는 경계에 대한 승인자 확인 필요 |
-| renderer 입력 | 이 변경에서 반영; 리뷰·병합 필요 |
+| renderer 입력 | PR #54 승인·병합 완료 (`c51a9ff5f8eff104915f5f8fee41906b077b2b2a`) |
 | 이미지 목록·digest·출처 | 6대 노드의 전체 digest, 반입 원본 위치·해시·검증 방법 필요 |
 | BLOCK 해제 | 위 항목 및 독립적인 OID-03 처분 근거 필요; 자동 해제하지 않음 |
 
@@ -50,3 +50,5 @@ worker01 Harbor 이름과 다른 노드 quay 이름은 전체 digest와 출처�
 OID-02 Owner 이하영 / Lead 이권욱, 기존 Due 2026-10-07 유지.
 Phase 1 Close 2026-10-06 전에 미해결 항목의 처리 또는 명시적 수용·이월 판단이 필요하며,
 이 문서는 그 승인을 대신하지 않는다.
+
+후속 수집·대조: [OID-02 이미지 증빙 인계](OID02_IMAGE_EVIDENCE_HANDOFF_20261004.md).

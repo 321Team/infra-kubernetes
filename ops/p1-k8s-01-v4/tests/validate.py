@@ -163,6 +163,17 @@ class PolicyTests(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0)
             self.assertFalse(out.exists())
 
+    def test_preloaded_accepts_empty_registry_nets(self):
+        render.validate(self.c, ROOT, False)
+
+    def test_preloaded_rejects_registry_egress_on_each_node(self):
+        for name in self.c['nodes']:
+            with self.subTest(node=name):
+                c = copy.deepcopy(self.c)
+                c['nodes'][name]['registry_nets'] = ['10.1.93.54/32']
+                with self.assertRaisesRegex(ValueError, 'preloaded mode must not add registry egress'):
+                    render.validate(c, ROOT, False)
+
     def test_ntp_unknown_and_broad_nets_rejected(self):
         for value in ([], ['0.0.0.0/0'], ['10.1.93.0/24'], ['127.0.0.1/32']):
             c = copy.deepcopy(self.c)
