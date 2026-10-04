@@ -1,0 +1,53 @@
+# P1-K8S-01 `ac-net-run01` — Pod/Service 통신·DNS·UDP4789·TCP179/IPIP 시험 도구
+
+- 책임: [#10 P1-K8S-01](https://github.com/321Team/fds-project-baseline/issues/10) AC "Calico/CoreDNS 정상", "Pod/Service DNS와 Cross-node Pod 통신 PASS", 핵심 요구 "UDP 4789 중심 Port Matrix, TCP 179/IPIP 기본 미허용"의 **잔여 증적**
+- 계획·승인 기록: [시험 계획 5977712768](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5977712768), [T14 보완 5978355596](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5978355596), [PMO/QA 통합 리뷰 5979627598](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5979627598)(B1~B4)
+- 상태: **Runtime 코드다. 이 PR의 병합·CI/STATIC PASS는 Runtime PASS나 AC credit이 아니다.** 실행은 PMO/QA의 Fresh Gate GO 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
+
+## 이 도구가 하는 일
+| 시험 | 방법 | 파일 |
+|---|---|---|
+| T09 Pod→CoreDNS | 각 Pod의 `socket.getaddrinfo`로 `kubernetes.default…`(기대 `10.96.0.1`), `kube-dns.kube-system…`, 없는 이름(NXDOMAIN), `quay.io` | `acnet-2-tests.sh` |
+| T07 교차 노드 Pod 통신 | 3개 Pod가 다른 2개 Pod IP:8080으로 HTTP GET, **6방향** | `acnet-2-tests.sh` |
+| T08 Service | 6방향 × (ClusterIP:80, FQDN:80) HTTP GET | `acnet-2-tests.sh` |
+| T14 UDP 4789 | 6대 route·`vxlan.calico` 읽기 전용 조회, edge01 → worker01 UDP 4789 **1회** + `ens160` tcpdump + 규칙 counter 전·후 | `acnet-3-edge.sh` |
+| T15 TCP179/IPIP | edge01 → worker01 TCP179 **1회**, IP protocol 4 raw **1회**(가능할 때만) + 같은 캡처·counter | `acnet-3-edge.sh` |
+
+## 파일
+| 파일 | 역할 | 실행 위치 |
+|---|---|---|
+| `manifests/ac-net-run01.yaml` | Namespace 1, Pod 3(worker01/02/03), Service 3. **이미지 digest 고정, `imagePullPolicy: Never`**, restricted PSA | 제출 |
+| `acnet-0-precheck.sh` | **읽기 전용** Fresh Gate: namespace NotFound, digest가 3 Worker에 정확히 있는지, 노드 Ready, readyz | ansible01 |
+| `acnet-1-gate-create.sh` | 기준선 기록 → dry-run → apply → **namespace UID 기록** → Pod Ready 대기 | control01 |
+| `acnet-2-tests.sh` | T09·T07·T08 | control01 |
+| `acnet-3-edge.sh`, `acnet-worker-counters.sh` | T14·T15 | ansible01 (+ worker01 helper) |
+| `acnet-9-cleanup.sh` | namespace UID에 결박된 정리 | control01 |
+| `SHA256SUMS` | 위 파일의 SHA-256 | — |
+
+## PMO/QA 차단사항 대응
+| ID | 요구 | 대응 |
+|---|---|---|
+| **B1** | Runtime 코드를 Git PR + exact SHA로 | 이 PR. 실행 SHA = 리뷰 완료 SHA. 서버에는 ansible01에서 `gh repo clone`한 exact SHA를 해시 확인 후 `ansible copy`로 전달한다(control01은 GitHub 접속 불가) |
+| **B2** | 이미지 공급 경로를 확정적으로 | `image@sha256:a7093136…cc33`(현재 `transaction-api` Deployment와 같은 digest) 고정, **`imagePullPolicy: Never`**, `acnet-0-precheck.sh`가 3 Worker에 digest 존재를 확인(없으면 `PRECHECK_FAIL`, **pull·Secret 생성으로 우회하지 않고 중단**), Pod 보안 설정은 매니페스트에 명시 |
+| **B3** | 정리를 Namespace UID에 결박 | 시작 전 NotFound 확인 → 생성 직후 UID 기록 → 삭제 직전 현재 UID 일치, 라벨 확인, Pod 3·Service 3 외 객체 있으면 **삭제 STOP**, 삭제 후 NotFound와 라벨 잔여 0 확인 |
+| **B4** | IPIP 실측 불가 시 PASS 대체 금지 | raw 송신이 불가능하거나 도착이 없으면 `T15_IPIP=NOT_VERIFIED`로 출력. 구성 증적(`ipipMode=Never`, 장치·모듈 없음)은 **보조 증적**으로만 쓴다. 스크립트는 PASS를 선언하지 않는다 |
+| T14 | 도착 + 같은 src/dst/proto에 연결되는 규칙 counter | tcpdump 도착, **noise 30초 구간**의 Calico DROP counter 변화량과 시험 구간 변화량을 비교해 `COUNTER_ATTRIBUTION`을 `CONSISTENT…`/`NOT_SEPARATED`로 기록. 분리가 안 되면 PARTIAL/LIMITATION |
+
+## 실행 순서
+1. **Fresh Gate**(PMO/QA 요구): Node 6/6 Ready, readyz, boot_id 6대·앱 Pod restart·HEP/GNP/Felix UID/generation 기준선, MON 23/23, 콘솔·재부팅 금지·동시 Runtime 없음, `acnet-0-precheck.sh` `PRECHECK_PASS`
+2. `acnet-1-gate-create.sh`(생성) → `acnet-2-tests.sh`(T09·T07·T08) → `acnet-3-edge.sh`(T14·T15) → `acnet-9-cleanup.sh`
+3. 정리 후 기준선·MON 23/23 복구 확인 → 서버 원본 묶음 → 해시 대조 → 증적 PR(독립 evidence reviewer)
+
+## STOP 조건 (하나라도 발생하면 즉시 중단)
+- 앱 Pod 재시작 증가, Node NotReady, readyz 이상, 예상하지 않은 boot_id 변경
+- HEP/GNP/Felix UID·generation 변화, 설명 안 되는 drift
+- 테스트 Pod가 `ErrImageNeverPull`/`ImagePullBackOff`/PSA 거부 등으로 Ready가 아니면 **Secret을 만들거나 pull로 우회하지 않는다**
+- 승인 관리 경로(ansible01 SSH, control01 → 10250) 상실
+- 동시 cluster/security/MON Runtime 변경 발생
+- 정리 단계의 UID·라벨·객체 집합 검사 실패(→ 삭제하지 않고 보고)
+
+## 한계 (정직하게)
+- `COUNTER_ATTRIBUTION`은 휴리스틱이다(Calico DROP counter는 규칙 전체 합계이며 noise 구간과 비교). 증명이 아니다.
+- edge01에서 `sudo -n`이 안 되면 IPIP raw 송신은 불가하고 `T15_IPIP=NOT_VERIFIED`로 남는다.
+- 이 도구는 시험 전 Node→`.52/.53`(6/6 수집 완료, 별도 증적)과 Pod 외부 DNS 시험을 대신하지 않는다.
+- 시험 시작/종료 시각과 대상은 #10에 먼저 기록한다. 이 README는 실행 승인이 아니다.
