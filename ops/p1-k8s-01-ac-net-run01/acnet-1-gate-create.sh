@@ -19,7 +19,14 @@ if $K get ns $NS >/dev/null 2>&1; then echo "STOP: namespace $NS already exists"
 echo "## dry-run"; $K apply --dry-run=server -f "$MAN" || { echo "STOP: dry-run failed"; exit 1; }
 echo "## apply"; $K apply -f "$MAN" | tee $R/2-apply.txt
 UID_NS=$($K get ns $NS -o jsonpath='{.metadata.uid}'); echo "$UID_NS" > $R/ns-uid.txt; echo "NS_UID=$UID_NS" | tee -a $R/2-apply.txt
-echo "## wait pods Ready (120s)"; $K -n $NS wait --for=condition=Ready pod --all --timeout=120s 2>&1 | tee -a $R/2-apply.txt
+echo "## wait pods Ready (120s)"
+$K -n $NS wait --for=condition=Ready pod --all --timeout=120s 2>&1 | tee -a $R/2-apply.txt
+WAIT_RC=${PIPESTATUS[0]}; echo "WAIT_RC=$WAIT_RC" | tee -a $R/2-apply.txt
+if [ "$WAIT_RC" != "0" ]; then
+  echo "STOP: test Pods are not all Ready. Do NOT create a pull secret or pull the image. Record pod state, then run acnet-9-cleanup.sh and report to #10."
+  $K -n $NS get pods -o wide | tee -a $R/2-apply.txt; $K -n $NS describe pods 2>&1 | grep -E 'Name:|State:|Reason:|Message:|Events:' | head -40 | tee -a $R/2-apply.txt
+  exit 1
+fi
 echo "## object set"; $K -n $NS get pods,svc -o name | sort | tee -a $R/2-apply.txt
 $K -n $NS get pods,svc -o wide | tee -a $R/2-apply.txt
 date -Is | tee -a $R/2-apply.txt

@@ -15,9 +15,14 @@ GOT=$($K -n $NS get pods,svc -o name | sort | tr '\n' ' ' | sed 's/ *$//'); echo
 WANT="pod/probe-a pod/probe-b pod/probe-c service/probe-a-svc service/probe-b-svc service/probe-c-svc"
 [ "$GOT" = "$WANT" ] || stop "unexpected pod/service set"
 echo "## other user resources (excluding defaults)"
-OTHER=$($K -n $NS get deploy,sts,ds,job,cronjob,cm,secret,sa,role,rolebinding,networkpolicy,pvc,ingress -o name 2>/dev/null | grep -v -E 'configmap/kube-root-ca.crt|serviceaccount/default' || true)
+ALL=$($K -n $NS get deploy,sts,ds,job,cronjob,cm,secret,sa,role,rolebinding,networkpolicy,pvc,ingress -o name 2>&1); LRC=$?
+[ "$LRC" = "0" ] || { echo "$ALL"; stop "resource listing failed (rc=$LRC); cannot confirm the namespace is clean"; }
+OTHER=$(echo "$ALL" | grep -v -E '^configmap/kube-root-ca.crt$|^serviceaccount/default$' || true)
 [ -z "$OTHER" ] || { echo "$OTHER"; stop "unexpected resources in namespace"; }
-echo "## delete"; $K delete ns $NS --wait=true --timeout=120s
+echo "## delete with UID precondition (no gap between the check and the delete)"
+echo "{\"kind\":\"DeleteOptions\",\"apiVersion\":\"v1\",\"preconditions\":{\"uid\":\"$REC\"}}" | $K delete --raw /api/v1/namespaces/$NS -f - ; DRC=$?
+echo "delete_rc=$DRC"; [ "$DRC" = "0" ] || stop "precondition delete refused (rc=$DRC)"
+for i in $(seq 1 24); do $K get ns $NS >/dev/null 2>&1 || break; sleep 5; done
 echo "## after"; $K get ns $NS 2>&1 | head -2
 echo "## leftover with label (expect none)"; $K get pods,svc -A -l fds.test/run=ac-net-run01 2>&1 | head -3
 echo "## nodes / readyz / fds-app"; $K get nodes --no-headers | awk '{print $1,$2}'; $K get --raw='/readyz?verbose' | tail -1; $K -n fds-app get pods --no-headers | awk '{print $1,$3,$4}'

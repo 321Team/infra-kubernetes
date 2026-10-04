@@ -23,6 +23,9 @@ echo "## digest cached on each worker (exact match required)"
 for w in k8s-worker01 k8s-worker02 k8s-worker03; do
   r=$(ansible -i inventory/hosts.yml $w -b -m shell -a "crictl images --digests --no-trunc 2>&1 | grep -c '$DIGEST'" 2>&1 | tail -1)
   echo "$w digest_rows=$r"; [ "${r:-0}" -ge 1 ] 2>/dev/null || { echo "FAIL: $w does not have $DIGEST"; fail=1; }
+  # kubelet resolves the exact reference; the grep above only shows the digest exists somewhere (supreme33-kr review point 1)
+  i=$(ansible -i inventory/hosts.yml $w -b -m shell -a "crictl inspecti '$IMAGE' >/dev/null 2>&1; echo inspecti_rc=\$?" 2>&1 | grep -o 'inspecti_rc=[0-9]*' | head -1)
+  echo "$w $i"; [ "$i" = "inspecti_rc=0" ] || { echo "FAIL: $w cannot resolve $IMAGE (crictl inspecti)"; fail=1; }
 done
 [ "$fail" = 0 ] && echo "PRECHECK_PASS" || echo "PRECHECK_FAIL (do NOT start; do not pull or create a secret to work around)"
 } 2>&1 | tee ~/ac-net-run01-precheck.txt

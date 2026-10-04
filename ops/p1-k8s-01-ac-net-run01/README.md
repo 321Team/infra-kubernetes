@@ -51,3 +51,18 @@
 - edge01에서 `sudo -n`이 안 되면 IPIP raw 송신은 불가하고 `T15_IPIP=NOT_VERIFIED`로 남는다.
 - 이 도구는 시험 전 Node→`.52/.53`(6/6 수집 완료, 별도 증적)과 Pod 외부 DNS 시험을 대신하지 않는다.
 - 시험 시작/종료 시각과 대상은 #10에 먼저 기록한다. 이 README는 실행 승인이 아니다.
+
+## 코드 리뷰 반영 (supreme33-kr CHANGES_REQUESTED, 대상 HEAD `1d400d2a`)
+| ID | 지적 | 반영 |
+|---|---|---|
+| **B-57-01** | TCP179의 RST·SYN-ACK·ICMP 응답을 "차단"과 구분하지 않음 | 캡처 필터에 `icmp`를 추가하고 요약에 `tcp179_synack`·`tcp179_rst`·`icmp_from_tgt`를 센다. **응답이 하나라도 있으면 `T15_TCP179=REACHABLE_OR_REJECTED`(Calico drop 모양이 아님)**, SYN만 도착하고 응답이 0일 때만 `SYN_ARRIVED_NO_REPLY(drop-shaped)`로 기록한다. SYN이 안 보이면 `NOT_ARRIVED` |
+| **B-57-02** | 캡처 유효성 Gate 없음 | tcpdump를 `timeout --signal=INT --preserve-status 85`로 정상 종료시키고, async 작업을 `async_status`로 받아 `finished`·`rc`를 확인한다. 캡처 파일의 `listening on ens160`, `0 packets dropped by kernel`, `packets captured` 통계 줄, **ansible01 SSH 제어 패킷(liveness)** 이 모두 있어야 `CAPTURE=VALID`. 하나라도 어긋나면 `CAPTURE=INVALID`이고 T14·T15 도착 관측과 counter 판정은 **`NOT_VERIFIED`** |
+| 비차단 1 | Pod Ready 실패 시 STOP | `acnet-1-gate-create.sh`가 `kubectl wait` 종료 코드를 확인해 0이 아니면 Pod 상태를 기록하고 **중단**(pull·Secret 생성으로 우회하지 않고 `acnet-9-cleanup.sh`와 #10 보고로 이어짐) |
+| 비차단 2 | 삭제 UID precondition | `kubectl delete --raw /api/v1/namespaces/ac-net-run01 -f -`에 `DeleteOptions.preconditions.uid=<기록값>`을 넣어 확인과 삭제 사이의 틈을 없앴다. 삭제 거부 시 STOP. **(이 호출 형식은 서버에서 아직 실행해 보지 않았다 — 첫 실행 전 dry 확인 대상)** |
+| 비차단 3 | 기타 리소스 조회 fail-open | 조회 종료 코드를 따로 확인하고 0이 아니면 삭제 STOP |
+| 비차단 4 | 이미지 내부 가정 | Pod가 Ready가 아니면 1번대로 STOP. `python3`·`/tmp`가 있다는 가정은 첫 Ready 확인으로 검증 |
+| 답변 보완 1 | `crictl images`만으로는 참조 해석을 보증 못함 | `acnet-0-precheck.sh`가 각 Worker에서 **`crictl inspecti <image>@<digest>`의 종료 코드**를 확인(0이 아니면 `PRECHECK_FAIL`) |
+| 답변 보완 3 | edge01 sudo 사용 | `SUDO_OK`이면 이 스크립트가 edge01에서 root로 **IP protocol 4 패킷 1개**를 raw 송신한다. **시작 코멘트에 edge01 sudo 사용 여부를 적는다** |
+| 답변 보완 4 | 규칙별 counter | `acnet-worker-counters.sh <label>`가 규칙별 DROP counter 스냅샷(`t15-drop-c0/c1/c2.txt`)을 남기고, edge 스크립트가 noise 구간(c0→c1)과 시험 구간(c1→c2)의 **규칙별 diff**를 출력한다 |
+
+로컬 검증(STATIC): 가짜 `ansible`·`sleep`을 PATH에 둔 모의 실행으로 `acnet-3-edge.sh`의 판정 줄을 4개 시나리오(유효·응답 없음, RST 응답, `listening` 줄 없음, async job rc≠0)로 확인했다. 서버 실행은 하지 않았다.
