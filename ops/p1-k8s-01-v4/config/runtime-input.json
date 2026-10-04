@@ -5,7 +5,7 @@
   "dataplane": "iptables",
   "mtu": null,
   "system_images": {
-    "mode": null
+    "mode": "preloaded"
   },
   "probe_image": null,
   "probe_nodes": [
