@@ -1,0 +1,27 @@
+=== collect-ac04-extra-negative.sh 로컬 시험 결과
+  PASS  T1: 정상: rc=0, COMPLETE, BLOCKED_VALID
+  PASS  T1: 행 12개(대조 3 + 차단 9), 차단 유효 9
+  PASS  T1: 봉인(SHA256SUMS·tar·sidecar) 생성
+  PASS  T1: route src 확인 파일 기록
+  PASS  T2: 차단 기대인데 CONNECTED 면 rc=11, FAIL
+  PASS  T2: FAIL 이면서 PASS 로 끝나지 않음(FINAL 줄에 FAIL)
+  PASS  T3: 대조 불충족이면 rc=10, INCONCLUSIVE
+  PASS  T3: 유효한 차단(valid_block)은 0, TIMEOUT 은 관측값으로 보존
+  PASS  T3: 대조 불충족 사유가 verdict-rows 에 기록
+  PASS  T4: 환경변수 변경을 무시하고 12행·rc=0
+  PASS  T4: 대상은 고정된 Worker 3대(1.2.3.4 로 접속하지 않음)
+  PASS  T5: route src 가 예상과 다르면 STOP(rc=2)
+  PASS  T5: 접속 호출 0회(자체 확인 외 시험 접속 없음)
+  PASS  T6: hostname 이 예상과 다르면 STOP(rc=2), 접속 0회
+  PASS  T7: REFUSED 는 INCONCLUSIVE(rc=10), 유효 차단 0
+  PASS  T7: REFUSED 로 분류되고 stderr 가 보존됨
+  PASS  T8: No route 는 ERROR 로 남고 REFUSED 로 읽지 않음
+  PASS  T8: ERROR 는 유효 차단이 아니며 rc=10
+  PASS  T9: worker03 만 대조 불충족: 유효 차단 6, 불확정 3, rc=10
+  PASS  T9: worker03 알려진 한계가 기록되고 승격 안 됨
+  PASS  T9: edge 대조 포트는 30080
+  PASS  T10: tar 봉인 실패면 INCOMPLETE(rc=12)
+  PASS  T11: /dev/tcp 미지원이면 STOP(rc=2), 시험 접속 0회
+  PASS  T12: 잘못된 인자는 rc=2
+  PASS  T13: edge 정상: rc=0, 대조 포트 30080, 차단 유효 9
+=== PASS=25 FAIL=0
