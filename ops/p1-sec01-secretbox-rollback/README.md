@@ -1,17 +1,17 @@
-# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.1)
+# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.2)
 
 - 책임: [#19 P1-SEC-01](https://github.com/321Team/fds-project-baseline/issues/19) AC "Secret encryption·backup·rotation·**rollback**" 중 rollback Runtime 증적([CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 P1 필수·미충족으로 남은 항목).
-- 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → **v4.1(이 PR)**.
+- 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → v4.1 → **v4.2(지정 구현 후속)**.
 - 상태: **Runtime 코드다. 운영 클러스터에서 한 번도 실행하지 않았다.** 이 PR의 병합·fixture PASS는 Runtime PASS나 AC credit이 아니며, 설정 변경·apiserver 재기동·변경창을 승인하지 않는다. 실행은 PMO/QA 승인 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
 
 ## 파일
 
 | 파일 | 역할 |
 |---|---|
-| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.1-20261005` |
+| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.2-20261005` |
 | `test-rollback-v4.sh` | 가짜 클러스터(fixture) 시험. 스텁 `kubectl`·`ss`·`hostname`을 PATH에 두고 클러스터에는 접근하지 않는다 |
-| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.1-20261005`) |
-| `validation/fixture-results-v4.1.txt` | fixture 실행 로그 원본: **152 PASS / 0 FAIL** |
+| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.2-20261005`) |
+| `validation/fixture-results-v4.2.txt` | 현행 fixture 실행 로그 원본: **191 PASS / 0 FAIL**(기존 152개 + 추가 39개) |
 | `SHA256SUMS` | 위 파일의 SHA-256(자기 자신 제외) |
 
 ## 실행 방법(승인된 변경창에서만, 대상 CP 콘솔 root)
@@ -37,3 +37,16 @@ fixture 시험(로컬, 약 7분): `bash test-rollback-v4.sh ./sec01-secretbox-ro
 - 실제 `kubectl`/API 서버의 `Conflict` 응답 문구, `--raw` 응답 처리, kubelet static pod 재생성, containerd ID, etcdctl 출력 형식은 **운영에서 검증되지 않았다.** etcd 출력 형식은 변경 전 2단계에서 먼저 검증된다(어긋나면 변경 없이 종료). 삭제의 첫 실제 검증은 변경 후 6단계 정리에서 일어난다.
 - 3CP 설정 해시 동일 확인은 실행자가 수집한 `PEER_SHAS` 대조다.
 - 예방 rotation, etcd snapshot 복원(DR), 잘못된 키·깨진 설정에서의 복구는 이 시험이 증명하지 않는다.
+
+## v4.2-20261005 — 지정 구현 후속
+
+근거: [지정 구현 요청 5987564325](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5987564325), [#59 리뷰](https://github.com/321Team/infra-kubernetes/pull/59#pullrequestreview-5409625292). 구현: 이권욱(CODEX_ASSISTED), 독립 리뷰: 이재환(`supreme33-kr`) 요청 예정. 과거 `fixture-results-v4.1.txt`는 당시 결과로 보존한다.
+
+- Gate의 nodes·각 CP readyz·etcd health/status·apiserver Pods·Secret 목록·kubeconfig server는 원 명령 stdout/stderr/rc를 먼저 수집한다. rc!=0인 정상처럼 보이는 출력으로 진행하지 않는다. rollback 중 대상 CP Secret 목록 실패도 즉시 복구 경로로 간다.
+- **실행 전 python3 필수.** etcd health JSON 배열, 필수 endpoint/health, `CP_IPS`의 각 `https://<IP>:2379` 집합, 중복 없음, boolean true를 검증한다. 파서 부재/실패나 형식 불일치는 변경 전 Gate에서 거부한다. fixture의 가상 a/b/c endpoint는 실제 형식의 CP 주소로 교체했으며 기존 152개 assertion은 유지한다.
+- `finalize`에서 tar rc, archive 비어 있지 않음, SHA-256 sidecar 쓰기 및 검산을 검사한다. 실패하면 `EVIDENCE_STATUS=INCOMPLETE`, nonzero이며 전체 GO/PASS는 출력하지 않는다. 소유 UID cleanup/설정 복구는 봉인 실패와 별개로 수행한다.
+- 실행 폴더는 `mktemp -d`로 고유하게 생성한다. `<OUT>.completion.txt`는 archive **밖의 최종 기록**이다. `99-operation-provisional.txt`는 봉인 전 실행 결과만 보존한다. run.log를 봉인 후 갱신하지 않으며 최종 결과는 콘솔과 completion에 남긴다. 인수 시 실제 process rc=0, GO/PASS, EVIDENCE_STATUS=COMPLETE, archive sidecar 검산을 함께 확인한다.
+- Gate 실패: ENC/manifest 변경·Secret 생성 없이 nonzero. 변경 이후 조회/봉인 실패: 원상복구·UID cleanup 결과를 기록하고 전체 FAIL로 종료한다. **변경 후 실패에 대해 '변경 자체가 없었다'고 주장하지 않는다.**
+- 증적 저장 실패 후 성공 기록을 수동으로 덮어쓰지 않는다. 기존 출력과 오류를 보존하고 원인 해소 후 새 실행으로 수집한다. 운영 재실행은 기존 변경창/승인 범위를 따른다. 자동 복구 실패 시 runbook 7절을 적용한다.
+
+추가 시험: 정상 출력+nonzero(health/readyz/nodes/status/Pods/목록/config), malformed/중복/예상 밖/필수 필드 누락 JSON, 파서 실패, tar/checksum/sidecar 실패, rollback 목록 실패, precheck/postcheck 봉인 실패. 실제 서버 실행은 포함하지 않는다.

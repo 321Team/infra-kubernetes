@@ -26,8 +26,8 @@
 #   ORIG_SHA=<시험 전 sha256> bash sec01-secretbox-rollback-v4.sh postcheck
 #
 # FIXTURE=1 은 가짜 클러스터(스텁) 시험 전용이다. 운영에서 사용하지 않는다.
-set -u
-REV="v4.1-20261005"
+set -uo pipefail
+REV="v4.2-20261005"
 MODE="${1:-}"
 FIXTURE="${FIXTURE:-0}"
 ENC="${ENC:-/etc/kubernetes/enc/encryption-config.yaml}"
@@ -62,7 +62,7 @@ umask 077
 
 if [ "$FIXTURE" != 1 ] && [ "$(id -u)" -ne 0 ]; then echo "root 로 실행하세요."; exit 2; fi
 case "$MODE" in precheck|rollback-test|postcheck) ;; *) echo "사용: $0 precheck | rollback-test | postcheck"; exit 2;; esac
-mkdir -p "$OUT"
+OUT="$(mktemp -d "$OUT.XXXXXX")" || { echo "출력 폴더 생성 실패" >&2; exit 2; }
 LOG="$OUT/run.log"
 say() { echo "[$(date -u +%H:%M:%SZ)] $*" | tee -a "$LOG"; }
 mark() { echo "$1" > "$STEP_FILE" 2>/dev/null; }
@@ -237,54 +237,131 @@ do_restore() {
   [ "$ok" = 1 ] && CHANGED=0
   [ "$ok" = 1 ]
 }
-finalize() {
-  local arc="$OUT_BASE/$(basename "$OUT").evidence.tar.gz"
-  tar czf "$arc" -C "$(dirname "$OUT")" --exclude='*.bak' --exclude='*.orig' --exclude='*.rolled' --exclude='*.db' --exclude='.etcd-raw.*' "$(basename "$OUT")"
-  sha256sum "$arc" | tee "$arc.sha256"
-  say "evidence 아카이브(키 설정 사본 제외): $arc"
+# All gate inputs retain command status before any parsing/pipeline.
+capture() {  # label command...; stdout/stderr/rc remain in OUT
+  local label="$1" rc; shift
+  "$@" > "$OUT/$label.txt" 2> "$OUT/$label.stderr"; rc=$?
+  printf '%s\n' "$rc" > "$OUT/$label.rc" || { fail "$label rc 기록 실패"; return 1; }
+  [ "$rc" -eq 0 ] || { fail "$label 조회 실패(rc=$rc)"; return 1; }
 }
-finish() { [ "$FINISHED" = 1 ] && return 0; FINISHED=1; cleanup_tests; finalize; }
-bail() { say "ABORT: $*"; ACFAILS=$((ACFAILS+1)); do_restore; finish; exit 1; }
-trap 'say "신호 수신 - 중단"; do_restore; finish; exit 1' INT TERM
-trap 'if [ "$FINISHED" = 0 ]; then say "비정상 종료 감지 - 정리"; do_restore; finish; fi' EXIT
+validate_health() {
+  command -v python3 >/dev/null 2>&1 || { fail "etcd health JSON 파서 python3 없음"; return 1; }
+  python3 - "$1" $CP_IPS <<'PYJSON'
+import json, sys
+from urllib.parse import urlsplit
+
+def unique_keys(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("duplicate JSON key")
+        obj[key] = value
+    return obj
+try:
+    with open(sys.argv[1]) as f:
+        data = json.load(f, object_pairs_hook=unique_keys)
+    expected = set(sys.argv[2:])
+    if not expected or len(expected) != len(sys.argv[2:]):
+        raise ValueError("invalid expected endpoint set")
+    if not isinstance(data, list) or len(data) != len(expected):
+        raise ValueError("endpoint count/JSON structure mismatch")
+    actual = []
+    for item in data:
+        if not isinstance(item, dict) or item.get("health") is not True:
+            raise ValueError("missing/false health")
+        ep = urlsplit(item["endpoint"])
+        if (ep.scheme != "https" or ep.port != 2379 or ep.username or ep.password
+                or ep.path not in ("", "/") or ep.query or ep.fragment):
+            raise ValueError("invalid endpoint URL")
+        actual.append(ep.hostname)
+    if len(set(actual)) != len(actual) or set(actual) != expected:
+        raise ValueError("duplicate/unexpected endpoint")
+except (ValueError, TypeError, KeyError, OSError) as exc:
+    print("etcd health invalid: " + str(exc), file=sys.stderr)
+    sys.exit(1)
+PYJSON
+}
+finalize() {
+  local arc="$OUT.evidence.tar.gz"
+  tar czf "$arc" -C "$(dirname "$OUT")" --exclude='*.bak' --exclude='*.orig' --exclude='*.rolled' --exclude='*.db' --exclude='.etcd-raw.*' "$(basename "$OUT")" || return 1
+  [ -s "$arc" ] || return 1
+  sha256sum "$arc" > "$arc.sha256" || return 1
+  [ -s "$arc.sha256" ] || return 1
+  sha256sum -c "$arc.sha256" >/dev/null || return 1
+}
+finish() {  # requested success token; FAIL explicitly suppresses success
+  [ "$FINISHED" = 1 ] && return "$FINAL_RC"
+  local requested="${1:-FAIL}" operation=FAIL result=FAIL evidence=COMPLETE
+  FINISHED=1; FINAL_RC=1
+  cleanup_tests || :  # cleanup increments ACFAILS; never skip seal on cleanup failure
+  if [ "$requested" != FAIL ] && [ "$FAILS" -eq 0 ] && [ "$ACFAILS" -eq 0 ] && [ "$CHANGED" -eq 0 ]; then operation="$requested"; fi
+  printf 'OPERATION_RESULT=%s\nEVIDENCE_STATUS=PENDING\n' "$operation" > "$OUT/99-operation-provisional.txt" || evidence=INCOMPLETE
+  finalize || evidence=INCOMPLETE
+  if [ "$operation" != FAIL ] && [ "$evidence" = COMPLETE ]; then result="$operation"; FINAL_RC=0; fi
+  [ "$result" = FAIL ] && [ "$MODE" = precheck ] && result=NO-GO
+  # External completion record: do not mutate archived files after sealing.
+  if ! printf 'RESULT: %s\nOPERATION_RESULT=%s\nEVIDENCE_STATUS=%s\nEXIT_CODE=%s\nARCHIVE=%s\n' "$result" "$operation" "$evidence" "$FINAL_RC" "$OUT.evidence.tar.gz" > "$OUT.completion.txt"; then
+    evidence=INCOMPLETE; FINAL_RC=1; result=FAIL
+    [ "$MODE" = precheck ] && result=NO-GO
+  fi
+  printf 'RESULT: %s\nOPERATION_RESULT=%s EVIDENCE_STATUS=%s EXIT_CODE=%s\nCOMPLETION=%s\n' "$result" "$operation" "$evidence" "$FINAL_RC" "$OUT.completion.txt"
+  return "$FINAL_RC"
+}
+bail() { say "ABORT: $*"; ACFAILS=$((ACFAILS+1)); do_restore || acfail "복원 실패"; finish FAIL; exit 1; }
+trap 'say "신호 수신 - 중단"; do_restore || acfail "복원 실패"; finish FAIL; exit 1' INT TERM
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  if [ "$FINISHED" = 0 ]; then
+    say "비정상 종료 감지 - 정리"
+    do_restore || acfail "복원 실패"
+    finish FAIL
+    [ "$rc" -ne 0 ] || rc=1
+  fi
+  exit "$rc"
+}
+trap on_exit EXIT
 
 # 읽기 전용 점검. $1 = 파일 접두어
 checks() {
-  local p="$1" n ip r left srv cnt healthy lout lrc
-  $KC get nodes -o wide > "$OUT/$p-nodes.txt" 2>&1
-  n=$($KC get nodes --no-headers 2>/dev/null | awk '$2=="Ready"' | wc -l)
-  say "nodes Ready: $n/$EXPECT_NODES"
-  [ "$n" -eq "$EXPECT_NODES" ] || fail "Ready 노드 $n/$EXPECT_NODES"
+  local p="$1" n ip r left srv lout lrc
+  capture "$p-nodes" $KC get nodes -o wide || :
+  if capture "$p-nodes-noheaders" $KC get nodes --no-headers; then
+    n=$(awk '$2=="Ready" {n++} END {print n+0}' "$OUT/$p-nodes-noheaders.txt")
+    say "nodes Ready: $n/$EXPECT_NODES"
+    [ "$n" -eq "$EXPECT_NODES" ] || fail "Ready 노드 $n/$EXPECT_NODES"
+  fi
   : > "$OUT/$p-readyz.txt"
   for ip in $CP_IPS; do
-    r=$($KC --server="https://$ip:6443" get --raw=/readyz 2>&1 | head -c 80)
-    echo "$ip readyz: $r" >> "$OUT/$p-readyz.txt"
-    [ "$r" = "ok" ] || fail "$ip /readyz = '$r'"
+    if capture "$p-readyz-$ip" $KC --server="https://$ip:6443" get --raw=/readyz; then
+      r=$(cat "$OUT/$p-readyz-$ip.txt")
+      printf '%s readyz: %s\n' "$ip" "$r" >> "$OUT/$p-readyz.txt"
+      [ "$r" = ok ] || fail "$ip /readyz 응답이 ok가 아님"
+    fi
   done
-  etcdctl_in_pod endpoint health --cluster -w json > "$OUT/$p-etcd-health.json" 2>&1
-  etcdctl_in_pod endpoint status --cluster -w table > "$OUT/$p-etcd-status.txt" 2>&1
-  cnt=$(echo $CP_IPS | wc -w)
-  healthy=$(grep -o '"health":true' "$OUT/$p-etcd-health.json" | wc -l)
-  [ "$healthy" -eq "$cnt" ] || fail "etcd healthy 엔드포인트 $healthy/$cnt"
-  grep -q '"health":false' "$OUT/$p-etcd-health.json" && fail "etcd unhealthy 엔드포인트 있음"
-  $KC -n kube-system get pods -l component=kube-apiserver \
-    -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount \
-    > "$OUT/$p-apiserver-pods.txt" 2>&1
-  secret_names > "$OUT/$p-secrets.txt" || fail "Secret 목록 조회 실패(rc!=0 또는 빈 출력)"
-  [ -s "$OUT/$p-secrets.txt" ] || fail "Secret 목록 수집 실패(비어 있음)"
+  if capture "$p-etcd-health" etcdctl_in_pod endpoint health --cluster -w json; then
+    validate_health "$OUT/$p-etcd-health.txt" 2> "$OUT/$p-etcd-health-validation.stderr" || fail "etcd health 구조/endpoint/상태 검증 실패"
+  fi
+  capture "$p-etcd-status" etcdctl_in_pod endpoint status --cluster -w table || :
+  if capture "$p-apiserver-pods" $KC -n kube-system get pods -l component=kube-apiserver \
+    -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount; then
+    awk 'NR>1 {n++; if ($2 != "true") bad=1} END {exit (n==0 || bad)}' "$OUT/$p-apiserver-pods.txt" || fail "apiserver Pod 상태 비어 있음/NotReady"
+  fi
+  if capture "$p-secrets-raw" $KC get secrets -A --no-headers; then
+    [ -s "$OUT/$p-secrets-raw.txt" ] || fail "Secret 목록 수집 실패(비어 있음)"
+    awk '{print $1"/"$2}' "$OUT/$p-secrets-raw.txt" | sort > "$OUT/$p-secrets.txt" || fail "Secret 목록 변환 실패"
+  else fail "Secret 목록 조회 실패"; fi
   { stat -c '%n mode=%a owner=%U:%G size=%s' "$ENC"; sha256sum "$ENC"; } > "$OUT/$p-enc-state.txt" 2>&1
   grep -nE '^\s*- (secretbox|identity|aescbc|aesgcm|kms)' "$ENC" > "$OUT/$p-provider-order.txt" 2>&1
   # B1: 잔여 시험 Secret 조회가 실패하면 0건이 아니라 NO-GO. 조회 성공 후에만 개수를 센다.
-  lout="$($KC -n default get secret --no-headers 2>&1)"; lrc=$?
-  if [ "$lrc" -ne 0 ]; then fail "default Namespace Secret 조회 실패(rc=$lrc): $(echo "$lout" | head -c 80 | tr '\n' ' ')"
-  else
-    left=$(echo "$lout" | awk '/^enc-rb-test-/' | wc -l)
+  if capture "$p-default-secrets" $KC -n default get secret --no-headers; then
+    left=$(awk '/^enc-rb-test-/ {n++} END {print n+0}' "$OUT/$p-default-secrets.txt")
     [ "$left" -eq 0 ] || fail "시험용 Secret(enc-rb-test-*) $left 개가 남아 있음"
+  else fail "default Namespace Secret 조회 실패"; fi
+  if capture "$p-kubeconfig-server" $KC config view --minify -o jsonpath='{.clusters[0].cluster.server}'; then
+    srv=$(cat "$OUT/$p-kubeconfig-server.txt")
+    [ "$srv" = "$LB_URL" ] || fail "admin.conf 서버($srv)가 승인 LB($LB_URL)가 아님"
   fi
-  # admin.conf 의 활성 서버가 승인 LB 인지
-  srv="$($KC config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null)"
-  echo "kubeconfig_server=$srv expected=$LB_URL" > "$OUT/$p-kubeconfig-server.txt"
-  [ "$srv" = "$LB_URL" ] || fail "admin.conf 서버($srv)가 승인 LB($LB_URL)가 아님"
 }
 gate_extra() {
   [ -f "$ENC" ] || fail "암호화 설정 파일 없음"
@@ -310,8 +387,7 @@ case "$MODE" in
 precheck)
   say "== precheck (읽기 전용)"
   checks pre; gate_extra
-  if [ "$FAILS" -eq 0 ]; then say "RESULT: GO"; else say "RESULT: NO-GO (실패 항목 $FAILS)"; fi
-  finish; [ "$FAILS" -eq 0 ]; exit $?
+  finish GO; exit $?
   ;;
 
 rollback-test)
@@ -352,7 +428,8 @@ rollback-test)
 
   say "[4] rollback 상태 검증"
   mark rolled_list
-  $SKC get secrets -A --no-headers 2>/dev/null | awk '{print $1"/"$2}' | sort > "$OUT/30-secrets-after-rollback.txt"
+  capture "30-secrets-raw" $SKC get secrets -A --no-headers || bail "재배치 후 Secret 목록 조회 실패"
+  cat "$OUT/30-secrets-raw.txt" | awk '{print $1"/"$2}' | sort > "$OUT/30-secrets-after-rollback.txt"
   [ -s "$OUT/30-secrets-after-rollback.txt" ] || bail "재배치 후 Secret 목록 수집 실패"
   diff <(grep -v 'default/enc-rb-test-' "$OUT/pre-secrets.txt") <(grep -v 'default/enc-rb-test-' "$OUT/30-secrets-after-rollback.txt") > "$OUT/31-secrets-diff.txt" 2>&1 \
     || bail "기존 Secret 목록 차이"
@@ -401,10 +478,8 @@ rollback-test)
   checks post
   diff "$OUT/pre-secrets.txt" "$OUT/post-secrets.txt" > "$OUT/51-secrets-diff-final.txt" 2>&1 || fail "시험 전후 Secret 목록 차이"
   [ "$(awk '{print $1}' "$OUT/00-orig-sha256.txt")" = "$(sha256sum "$ENC" | awk '{print $1}')" ] || fail "복원 설정 해시 불일치"
-  if [ "$FAILS" -eq 0 ] && [ "$ACFAILS" -eq 0 ]; then say "RESULT: PASS (재기동 관측, rollback 확인, 원복 확인(대상 CP 직접), 정리 확인, 사후 점검 통과)"; else say "RESULT: FAIL (사후 점검 실패 $FAILS 건, AC 실패 $ACFAILS 건)"; fi
   say "원래 설정 sha256: $(awk '{print $1}' "$OUT/00-orig-sha256.txt")"
-  finish
-  [ "$FAILS" -eq 0 ] && [ "$ACFAILS" -eq 0 ]; exit $?
+  finish PASS; exit $?
   ;;
 
 postcheck)
@@ -414,7 +489,6 @@ postcheck)
     [ "$(sha256sum "$ENC" | awk '{print $1}')" = "$ORIG_SHA" ] || fail "암호화 설정 해시가 ORIG_SHA 와 다름"
   else say "ORIG_SHA 미지정 - 설정 해시 비교는 건너뜀"; fi
   [ "$(first_provider "$ENC")" = "secretbox" ] || fail "첫 provider 가 secretbox 가 아님"
-  if [ "$FAILS" -eq 0 ]; then say "RESULT: PASS"; else say "RESULT: FAIL (실패 $FAILS 건)"; fi
-  finish; [ "$FAILS" -eq 0 ]; exit $?
+  finish PASS; exit $?
   ;;
 esac

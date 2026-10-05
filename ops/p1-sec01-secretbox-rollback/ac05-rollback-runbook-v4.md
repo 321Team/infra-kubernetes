@@ -1,7 +1,9 @@
-# P1-SEC-01 AC-05 Secretbox rollback 시험 절차서 (v4.1, rev v4.1-20261005, 승인 전)
+# P1-SEC-01 AC-05 Secretbox rollback 시험 절차서 (v4.2, rev v4.2-20261005, 승인 전)
 
 대상: [#19](https://github.com/321Team/fds-project-baseline/issues/19) AC-05 `Secret encryption·backup·rotation·rollback` 중 **rollback**. [CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 "P1 필수 / Runtime 증적 미충족"으로 남은 항목이다.
-도구: `sec01-secretbox-rollback-v4.sh` (`precheck` / `rollback-test` / `postcheck`). 이 절차서와 스크립트는 **운영 클러스터에서 한 번도 실행하지 않았다.** v3는 PMO/QA 재리뷰([#19 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672), 2026-10-05)에서 소스 차단 3건(B1~B3)과 추적성 조건을 받았고, v4는 그 수정본이다. v4 재리뷰([#19 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302))가 **B3를 서버 측 UID precondition으로 원자적으로 고치라**고 하여 이 문서와 스크립트는 **v4.1**이다(파일 이름은 그대로, 바이트와 revision이 다르다). v4.1도 가짜 클러스터(fixture)에서만 시험했다. **이 문서는 변경창 승인이 아니다.**
+도구: `sec01-secretbox-rollback-v4.sh` (`precheck` / `rollback-test` / `postcheck`). 이 절차서와 스크립트는 **운영 클러스터에서 한 번도 실행하지 않았다.** v3는 PMO/QA 재리뷰([#19 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672), 2026-10-05)에서 소스 차단 3건(B1~B3)과 추적성 조건을 받았고, v4는 그 수정본이다. v4 재리뷰([#19 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302))가 **B3를 서버 측 UID precondition으로 원자적으로 고치라**고 하여 당시 문서와 스크립트는 **v4.1**로 갱신되었다(파일 이름은 그대로, 바이트와 revision이 다르다). v4.1도 가짜 클러스터(fixture)에서만 시험했다. **이 문서는 변경창 승인이 아니다.**
+
+현행 v4.2의 추가 변경·증적 경로·파서 전제는 11절을 따른다. 아래 v4/v4.1 시험 수치는 당시 이력이다.
 
 ## 0. v4 변경 이력 (재리뷰 반영)
 
@@ -110,15 +112,15 @@ Review Owner 정의: rollback은 키 회전이 아니라 **"잘못된 암호화 
 
 ## 6. 증적 (수집·편입)
 
-스크립트가 `/root/p1-sec01-secretbox-rollback-test-<시각>/`에 남기는 파일: `run.log`, `00-identity.txt`(스크립트 SHA·rev·run_id), `pre-*`/`post-*`(nodes, readyz, etcd health/status, apiserver pods, secrets 목록, 설정 mode·해시, provider 순서, `pre-3cp-config-sha.txt`, `pre-enc-backup.txt`), `13`·`33`·`40`(etcd 앞 40바이트와 `class=`), `10-owned-secrets.txt`(이름과 UID)·`10-unowned-secrets.txt`(있다면 수동 확인 대상), `30`·`31`·`51`(목록 비교), `32`·`34`·`35`·`41`·`42`·`43`·`44`(읽기 결과), `restart-rollback-*`·`restart-restore-*`(재기동 증거 단계별), `50-cleanup.txt`, `00-orig-sha256.txt`, `99-restored-sha256.txt`.
-아카이브 `…rollback-test-<시각>.evidence.tar.gz`(+ `.sha256`)에는 `.bak`·`.orig`·`.rolled`·`.db`(키 포함)와 etcd 원문 임시 파일이 **제외**된다. 증적 편입은 기존 방식(ansible01 취합 → 증적 PR → 독립 리뷰)을 따른다.
+스크립트가 `/root/p1-sec01-secretbox-rollback-test-<시각>.<고유값>/`에 남기는 파일: `run.log`, `00-identity.txt`(스크립트 SHA·rev·run_id), `pre-*`/`post-*`(nodes, readyz, etcd health/status, apiserver pods, secrets 목록, 설정 mode·해시, provider 순서, `pre-3cp-config-sha.txt`, `pre-enc-backup.txt`), `13`·`33`·`40`(etcd 앞 40바이트와 `class=`), `10-owned-secrets.txt`(이름과 UID)·`10-unowned-secrets.txt`(있다면 수동 확인 대상), `30`·`31`·`51`(목록 비교), `32`·`34`·`35`·`41`·`42`·`43`·`44`(읽기 결과), `restart-rollback-*`·`restart-restore-*`(재기동 증거 단계별), `50-cleanup.txt`, `00-orig-sha256.txt`, `99-restored-sha256.txt`.
+아카이브 `…rollback-test-<시각>.<고유값>.evidence.tar.gz`(+ `.sha256`)에는 `.bak`·`.orig`·`.rolled`·`.db`(키 포함)와 etcd 원문 임시 파일이 **제외**된다. 증적 편입은 기존 방식(ansible01 취합 → 증적 PR → 독립 리뷰)을 따른다.
 
 ## 7. 수동 복구 (자동 복원이 실패했을 때)
 
 대상 CP에서 root로. 다른 CP 2대가 정상이면 클러스터는 그동안 LB로 서비스된다. **이 CP에서 실제 접근 가능한 사본만 쓴다.**
 
 1. **manifest 위치 확인:** `ls /etc/kubernetes/manifests/kube-apiserver.yaml`. 없으면 `ls /etc/kubernetes/manifests-parked/` 에서 `mv /etc/kubernetes/manifests-parked/kube-apiserver.yaml /etc/kubernetes/manifests/`.
-2. **설정 복원:** 우선순위는 ① 실행 폴더의 `/root/p1-sec01-secretbox-rollback-test-<시각>/encryption-config.yaml.orig`, ② 사전 준비한 `ENC_BACKUP`(`/root/enc-config-prechange.yaml`). 둘 다 이 CP에 있다. `cp -p <사본> /etc/kubernetes/enc/encryption-config.yaml && chmod 600 /etc/kubernetes/enc/encryption-config.yaml`. 사본이 모두 없을 때만 다른 정상 CP의 같은 파일을 `scp`로 가져오고 해시를 `PEER_SHAS`와 대조한다. control01의 2026-10-02 backup 경로는 이 CP에서 접근할 수 없다면 쓸 수 없다.
+2. **설정 복원:** 우선순위는 ① 실행 폴더의 `/root/p1-sec01-secretbox-rollback-test-<시각>.<고유값>/encryption-config.yaml.orig`, ② 사전 준비한 `ENC_BACKUP`(`/root/enc-config-prechange.yaml`). 둘 다 이 CP에 있다. `cp -p <사본> /etc/kubernetes/enc/encryption-config.yaml && chmod 600 /etc/kubernetes/enc/encryption-config.yaml`. 사본이 모두 없을 때만 다른 정상 CP의 같은 파일을 `scp`로 가져오고 해시를 `PEER_SHAS`와 대조한다. control01의 2026-10-02 backup 경로는 이 CP에서 접근할 수 없다면 쓸 수 없다.
 3. **해시 확인:** `sha256sum /etc/kubernetes/enc/encryption-config.yaml` 이 시험 전 값(`00-orig-sha256.txt` 또는 `pre-3cp-config-sha.txt`의 `self=`)과 같은지.
 4. **재기동:** manifest를 다른 폴더로 옮겼다가 다시 `/etc/kubernetes/manifests/`로 되돌린다(약 30초 간격).
 5. **상태 확인:** `kubectl --server=https://<이 CP IP>:6443 get --raw=/readyz`, `crictl ps | grep kube-apiserver`, 실패하면 `crictl logs <id>`·`journalctl -u kubelet -n 100`.
@@ -151,3 +153,11 @@ Review Owner 정의: rollback은 키 회전이 아니라 **"잘못된 암호화 
 - 스크립트(`sec01-secretbox-rollback-v4.sh`), fixture(`test-rollback-v4.sh`), 이 절차서는 변경창 승인 전에 **소스 저장소 PR**로 올리고 exact commit SHA와 각 파일의 SHA-256을 고정한다. PMO/QA 지정([#19 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)): 저장소 `321Team/infra-kubernetes`, 경로 `ops/p1-sec01-secretbox-rollback/`(세 파일 + 자기 자신을 제외한 `SHA256SUMS` + 실행 방법·원본 시험 결과 연결). 바이트가 바뀌면 새 SHA와 revision을 기록하고 이전 코멘트의 SHA를 재사용하지 않는다.
 - 승인 요건: 위 SHA 고정, 독립 리뷰 exact-head APPROVED, fixture 전부 PASS(결과 로그 첨부), 3절 수동 확인과 R1~R5 기록.
 - 이 문서와 PR은 **설정 변경·재기동을 승인하지 않는다.**
+
+## 11. v4.2-20261005 변경 기록 (지정 구현)
+
+- 근거: #19 comment 5987564325. v4.1의 UID precondition 및 대상 CP 직접 원복 확인은 유지한다.
+- Gate 입력은 원 명령 rc 성공 후 검증한다. JSON 파서 `python3`가 대상 CP에 있어야 하며, `etcdctl endpoint health --cluster -w json`의 각 endpoint가 `CP_IPS`와 일치하는 HTTPS/2379인지 구조적으로 검사한다. stderr/rc 원본은 각 `<label>.stderr/.rc`, stdout은 `<label>.txt`로 남긴다(health 원본도 `.txt` 확장자이며 내용은 JSON).
+- 봉인 성공 전에는 최종 GO/PASS를 출력하지 않는다. 증적 압축/체크섬/sidecar/완료 기록 실패는 nonzero, INCOMPLETE다. 최종 결과는 `<OUT>.completion.txt`와 콘솔을 확인한다. 봉인 전 `run.log`/`99-operation-provisional.txt`만으로 승인하지 않는다.
+- 폴더/아카이브에는 고유 접미사가 붙는다. 수동 복구에서 `<시각>.<고유값>`은 실제 실행 폴더로 치환하고 `.orig` 등 키 포함 로컬 사본은 증적 저장소에 올리지 않는다. archive + checksum + completion을 함께 인계한다.
+- 기존 v4.1 152개 assertion 유지, 현행 결과: `validation/fixture-results-v4.2.txt`. 실제 실행 승인은 독립 리뷰 이후 별도다.

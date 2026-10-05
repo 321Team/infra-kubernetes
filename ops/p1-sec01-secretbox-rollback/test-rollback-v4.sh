@@ -4,6 +4,7 @@
 # 환경변수 ONLY=S1,S3 처럼 지정하면 해당 case 만 실행한다.
 SCRIPT="$(cd "$(dirname "${1:-./sec01-secretbox-rollback-v4.sh}")" && pwd)/$(basename "${1:-./sec01-secretbox-rollback-v4.sh}")"
 PASS=0; FAILN=0; RESULTS=()
+export FIXTURE_PYTHON="$(command -v python3)"
 
 make_fixture() {   # $1 = dir
   local FX="$1"
@@ -125,8 +126,8 @@ case "${args[0]:-} ${args[1]:-}" in
   "exec etcd-"*)
     all="${args[*]}"
     case "$all" in
-      *"endpoint health"*) if [ "${FAULT:-}" = etcd_unhealthy ]; then echo '[{"endpoint":"a","health":true},{"endpoint":"b","health":false},{"endpoint":"c","health":true}]'
-        else echo '[{"endpoint":"a","health":true},{"endpoint":"b","health":true},{"endpoint":"c","health":true}]'; fi ;;
+      *"endpoint health"*) if [ "${FAULT:-}" = etcd_unhealthy ]; then echo '[{"endpoint":"https://10.1.93.102:2379","health":true},{"endpoint":"https://10.1.93.103:2379","health":false},{"endpoint":"https://10.1.93.104:2379","health":true}]'
+        else echo '[{"endpoint":"https://10.1.93.102:2379","health":true},{"endpoint":"https://10.1.93.103:2379","health":true},{"endpoint":"https://10.1.93.104:2379","health":true}]'; fi ;;
       *"endpoint status"*) echo "ENDPOINT ID LEADER"; echo "a 1 false" ;;
       *"get /registry/secrets/"*)
         # etcd 조회 결함 주입: 조회 실패(rc=1) / 성공이지만 빈 값 / 알 수 없는 형식
@@ -138,6 +139,47 @@ case "${args[0]:-} ${args[1]:-}" in
 esac
 echo "stub: unhandled: ${args[*]}" >&2; exit 1
 S
+  mv "$FX/bin/kubectl" "$FX/bin/kubectl-base"
+  cat > "$FX/bin/kubectl" <<'WRAP'
+#!/usr/bin/env bash
+all=" $* "
+step=$(cat "$STEP_FILE" 2>/dev/null)
+fault="${FAULT:-}"
+case "$fault:$all" in
+  readyz_rc:*"get --raw=/readyz"*) printf ok; exit 42 ;;
+  nodes_rc:*"get nodes"*|pods_rc:*"get pods"*|status_rc:*"endpoint status"*|config_rc:*"config view"*)
+    "$(dirname "$0")/kubectl-base" "$@"; exit 42 ;;
+  secrets_rc:*"get secrets"*|default_rc:*"get secret --no-headers"*)
+    "$(dirname "$0")/kubectl-base" "$@"; exit 42 ;;
+  rolled_list_rc:*"get secrets"*)
+    if [ "$step" = rolled_list ]; then "$(dirname "$0")/kubectl-base" "$@"; exit 42; fi ;;
+  health_rc:*"endpoint health"*) "$(dirname "$0")/kubectl-base" "$@"; exit 42 ;;
+  health_malformed:*"endpoint health"*) printf '[{"health":true}'; exit 0 ;;
+  health_duplicate:*"endpoint health"*) printf '[{"endpoint":"https://10.1.93.102:2379","health":true},{"endpoint":"https://10.1.93.102:2379","health":true},{"endpoint":"https://10.1.93.104:2379","health":true}]'; exit 0 ;;
+  health_unexpected:*"endpoint health"*) "$(dirname "$0")/kubectl-base" "$@" | sed s/10.1.93.103/10.1.93.199/; exit 0 ;;
+  health_missing:*"endpoint health"*) printf '[{"health":true},{"health":true},{"health":true}]'; exit 0 ;;
+esac
+exec "$(dirname "$0")/kubectl-base" "$@"
+WRAP
+  cat > "$FX/bin/tar" <<'WRAP'
+#!/usr/bin/env bash
+[ "${FAULT:-}" = seal_tar ] && exit 42
+/usr/bin/tar "$@" || exit $?
+if [ "${FAULT:-}" = seal_sidecar ]; then
+  # czf archive: obstruct sidecar creation without root permission assumptions.
+  mkdir "$2.sha256"
+fi
+WRAP
+  cat > "$FX/bin/sha256sum" <<'WRAP'
+#!/usr/bin/env bash
+if [ "${FAULT:-}" = seal_checksum ] && [[ "$*" == *".evidence.tar.gz"* ]]; then exit 42; fi
+exec /usr/bin/sha256sum "$@"
+WRAP
+  cat > "$FX/bin/python3" <<'WRAP'
+#!/usr/bin/env bash
+[ "${FAULT:-}" = no_parser ] && exit 127
+exec "$FIXTURE_PYTHON" "$@"
+WRAP
   chmod +x "$FX/bin/"*
 }
 
@@ -156,7 +198,7 @@ run_case() {   # $1 name, $2 mode, rest = env assignments
   env "${envs[@]}" "$@" bash "$SCRIPT" "$mode" > "$FX/out.log" 2>&1
   RC=$?
   RUNDIR="$(ls -d "$FX"/root/p1-sec01-secretbox-"$mode"-* 2>/dev/null | head -1)"
-  LOGF="$RUNDIR/run.log"
+  LOGF="$FX/out.log"   # final result is emitted only after archive seal
   CASE_FX="$FX"
 }
 check() {   # $1 case, $2 description, $3 condition result(0=ok)
@@ -373,6 +415,33 @@ FX1="$CASE_FX"; ENC_AFTER1="$(sha256sum "$ENC" | awk '{print $1}')"
 env FIXTURE=1 ENC_BACKUP="$FX1/root/enc-backup.yaml" ENC="$ENC" MANIFEST="$MANIFEST" PARK="$FX1/etc/manifests-parked" ADMIN="$FX1/etc/admin.conf" OUT_BASE="$FX1/root" STEP_FILE="$FX1/state/step" HOST=k8s-control03 SELF_IP=10.1.93.104 POLL_SEC=1 DOWN_WAIT_SEC=3 READY_WAIT_SEC=4 PEER_SHAS="$ORIG_ENC_SHA $ORIG_ENC_SHA" FX="$FX1" PATH="$FX1/bin:$PATH" CONFIRM=YES bash "$SCRIPT" rollback-test > "$FX1/out2.log" 2>&1; RC2=$?
 check S12 "재실행도 PASS(재실행 안전)" $([ "$RC" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$ENC_AFTER1" = "$ORIG_ENC_SHA" ]; echo $?)
 rm -rf "$FX1"
+
+# S20: plausible stdout must never hide a failed command. Gate failures do not mutate ENC/manifest.
+for fault in health_rc health_malformed health_duplicate health_unexpected health_missing readyz_rc nodes_rc status_rc pods_rc config_rc secrets_rc default_rc no_parser; do
+  name="S20_$fault"
+  run_case "$name" rollback-test FAULT="$fault"
+  check "$name" "조회 실패/잘못된 JSON: nonzero, GO/PASS 없음" $([ "$RC" -ne 0 ] && ! has "RESULT: GO" && not_pass; echo $?)
+  check "$name" "Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음" $(enc_same && manifest_ok && [ "$(cat "$CASE_FX/state/gen" 2>/dev/null)" = 1 ] && [ ! -e "$CASE_FX/state/uidseq" ]; echo $?)
+  rm -rf "$CASE_FX"
+done
+
+# S21: failures after actual fixture mutation must still restore and perform UID cleanup.
+for fault in seal_tar seal_checksum seal_sidecar rolled_list_rc; do
+  name="S21_$fault"
+  run_case "$name" rollback-test FAULT="$fault"
+  check "$name" "nonzero, 전체 PASS 없음" $([ "$RC" -ne 0 ] && not_pass; echo $?)
+  check "$name" "ENC/manifest 복구 및 UID cleanup 계속" $(enc_same && manifest_ok && no_leftover && raw_attempted a && no_name_delete; echo $?)
+  if [ "$fault" != rolled_list_rc ]; then
+    check "$name" "봉인 실패가 완료 기록과 stdout에 INCOMPLETE" $(has "EVIDENCE_STATUS=INCOMPLETE" && grep -q 'EVIDENCE_STATUS=INCOMPLETE' "$RUNDIR.completion.txt"; echo $?)
+  fi
+  rm -rf "$CASE_FX"
+done
+for mode in precheck postcheck; do
+  name="S22_$mode"
+  run_case "$name" "$mode" FAULT=seal_tar
+  check "$name" "읽기 전용 모드도 봉인 실패 시 nonzero/INCOMPLETE, GO/PASS 없음" $([ "$RC" -ne 0 ] && has 'EVIDENCE_STATUS=INCOMPLETE' && ! has 'RESULT: GO' && not_pass; echo $?)
+  rm -rf "$CASE_FX"
+done
 
 echo "=== fixture 시험 결과"
 printf '%s\n' "${RESULTS[@]}"
