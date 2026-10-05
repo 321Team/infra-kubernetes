@@ -105,3 +105,15 @@
 - 한계: kubelet이 새 namespace의 복사본을 받아들이는지는 **실제 실행으로만 확인**된다. secret uid 차이만으로 `Never`가 반드시 거절된다고 단정하지 않으며, 기록(credentialMapping·hash)과 실제 동작은 구분한다. `IfNotPresent`는 **레지스트리 인증 요청과, kubelet이 필요하다고 판단하면 해당 digest pull이 발생할 수 있고 로컬 cache만 쓴다고 보장하지 않는다**(수용 범위: 복사본 1개, 해당 namespace, 고정 digest).
 - B62-1(독립 리뷰): 복사 검증의 source/copy GET 종료 코드를 파이프로 가리지 않고, 두 값이 비어 있지 않을 때만 shell 변수 안에서 비교한다(값·base64·해시는 인자·환경변수·파일·로그로 내보내지 않음). 조회 실패·빈 값은 fixtures 생성 전에 STOP.
 - 모의 시험: `bash acnet-selftest.sh` 시나리오에 secret 복사 성공/값 비출력/순서, 원본 읽기 실패·잘못된 타입·생성 실패·라벨 실패·데이터 불일치, cleanup의 secret 허용·타 secret 거부를 추가했다. 이 변경은 [#10 승인](https://github.com/321Team/fds-project-baseline/issues/10)과 독립 리뷰 뒤에만 새 exact SHA로 실행한다.
+
+## 2026-10-05 후속 수정 — precheck 오탐, 캡처 대기, UDP 집계 (승인 대기, 서버 미적용)
+오늘 시험([#10 결과 보고](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5989192506))에서 드러난 도구 결함을 [PMO/QA 결정](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5989234529)과 [독립 증적 리뷰](https://github.com/321Team/fds-project-evidence/pull/114#pullrequestreview-5411104434)의 지적대로 고친다. 시험 객체·정책·권한은 바꾸지 않으며, **오늘 실행한 source(`e469761c`)나 증적에 덮어쓰지 않고** 새 source로만 쓴다. 재시험 GO가 아니다.
+
+| 결함 | 오늘 관측 | 수정 | 회귀 시험 |
+|---|---|---|---|
+| `acnet-0-precheck.sh` 오탐 | worker의 `crictl` 경고(stderr)가 ansible 출력에서 성공 표시 `ACNET_IMAGE_OK` 바로 뒤에 붙어 `grep -Fx`가 실패, `PRECHECK_FAIL`(3대) | 원격 명령에서 `crictl` stderr를 원격 임시 파일로 보내 stdout에 섞지 않고, **실패할 때만** 접두어를 붙여 출력. 표시는 여전히 한 줄 전체 일치이며 종료 코드도 그대로 본다(완화하지 않음) | `acnet-precheck-selftest.py`: ansible stub이 실제 출력(stdout 끝 개행 제거 + stderr 직접 이어붙임)을 재현. 정상+stderr 경고는 PASS, 표시가 줄 끝에 붙은 경우·빈 stdout·실패 RC+표시는 FAIL. **이전 precheck에 같은 시험을 돌리면 `stderr_warn`이 실패**하며 오늘의 `exact image unresolved`가 재현된다 |
+| `acnet-3-edge.sh` 캡처 대기 | 고정 `sleep 25` 뒤 `async_status`를 1회만 조회(`job_finished=0`) → `CAPTURE=INVALID` | `finished=1`이 될 때까지 5초 간격으로 **최대 `ACNET_CAP_POLL_MAX`(기본 30)회** 폴링. 마감 초과·조회 실패·`rc` 누락/비0·job id 없음은 `INVALID`/`NOT_VERIFIED`. 상태 원문은 `head`로 자르지 않고 전부 남기며 `polls`·`poll_rc`·`finished`·`job_rc`를 기록 | `acnet-edge-selftest.py`: 4회째 완료, 끝나지 않음(폴링 횟수 한정), 조회 실패, `rc` 없음, `rc=7`, job id 없음(폴링 0회), 상태 원문 보존 |
+| UDP 4789 집계 | 목적지 4789 뒤 문자열 `UDP`만 세어 `VXLAN (invalid)` 출력을 놓침(`udp4789_arrived=0`) | edge01 → worker01:4789로 가는 패킷을 `UDP`/`VXLAN` 등 뒤따르는 문자열과 무관하게 세고, IP의 점을 이스케이프하고 앞에 공백을 두어 `110.x`·`10a1b93c50` 같은 유사 주소를 배제 | 같은 시험: 두 가지 출력 형태(VXLAN, UDP)=2, 역방향·다른 포트(4790)·다른 출발지·유사 주소는 미포함. 이전 `acnet-3`에 돌리면 **8개 중 5개 실패** |
+- **이번 PR이 고치지 않는 것:** 오늘 15:00 기준선 비교가 실패·빈 입력을 "차이 없음"으로 보고한 경로는 **이 패키지의 코드가 아니라** 실행자가 세션에서 쓴 임시 비교 명령이다. 원인을 재현하지 못했고 추정으로 다른 코드를 바꾸지 않는다([PMO/QA](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5989234529) §5-4). 원인 확인 전에는 수집 RC·파싱 성공·객체 개수를 확인한 표본에서만 비교 결과를 해석한다.
+- 고치지 않은 한계: IPIP는 edge01 `sudo` 없이는 보낼 수 없고(`NOT_VERIFIED` 유지), counter 귀속은 이 수정으로 해결되지 않는다.
+- **검증:** `acnet-selftest.sh` 67 PASS(변경 없음), `acnet-precheck-selftest.py` 20 OK(17+3), `acnet-edge-selftest.py` 8 OK, `bash -n` 통과. 작성자의 Windows PC에서는 시험 harness가 `bash`를 WSL로 해석하므로 Git Bash 절대 경로·UTF-8·POSIX 경로로 바꾼 복사본으로 실행했다(코드 변경 없음). **Linux에서 재실행을 리뷰어께 요청한다.** 서버 실행은 없다.

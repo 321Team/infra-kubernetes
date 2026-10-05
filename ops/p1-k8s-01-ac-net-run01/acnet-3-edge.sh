@@ -13,6 +13,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 source ~/.config/ansible/p1-ans-01.env && export ANSIBLE_PRIVATE_KEY_FILE
 cd ~/infra-ansible || exit 1
 EDGE=10.1.93.50; TGT=10.1.93.105; ANS=10.250.10.10; D=/var/log/fds-evidence/P1-K8S-01/ac-net-run01
+# Dots are escaped for grep -E so 10.1.93.50 cannot match 110x1x93x50; patterns also start after a space (tcpdump prints `IP a.b.c.d.port > ...`).
+EDGE_RE=${EDGE//./\\.}; TGT_RE=${TGT//./\\.}; ANS_RE=${ANS//./\\.}
 OUT=~/ac-net-run01-edge.txt
 cnt(){ ansible -i inventory/hosts.yml k8s-worker01 -b -m script -a "$HERE/acnet-worker-counters.sh $1" 2>&1 | grep -o 'DROP_PKTS=[0-9]*' | head -1 | cut -d= -f2; }
 {
@@ -37,16 +39,26 @@ ansible -i "$EDGE," all -u svc_ansible -m shell -a "date -Is; echo --tcp179; tim
 sleep 6
 echo "## ssh control after attempts"; ansible -i inventory/hosts.yml k8s-worker01 -m ping
 C2=$(cnt c2); echo "C2 $(date -Is) DROP_PKTS=$C2"
-echo "## wait for capture to finish (tcpdump timeout 85s)"; sleep 25
-echo "## capture job status"
-ST=$(ansible -i inventory/hosts.yml k8s-worker01 -b -m async_status -a "jid=$JID" 2>&1); echo "$ST" | head -12
-FIN=$(echo "$ST" | grep -o '"finished": [01]' | head -1 | awk '{print $2}'); RC=$(echo "$ST" | grep -o '"rc": [0-9]*' | head -1 | awk '{print $2}')
+echo "## wait for capture to finish (tcpdump timeout 85s): poll async_status every 5s, at most ${ACNET_CAP_POLL_MAX:-30} polls; no verdict before finished=1"
+POLL_MAX=${ACNET_CAP_POLL_MAX:-30}; POLLS=0; FIN=""; ST=""; POLL_RC=""
+if [ -n "$JID" ]; then
+  while [ "$POLLS" -lt "$POLL_MAX" ]; do
+    POLLS=$((POLLS+1))
+    ST=$(ansible -i inventory/hosts.yml k8s-worker01 -b -m async_status -a "jid=$JID" 2>&1); POLL_RC=$?
+    FIN=$(echo "$ST" | grep -o '"finished": [01]' | head -1 | awk '{print $2}')
+    [ "$FIN" = "1" ] && break
+    sleep 5
+  done
+else echo "no capture job id: the capture did not start"; fi
+echo "## capture job status (full original text, poll $POLLS of $POLL_MAX)"; echo "$ST"
+RC=$(echo "$ST" | grep -o '"rc": [0-9]*' | head -1 | awk '{print $2}')
+echo "capture_status polls=$POLLS poll_rc=${POLL_RC:-?} finished=${FIN:-?} job_rc=${RC:-?}"
 echo "## counters after (worker01)"
 ansible -i inventory/hosts.yml k8s-worker01 -b -m shell -a "iptables-save -c > $D/t15-ipt-after.txt 2>&1; nft -a list ruleset > $D/t15-nft-after.txt 2>&1; echo saved"
 echo "## per-rule DROP counter diff (c0 -> c1 noise, c1 -> c2 test)"
 ansible -i inventory/hosts.yml k8s-worker01 -b -m shell -a "echo --noise c0-c1; diff $D/t15-drop-c0.txt $D/t15-drop-c1.txt | head -10; echo --test c1-c2; diff $D/t15-drop-c1.txt $D/t15-drop-c2.txt | head -10"
 echo "## capture summary and validity"
-SUM=$(ansible -i inventory/hosts.yml k8s-worker01 -b -m shell -a "f=$D/t15-edge-capture.txt; echo listening=\$(grep -c 'listening on ens160' \$f); echo kernel_dropped_zero=\$(grep -c '^0 packets dropped by kernel' \$f); echo stats_line=\$(grep -c 'packets captured' \$f); echo ssh_ctl=\$(grep -cE '$ANS\\.[0-9]+ > $TGT\\.22' \$f); echo total=\$(wc -l < \$f); echo tcp179_syn=\$(grep -cE '$EDGE\\.[0-9]+ > $TGT\\.179: Flags \\[S\\],' \$f); echo tcp179_synack=\$(grep -cE '$TGT\\.179 > $EDGE\\.[0-9]+: Flags \\[S\\.\\]' \$f); echo tcp179_rst=\$(grep -cE '$TGT\\.179 > $EDGE\\.[0-9]+: Flags \\[R' \$f); echo icmp_from_tgt=\$(grep -cE '$TGT > $EDGE: ICMP' \$f); echo udp4789_arrived=\$(grep -cE '$EDGE\\.[0-9]+ > $TGT\\.4789: UDP' \$f); echo ipip_proto4_arrived=\$(grep -ciE 'IPIP|ip-proto-4' \$f); grep -E '179|4789|IPIP|proto-4|ICMP' \$f | head -14" 2>&1)
+SUM=$(ansible -i inventory/hosts.yml k8s-worker01 -b -m shell -a "f=$D/t15-edge-capture.txt; echo listening=\$(grep -c 'listening on ens160' \$f); echo kernel_dropped_zero=\$(grep -c '^0 packets dropped by kernel' \$f); echo stats_line=\$(grep -c 'packets captured' \$f); echo ssh_ctl=\$(grep -cE ' $ANS_RE\\.[0-9]+ > $TGT_RE\\.22: ' \$f); echo total=\$(wc -l < \$f); echo tcp179_syn=\$(grep -cE ' $EDGE_RE\\.[0-9]+ > $TGT_RE\\.179: Flags \\[S\\],' \$f); echo tcp179_synack=\$(grep -cE ' $TGT_RE\\.179 > $EDGE_RE\\.[0-9]+: Flags \\[S\\.\\]' \$f); echo tcp179_rst=\$(grep -cE ' $TGT_RE\\.179 > $EDGE_RE\\.[0-9]+: Flags \\[R' \$f); echo icmp_from_tgt=\$(grep -cE ' $TGT_RE > $EDGE_RE: ICMP' \$f); echo udp4789_arrived=\$(grep -cE ' $EDGE_RE\\.[0-9]+ > $TGT_RE\\.4789: ' \$f); echo ipip_proto4_arrived=\$(grep -ciE 'IPIP|ip-proto-4' \$f); grep -E '179|4789|IPIP|proto-4|ICMP' \$f | head -14" 2>&1)
 echo "$SUM"
 g(){ echo "$SUM" | grep -o "$1=[0-9]*" | head -1 | cut -d= -f2; }
 LIS=$(g listening); KD=$(g kernel_dropped_zero); SL=$(g stats_line); SC=$(g ssh_ctl); SYN=$(g tcp179_syn); SA=$(g tcp179_synack); RST=$(g tcp179_rst); ICMP=$(g icmp_from_tgt); UDP=$(g udp4789_arrived); IPIP=$(g ipip_proto4_arrived)

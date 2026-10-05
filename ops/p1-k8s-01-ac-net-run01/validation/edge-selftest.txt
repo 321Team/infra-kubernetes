@@ -1,0 +1,10 @@
+test_finished_with_nonzero_rc ... ok
+test_finished_without_rc ... ok
+test_finishes_after_several_polls ... ok
+test_full_status_text_is_kept ... ok
+test_never_finishes_is_bounded_and_invalid ... ok
+test_no_job_id_does_not_poll ... ok
+test_packet_counts_direction_port_source_and_dots ... ok
+test_status_command_fails ... ok
+Ran 8 tests in 20.618s
+OK
