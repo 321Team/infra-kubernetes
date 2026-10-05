@@ -77,3 +77,12 @@
 `AC_NET_R`·`AC_NET_K`·`AC_NET_WAIT_TRIES`는 자체시험용 훅이다(기본값이 운영 경로). **서버에서 실행하는 시험이 아니다.**
 
 `acnet-selftest.sh` 실행: `bash acnet-selftest.sh` (로컬, 종료 코드 0이면 전 시나리오 통과).
+
+## PMO/QA 재리뷰 반영 2 (GWONUK CHANGES_REQUESTED, 대상 HEAD `e2900b88`)
+| ID | 지적 | 반영 |
+|---|---|---|
+| **B57-NEW1** | `acnet-1-gate-create.sh`의 awk 분할이 모든 `---` 구분자를 버려 Pod 3·Service 3이 한 문서로 붙음(실제 매니페스트에서 `rest.yaml`에 Service 하나만 남거나 파싱 오류). mock이 파일을 파싱하지 않아 통과했음 | **첫 경계만 제거하고 나머지 `---`는 유지**한다(`if(d>2) print "---" > rest`). 분할 직후 **Namespace 1 / 추가 Namespace 0 / Pod 3 / Service 3 / 구분자 5개**와 6개 fixture 이름을 확인하고 하나라도 어긋나면 STOP한다. 자체시험의 **mock `kubectl`이 `-f` 파일을 실제로 파싱**해(문서마다 `kind:`가 정확히 1개, 문서 수 1·6) 구분자가 사라지면 happy path가 실패하고, 시험은 작은 모의 파일이 아니라 **실제 매니페스트**를 쓴다 |
+| **B57-NEW2** | namespace 생성 후 fixtures가 부분 생성된 상태(빈 namespace, probe-a만)는 UID가 정확해도 cleanup이 "6개와 정확히 일치"를 요구해 STOP — 안내한 복구가 불가능 | cleanup은 **자신의 create-response UID와 라벨을 유지한 채**, 존재하는 Pod/Service가 **허용된 6개의 부분집합(빈 집합 포함)** 이면 UID precondition 삭제를 허용한다. 허용 목록 밖 객체(외부 객체·다른 이름)가 하나라도 있으면 계속 STOP. `get -o name`의 stdout만 쓰고 stderr(`No resources found…`)는 분리해 빈 집합을 오인하지 않는다 |
+| 회귀 | 요청된 재검증 | 자체시험을 **22개 → 28개**로 늘렸다: 실제 매니페스트 분할 1+6, 빈 namespace cleanup, Pod 1개 부분 생성 cleanup, 외부 객체 거부(부분집합+외부, 외부만), 기존 UID 불일치·조회 오류·Terminating 비정상 종료. 이전 HEAD(`e2900b88`) 스크립트에 같은 시험을 돌리면 **9개가 실패**(happy path와 분할 구조, 부분 cleanup 포함)하므로 테스트가 두 버그를 실제로 잡는다 |
+
+이 자체시험 결과를 Runtime 성공으로 보지 않는다(모의 kubectl, 서버 실행 없음).

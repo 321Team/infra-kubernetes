@@ -11,10 +11,14 @@ K=${AC_NET_K:-"kubectl --kubeconfig /etc/kubernetes/admin.conf"}
 mkdir -p "$R"; chmod 700 "$R"
 stop(){ echo "STOP: $1"; exit 1; }
 # split: document 1 = Namespace only, the rest = Pods/Services
-awk -v ns="$R/ns.yaml" -v rest="$R/rest.yaml" 'BEGIN{d=1; printf "" > ns; printf "" > rest} /^---[ \t]*$/{d++; next} {print > (d==1 ? ns : rest)}' "$MAN" || stop "cannot split manifest"
-grep -q '^kind: Namespace' "$R/ns.yaml" || stop "first manifest document is not the Namespace"
+# Only the FIRST document boundary is consumed; every later `---` is kept so the fixtures stay 6 separate documents (B57-NEW1).
+awk -v ns="$R/ns.yaml" -v rest="$R/rest.yaml" 'BEGIN{d=1; printf "" > ns; printf "" > rest} /^---[ \t]*$/{d++; if(d>2) print "---" > rest; next} {print > (d==1 ? ns : rest)}' "$MAN" || stop "cannot split manifest"
+NNS=$(grep -c '^kind: Namespace$' "$R/ns.yaml"); NPOD=$(grep -c '^kind: Pod$' "$R/rest.yaml"); NSVC=$(grep -c '^kind: Service$' "$R/rest.yaml"); NSEP=$(grep -c '^---[ \t]*$' "$R/rest.yaml"); NNS2=$(grep -c '^kind: Namespace$' "$R/rest.yaml")
+[ "$NNS" = "1" ] && [ "$NNS2" = "0" ] && [ "$NPOD" = "3" ] && [ "$NSVC" = "3" ] && [ "$NSEP" = "5" ] || stop "manifest split check failed (namespace=$NNS extra_namespace=$NNS2 pods=$NPOD services=$NSVC separators=$NSEP; expected 1/0/3/3/5)"
 grep -q '^  name: ac-net-run01$' "$R/ns.yaml" || stop "Namespace name is not ac-net-run01"
-if grep -q '^kind: Namespace' "$R/rest.yaml"; then stop "unexpected second Namespace in manifest"; fi
+for nm in probe-a probe-b probe-c probe-a-svc probe-b-svc probe-c-svc; do
+  grep -q "^  name: $nm\$" "$R/rest.yaml" || stop "fixture $nm is missing after the split"
+done
 {
 echo "# AC-NET-RUN01 GATE + CREATE"; date -Is; hostname; sha256sum "$MAN" "$R/ns.yaml" "$R/rest.yaml"
 echo "## nodes (bootID)"; $K get nodes -o custom-columns='NAME:.metadata.name,STATUS:.status.conditions[-1].type,BOOTID:.status.nodeInfo.bootID,UNSCHED:.spec.unschedulable'
