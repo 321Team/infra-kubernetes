@@ -1,30 +1,59 @@
 #!/bin/bash
 # ac-net-run01 cleanup (B3): delete ONLY the namespace this run created, bound to its recorded UID. Run on control01 as root.
+# PMO/QA review (GWONUK, P1-2): the failure code of the whole block is returned to the caller (no tee-masked rc=0), and
+# cleanup is "complete" ONLY after an explicit NotFound for the namespace AND a successful zero-result leftover query.
+# API errors, timeouts and a namespace still Terminating after the wait exit non-zero with CLEANUP_INCOMPLETE.
+# AC_NET_R / AC_NET_K are test hooks (selftest uses a mock kubectl); production runs use the defaults.
 set -u
-R=/root/ac-net-run01; NS=ac-net-run01; K="kubectl --kubeconfig /etc/kubernetes/admin.conf"
-stop(){ echo "STOP: $1 (nothing deleted)"; exit 1; }
+R=${AC_NET_R:-/root/ac-net-run01}; NS=ac-net-run01
+K=${AC_NET_K:-"kubectl --kubeconfig /etc/kubernetes/admin.conf"}
+WAIT_TRIES=${AC_NET_WAIT_TRIES:-24}
+mkdir -p "$R"
+stop(){ echo "STOP: $1 (nothing deleted)"; echo "CLEANUP_INCOMPLETE"; exit 1; }
+incomplete(){ echo "CLEANUP_INCOMPLETE: $1"; exit 1; }
 {
 echo "# AC-NET-RUN01 CLEANUP"; date -Is; hostname
-[ -s $R/ns-uid.txt ] || stop "no recorded namespace UID ($R/ns-uid.txt)"
-REC=$(cat $R/ns-uid.txt); CUR=$($K get ns $NS -o jsonpath='{.metadata.uid}' 2>&1)
-echo "recorded_uid=$REC current_uid=$CUR"
-[ "$REC" = "$CUR" ] || stop "namespace UID mismatch"
-LBL=$($K get ns $NS -o jsonpath='{.metadata.labels.fds\.test/run}'); [ "$LBL" = "ac-net-run01" ] || stop "label mismatch ($LBL)"
+[ -s "$R/ns-uid.txt" ] || stop "no recorded namespace UID ($R/ns-uid.txt)"
+REC=$(cat "$R/ns-uid.txt")
+CURO=$($K get ns $NS -o jsonpath='{.metadata.uid}' 2>&1); CRC=$?
+echo "recorded_uid=$REC current_uid=$CURO get_rc=$CRC"
+[ "$CRC" = "0" ] || stop "cannot read the namespace UID (rc=$CRC: $CURO)"
+[ "$REC" = "$CURO" ] || stop "namespace UID mismatch"
+LBL=$($K get ns $NS -o jsonpath='{.metadata.labels.fds\.test/run}' 2>&1); LRC=$?
+[ "$LRC" = "0" ] && [ "$LBL" = "ac-net-run01" ] || stop "label check failed (rc=$LRC, value=$LBL)"
 echo "## object set (expected: pod/probe-a,b,c + service/probe-a-svc,b-svc,c-svc)"
-GOT=$($K -n $NS get pods,svc -o name | sort | tr '\n' ' ' | sed 's/ *$//'); echo "got: $GOT"
+GOTO=$($K -n $NS get pods,svc -o name 2>&1); GRC=$?
+[ "$GRC" = "0" ] || stop "cannot list pods/services (rc=$GRC)"
+GOT=$(echo "$GOTO" | sort | tr '\n' ' ' | sed 's/ *$//'); echo "got: $GOT"
 WANT="pod/probe-a pod/probe-b pod/probe-c service/probe-a-svc service/probe-b-svc service/probe-c-svc"
 [ "$GOT" = "$WANT" ] || stop "unexpected pod/service set"
 echo "## other user resources (excluding defaults)"
-ALL=$($K -n $NS get deploy,sts,ds,job,cronjob,cm,secret,sa,role,rolebinding,networkpolicy,pvc,ingress -o name 2>&1); LRC=$?
-[ "$LRC" = "0" ] || { echo "$ALL"; stop "resource listing failed (rc=$LRC); cannot confirm the namespace is clean"; }
+ALL=$($K -n $NS get deploy,sts,ds,job,cronjob,cm,secret,sa,role,rolebinding,networkpolicy,pvc,ingress -o name 2>&1); ARC=$?
+[ "$ARC" = "0" ] || { echo "$ALL"; stop "resource listing failed (rc=$ARC); cannot confirm the namespace is clean"; }
 OTHER=$(echo "$ALL" | grep -v -E '^configmap/kube-root-ca.crt$|^serviceaccount/default$' || true)
 [ -z "$OTHER" ] || { echo "$OTHER"; stop "unexpected resources in namespace"; }
 echo "## delete with UID precondition (no gap between the check and the delete)"
 echo "{\"kind\":\"DeleteOptions\",\"apiVersion\":\"v1\",\"preconditions\":{\"uid\":\"$REC\"}}" | $K delete --raw /api/v1/namespaces/$NS -f - ; DRC=$?
 echo "delete_rc=$DRC"; [ "$DRC" = "0" ] || stop "precondition delete refused (rc=$DRC)"
-for i in $(seq 1 24); do $K get ns $NS >/dev/null 2>&1 || break; sleep 5; done
-echo "## after"; $K get ns $NS 2>&1 | head -2
-echo "## leftover with label (expect none)"; $K get pods,svc -A -l fds.test/run=ac-net-run01 2>&1 | head -3
-echo "## nodes / readyz / fds-app"; $K get nodes --no-headers | awk '{print $1,$2}'; $K get --raw='/readyz?verbose' | tail -1; $K -n fds-app get pods --no-headers | awk '{print $1,$3,$4}'
+echo "## wait for explicit NotFound (up to $WAIT_TRIES tries)"
+GONE=0
+for i in $(seq 1 "$WAIT_TRIES"); do
+  OUT=$($K get ns $NS 2>&1); RC=$?
+  if [ "$RC" = "0" ]; then sleep 5; continue; fi
+  case "$OUT" in
+    *NotFound*) GONE=1; break;;
+    *) incomplete "namespace lookup failed with something other than NotFound (rc=$RC: $OUT)";;
+  esac
+done
+[ "$GONE" = "1" ] || incomplete "namespace still present (Terminating?) after the wait"
+echo "namespace NotFound confirmed"
+echo "## leftover with label (query must succeed and return nothing)"
+LEFT=$($K get pods,svc -A -l fds.test/run=ac-net-run01 -o name 2>/dev/null); LFRC=$?
+[ "$LFRC" = "0" ] || incomplete "leftover query failed (rc=$LFRC)"
+[ -z "$LEFT" ] || { echo "$LEFT"; incomplete "leftover resources still exist"; }
+echo "leftover=0"
+echo "## nodes / readyz / fds-app (informational)"; $K get nodes --no-headers | awk '{print $1,$2}'; $K get --raw='/readyz?verbose' | tail -1; $K -n fds-app get pods --no-headers | awk '{print $1,$3,$4}'
 date -Is
-} 2>&1 | tee $R/9-cleanup.txt
+echo "CLEANUP_COMPLETE"
+} 2>&1 | tee "$R/9-cleanup.txt"
+exit "${PIPESTATUS[0]}"

@@ -66,3 +66,14 @@
 | 답변 보완 4 | 규칙별 counter | `acnet-worker-counters.sh <label>`가 규칙별 DROP counter 스냅샷(`t15-drop-c0/c1/c2.txt`)을 남기고, edge 스크립트가 noise 구간(c0→c1)과 시험 구간(c1→c2)의 **규칙별 diff**를 출력한다 |
 
 로컬 검증(STATIC): 가짜 `ansible`·`sleep`을 PATH에 둔 모의 실행으로 `acnet-3-edge.sh`의 판정 줄을 4개 시나리오(유효·응답 없음, RST 응답, `listening` 줄 없음, async job rc≠0)로 확인했다. 서버 실행은 하지 않았다.
+
+## PMO/QA delta 리뷰 반영 (GWONUK CHANGES_REQUESTED, 대상 HEAD `48996457`)
+| ID | 지적 | 반영 |
+|---|---|---|
+| **P1-1** | `acnet-1-gate-create.sh`: namespace 조회가 timeout·Forbidden일 때도 "없음"으로 취급해 기존 namespace를 `apply`로 건드리고 그 UID를 기록할 수 있음, 조회 뒤 경쟁 생성도 같음, `apply` 종료 코드 미확인 | **`apply`를 쓰지 않는다.** 매니페스트를 Namespace 문서와 나머지로 나누어 **Namespace를 create-only**(`kubectl create -f … -o jsonpath={.metadata.uid}`)로 만든다. AlreadyExists·timeout·Forbidden·그 밖의 모든 오류는 **STOP이고 UID를 기록하지 않는다.** 기록하는 UID는 **이번 실행의 create 응답 UID**뿐이며 형식(UUID)도 확인한다. 이후 fixtures도 create-only이고 dry-run·create의 종료 코드를 `PIPESTATUS`로 즉시 확인한다. namespace 생성 뒤의 부분 실패는 UID가 기록된 상태로 STOP하고 `acnet-9-cleanup.sh`로 이어진다 |
+| **P1-2** | `acnet-9-cleanup.sh`: `{ …; exit 1 } \| tee` 때문에 UID 불일치 STOP도 최종 rc=0, 삭제 후 모든 오류를 부재로 취급, 24회 뒤에도 Terminating이면 성공 종료 | 블록의 종료 코드를 `${PIPESTATUS[0]}`로 호출자에게 전달한다. 삭제 후에는 **명시적 `NotFound`** 가 나올 때만 부재로 인정하고, NotFound가 아닌 오류는 `CLEANUP_INCOMPLETE`(rc≠0), 대기(기본 24회) 뒤에도 남아 있으면(Terminating) `CLEANUP_INCOMPLETE`(rc≠0)이다. 라벨 잔여 조회는 **성공(rc=0)이고 결과 0건**일 때만 통과한다. UID·라벨·객체 집합 조회 실패도 모두 STOP(rc≠0). 마지막에 `CLEANUP_COMPLETE`가 있어야 완료다 |
+| 요구 | 회귀 테스트 | `acnet-selftest.sh`(모의 `kubectl`·`sleep`, API 접근·클러스터 변경 없음)를 추가했다. 요청된 경로(조회/생성 timeout, 정리 UID 불일치 rc, 삭제 뒤 계속 Terminating)와 경쟁 생성(AlreadyExists)·fixtures 생성 실패를 포함해 22개 시나리오를 확인한다. 이전 HEAD 스크립트에 같은 테스트를 돌리면 20개가 실패하므로(재현 확인) 테스트가 버그를 실제로 잡는다 |
+
+`AC_NET_R`·`AC_NET_K`·`AC_NET_WAIT_TRIES`는 자체시험용 훅이다(기본값이 운영 경로). **서버에서 실행하는 시험이 아니다.**
+
+`acnet-selftest.sh` 실행: `bash acnet-selftest.sh` (로컬, 종료 코드 0이면 전 시나리오 통과).
