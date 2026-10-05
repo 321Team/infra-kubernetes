@@ -18,7 +18,7 @@
 |---|---|---|
 | `manifests/ac-net-run01.yaml` | Namespace 1, Pod 3(worker01/02/03), Service 3. **이미지 digest 고정, `imagePullPolicy: Never`**, restricted PSA | 제출 |
 | `acnet-0-precheck.sh` | **읽기 전용** Fresh Gate: namespace NotFound, digest가 3 Worker에 정확히 있는지, 노드 Ready, readyz | ansible01 |
-| `acnet-1-gate-create.sh` | 기준선 기록 → dry-run → apply → **namespace UID 기록** → Pod Ready 대기 | control01 |
+| `acnet-1-gate-create.sh` | 기준선 기록 → dry-run → create-only → **namespace UID 기록** → Pod Ready 대기 | control01 |
 | `acnet-2-tests.sh` | T09·T07·T08 | control01 |
 | `acnet-3-edge.sh`, `acnet-worker-counters.sh` | T14·T15 | ansible01 (+ worker01 helper) |
 | `acnet-9-cleanup.sh` | namespace UID에 결박된 정리 | control01 |
@@ -86,3 +86,14 @@
 | 회귀 | 요청된 재검증 | 자체시험을 **22개 → 28개**로 늘렸다: 실제 매니페스트 분할 1+6, 빈 namespace cleanup, Pod 1개 부분 생성 cleanup, 외부 객체 거부(부분집합+외부, 외부만), 기존 UID 불일치·조회 오류·Terminating 비정상 종료. 이전 HEAD(`e2900b88`) 스크립트에 같은 시험을 돌리면 **9개가 실패**(happy path와 분할 구조, 부분 cleanup 포함)하므로 테스트가 두 버그를 실제로 잡는다 |
 
 이 자체시험 결과를 Runtime 성공으로 보지 않는다(모의 kubectl, 서버 실행 없음).
+
+## 2026-10-05 precheck fail-closed 수정 (독립 리뷰 대기)
+
+근거: [#10 Fresh Gate/조기 시작 요청](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5987631809). 구현: 이권욱(CODEX_ASSISTED). 기존 승인 SHA `a24f0a23fa6ddb43a58bfc3de612e8677b359fc5`의 precheck는 nodes/readyz를 출력만 하고 실패를 `fail`에 반영하지 않아, 해당 조회가 실패해도 PRECHECK_PASS/rc0이 가능했다. 로컬 PATH stub과 경로만 격리한 원본 코드로 재현했다.
+
+- Ansible transport rc와 원격 검사 성공 marker가 둘 다 있어야 통과한다. 노드 이름 중복 없는 정확히 6행·전부 Ready, readyz 명령 rc0·응답 ok를 검사한다. SchedulingDisabled와 빈/추가 노드도 거부한다.
+- namespace는 성공한 `--ignore-not-found -o name`의 빈 stdout만 부재로 인정한다. 조회 오류를 NotFound로 해석하지 않는다. image list/inspecti도 명령 오류를 성공 marker로 덮지 않는다.
+- 출력 폴더는 `umask 077` + 고유 `mktemp -d`. 항목별 stdout/stderr/rc, run.log, SHA256SUMS, result.txt를 보존한다. 인수는 process rc0 + PRECHECK_PASS + 원본 검산을 함께 확인한다. 쓰기/tee/해시 실패는 nonzero이며 콘솔에 PRECHECK_PASS를 출력하지 않는다.
+- 자체시험: `python3 acnet-precheck-selftest.py` (로컬 Python3 필요, 운영 precheck에는 Python3 불필요). 실제 원격 shell 문자열을 가짜 kubectl/crictl에 실행하며 서버에 접근하지 않는다. 테스트 복사본에서는 사용자 홈의 설정·inventory·출력 경로만 임시 폴더로 치환한다. 17개 정상/실패 case. 기존 생성·cleanup 회귀 `bash acnet-selftest.sh` 28개도 유지한다.
+- 생성/시험/정리 스크립트와 manifest는 변경하지 않았다. 수정 precheck의 source 승인은 기존 a24f0a23 승인과 별도이며, 구현자 본인이 독립 승인하지 않는다. Runtime GO·변경창과 AC 인수도 별도다.
+- 수정 전 SHA를 실행하는 경우 기존 PRECHECK_PASS 하나만으로 Fresh Gate를 대체하지 않는다. 기존 Gate 계약의 노드·readyz 원본/rc를 별도로 확인하는 운영 판단은 #10의 해당 실행 승인 기록을 따른다.
