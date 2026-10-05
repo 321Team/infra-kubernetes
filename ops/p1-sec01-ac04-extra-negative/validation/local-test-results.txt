@@ -24,4 +24,16 @@
   PASS  T11: /dev/tcp 미지원이면 STOP(rc=2), 시험 접속 0회
   PASS  T12: 잘못된 인자는 rc=2
   PASS  T13: edge 정상: rc=0, 대조 포트 30080, 차단 유효 9
-=== PASS=25 FAIL=0
+  PASS  T14_rc1: STOP rc2 and target probe calls=0
+  PASS  T14_rc1: route stdout/stderr/rc retained
+  PASS  T14_empty: STOP rc2 and target probe calls=0
+  PASS  T14_empty: route stdout/stderr/rc retained
+  PASS  T14_ambiguous: STOP rc2 and target probe calls=0
+  PASS  T14_ambiguous: route stdout/stderr/rc retained
+  PASS  T14_multiline: STOP rc2 and target probe calls=0
+  PASS  T14_multiline: route stdout/stderr/rc retained
+  PASS  T15: same TS sequential runs succeed without overwriting original raw/manifest/archive/sidecar/completion
+  PASS  T15: same TS concurrent runs succeed; first evidence hashes unchanged
+  PASS  T15: four unique mode700 directories and four completion records
+  PASS  T15: all four manifests, archive hashes and final exit records verify
+=== PASS=37 FAIL=0

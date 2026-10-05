@@ -15,7 +15,14 @@ S
   cat > "$B/ip" <<'S'
 #!/usr/bin/env bash
 # ip -4 route get <ip>
+case "${STUB_ROUTE:-}" in
+  empty) exit 0 ;;
+  ambiguous) echo "src $STUB_SRC src $STUB_SRC"; exit 0 ;;
+  multiline) printf 'src %s\nsrc %s\n' "$STUB_SRC" "$STUB_SRC"; exit 0 ;;
+esac
 echo "$3 via 10.250.10.1 dev ens160 src ${STUB_SRC:-10.250.10.10} uid 1000"
+[ "${STUB_ROUTE:-}" = rc1 ] && { echo "injected route failure" >&2; exit 1; }
+exit 0
 S
   cat > "$B/timeout" <<'S'
 #!/usr/bin/env bash
@@ -49,7 +56,7 @@ run() {  # $1 name  $2 role  rest = env assignments ; 결과: RC, OUTDIR, OUT_TX
   CASE_T="$T"
 }
 has() { grep -q -- "$1" "$CASE_T/out.txt"; }
-sumhas() { grep -q -- "$1" "$OUTDIR/99-summary.txt" 2>/dev/null; }
+sumhas() { grep -q -- "$1" "$OUTDIR/99-summary-provisional.txt" 2>/dev/null; }
 probe_calls() { local n; n="$(grep -c '^call [0-9]* bash -c .* _ ' "$CASE_T/calls.log" 2>/dev/null)"; echo "${n:-0}"; }
 rows() { awk 'NR>1' "$OUTDIR/results.tsv" 2>/dev/null | wc -l; }
 
@@ -134,6 +141,42 @@ rm -rf "$T"
 run T13 edge STUB_MODE=normal
 check T13 "edge 정상: rc=0, 대조 포트 30080, 차단 유효 9" $([ "$RC" -eq 0 ] && sumhas "BLOCKED_VALID" && grep -q '30080' "$OUTDIR/results.tsv"; echo $?)
 rm -rf "$CASE_T"
+
+# T14 source gate fails closed even when stdout looks valid.
+for fault in rc1 empty ambiguous multiline; do
+  run "T14_$fault" mgmt STUB_ROUTE="$fault"
+  check "T14_$fault" "STOP rc2 and target probe calls=0" $([ "$RC" -eq 2 ] && [ "$(probe_calls)" -eq 0 ]; echo $?)
+  check "T14_$fault" "route stdout/stderr/rc retained" $([ -f "$OUTDIR/route-10.1.93.105.stdout" ] && [ -f "$OUTDIR/route-10.1.93.105.stderr" ] && [ -s "$OUTDIR/route-10.1.93.105.rc" ]; echo $?)
+  rm -rf "$CASE_T"
+done
+
+# T15: force identical TS for sequential AND concurrent runs in the same working directory.
+T=$(mktemp -d); make_stubs "$T"; mkdir "$T/work"
+cat > "$T/bin/date" <<'DATE'
+#!/usr/bin/env bash
+if [ "$*" = '-u +%Y%m%dT%H%M%SZ' ]; then echo 20261005T000000Z; else exec /usr/bin/date "$@"; fi
+DATE
+chmod +x "$T/bin/date"
+run_shared() {
+  (cd "$T/work" && env STUB_HOST=ansible01 STUB_SRC=10.250.10.10 STUB_CTRL_PORT=22 STUB_MODE=normal STUB_LOG="$T/calls-$1.log" PATH="$T/bin:$PATH" bash "$SCRIPT" mgmt > "$T/run-$1.txt" 2>&1)
+}
+run_shared first; first_rc=$?
+first_dir=$(find "$T/work" -mindepth 1 -maxdepth 1 -type d)
+find "$T/work" -type f -exec sha256sum {} + > "$T/first.sha256"
+run_shared second; second_rc=$?
+check T15 "same TS sequential runs succeed without overwriting original raw/manifest/archive/sidecar/completion" $([ "$first_rc" -eq 0 ] && [ "$second_rc" -eq 0 ] && sha256sum -c "$T/first.sha256" >/dev/null; echo $?)
+run_shared concurrent1 & pid1=$!
+run_shared concurrent2 & pid2=$!
+wait "$pid1"; rc1=$?; wait "$pid2"; rc2=$?
+check T15 "same TS concurrent runs succeed; first evidence hashes unchanged" $([ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && sha256sum -c "$T/first.sha256" >/dev/null; echo $?)
+check T15 "four unique mode700 directories and four completion records" $([ "$(find "$T/work" -mindepth 1 -maxdepth 1 -type d -perm 700 | wc -l)" -eq 4 ] && [ "$(find "$T/work" -maxdepth 1 -name '*.completion.txt' | wc -l)" -eq 4 ]; echo $?)
+valid=0
+for d in "$T"/work/p1-sec01-ac04-extra-neg-*; do
+  [ -d "$d" ] || continue
+  ( cd "$d" && sha256sum -c SHA256SUMS >/dev/null ) && ( cd "$T/work" && sha256sum -c "$(basename "$d").tar.gz.sha256" >/dev/null ) && grep -q '^EXIT_CODE=0$' "$d.completion.txt" && valid=$((valid+1))
+done
+check T15 "all four manifests, archive hashes and final exit records verify" $([ "$valid" -eq 4 ]; echo $?)
+rm -rf "$T"
 
 echo "=== collect-ac04-extra-negative.sh 로컬 시험 결과"
 printf '%s\n' "${RESULTS[@]}"
