@@ -1,17 +1,17 @@
-# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.2)
+# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.3)
 
 - 책임: [#19 P1-SEC-01](https://github.com/321Team/fds-project-baseline/issues/19) AC "Secret encryption·backup·rotation·**rollback**" 중 rollback Runtime 증적([CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 P1 필수·미충족으로 남은 항목).
-- 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → v4.1 → **v4.2(지정 구현 후속)**.
+- 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → v4.1 → v4.2 → **v4.3(B59-3 독립 리뷰 반영)**.
 - 상태: **Runtime 코드다. 운영 클러스터에서 한 번도 실행하지 않았다.** 이 PR의 병합·fixture PASS는 Runtime PASS나 AC credit이 아니며, 설정 변경·apiserver 재기동·변경창을 승인하지 않는다. 실행은 PMO/QA 승인 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
 
 ## 파일
 
 | 파일 | 역할 |
 |---|---|
-| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.2-20261005` |
+| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.3-20261005` |
 | `test-rollback-v4.sh` | 가짜 클러스터(fixture) 시험. 스텁 `kubectl`·`ss`·`hostname`을 PATH에 두고 클러스터에는 접근하지 않는다 |
-| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.2-20261005`) |
-| `validation/fixture-results-v4.2.txt` | 현행 fixture 실행 로그 원본: **191 PASS / 0 FAIL**(기존 152개 + 추가 39개) |
+| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.3-20261005`) |
+| `validation/fixture-results-v4.3.txt` | 현행 **231 PASS / 0 FAIL**(기존 191 + 추가 40). v4.1/v4.2 로그는 이력 보존 |
 | `SHA256SUMS` | 위 파일의 SHA-256(자기 자신 제외) |
 
 ## 실행 방법(승인된 변경창에서만, 대상 CP 콘솔 root)
@@ -50,3 +50,9 @@ fixture 시험(로컬, 약 7분): `bash test-rollback-v4.sh ./sec01-secretbox-ro
 - 증적 저장 실패 후 성공 기록을 수동으로 덮어쓰지 않는다. 기존 출력과 오류를 보존하고 원인 해소 후 새 실행으로 수집한다. 운영 재실행은 기존 변경창/승인 범위를 따른다. 자동 복구 실패 시 runbook 7절을 적용한다.
 
 추가 시험: 정상 출력+nonzero(health/readyz/nodes/status/Pods/목록/config), malformed/중복/예상 밖/필수 필드 누락 JSON, 파서 실패, tar/checksum/sidecar 실패, rollback 목록 실패, precheck/postcheck 봉인 실패. 실제 서버 실행은 포함하지 않는다.
+
+## v4.3-20261005 — B59-3 후속
+
+[독립 리뷰](https://github.com/321Team/infra-kubernetes/pull/59#pullrequestreview-5410017432)의 실제 Secret 평문 잔여를 탐지한다. 변경 직전/복원 직후 metadata의 UID·RV로 생성·교체·갱신 후보를 추출하고, 정확한 소유 UID만 제외한 뒤 etcd 저장 class를 확인한다. PLAIN/조회 실패/불명확 형식은 최종 nonzero이며 원복·cleanup은 계속한다. 실제 Secret 바이트를 증적으로 노출하지 않도록 기존 앞 40바이트 출력도 class-only로 바꿨다.
+
+수동 재암호화의 전제·경쟁 갱신 처리·원문 비저장·복구 기록·과거 revision 한계는 runbook 12절을 따른다. 자동 재암호화와 Runtime 승인은 포함하지 않는다. 구현자 이권욱과 독립 Reviewer 이재환을 분리하며 변경분 재리뷰를 요청한다.

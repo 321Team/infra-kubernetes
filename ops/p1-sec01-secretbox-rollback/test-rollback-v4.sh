@@ -65,6 +65,30 @@ case "${args[0]:-} ${args[1]:-}" in
   "get pods") echo "NAME READY RESTARTS"; echo "kube-apiserver-k8s-control03 true 0"; exit 0 ;;
   "get secrets")
     [ "${FAULT:-}" = secrets_all_fail ] && { echo 'Error from server (Forbidden): secrets is forbidden' >&2; exit 1; }
+    if [[ " ${args[*]} " == *"custom-columns="* ]]; then
+      if [ "$step" = snapshot_before ] && [ "${FAULT:-}" = rv_before_rc ]; then echo 'fds-app harbor-pull base-uid 1'; exit 42; fi
+      if [ "$step" = audit_after ]; then
+        case "${FAULT:-}" in
+          rv_after_rc) echo 'fds-app harbor-pull base-uid 1'; exit 42 ;;
+          rv_after_bad) echo 'malformed'; exit 0 ;;
+        esac
+      fi
+      while read -r key; do
+        ns1="${key%/*}"; n1="${key#*/}"; uid="base-$n1"; rv=1
+        if [ -f "$ST/uid/$n1" ]; then uid="$(cat "$ST/uid/$n1")"; fi
+        if [ "$step" = audit_after ] && [ "$key" = fds-app/harbor-pull ]; then
+          case "${FAULT:-}" in rv_plain|rv_encrypted|rv_query|rv_unknown|rv_empty|rv_bail) rv=2 ;; rv_recreated) uid=replaced-uid ;; esac
+        fi
+        printf '%s %s %s %s\n' "$ns1" "$n1" "$uid" "$rv"
+      done < <(all_names)
+      if [ "$step" = audit_after ]; then
+        case "${FAULT:-}" in
+          rv_new) echo 'fds-app new-secret uid-new 2' ;;
+          rv_foreign_prefix) echo 'default enc-rb-test-foreign uid-foreign 2' ;;
+        esac
+      fi
+      exit 0
+    fi
     if self_down; then exit 1; fi; all_names | awk -F/ '{print $1" "$2" Opaque 1 1d"}'; exit 0 ;;
   "get secret")
     if [ "${args[2]:-}" = "--no-headers" ] || [ -z "${args[2]:-}" ]; then
@@ -134,6 +158,15 @@ case "${args[0]:-} ${args[1]:-}" in
         if fault_at etcd_query_fail_b prefix_b || fault_at etcd_query_fail_c prefix_c; then echo "Error: context deadline exceeded" >&2; exit 1; fi
         if fault_at etcd_empty_b prefix_b; then exit 0; fi
         if fault_at etcd_unknown_b prefix_b; then printf 'GARBAGE-NOT-A-K8S-OBJECT-0123456789'; exit 0; fi
+        if [ "$step" = audit_after ]; then
+          case "${FAULT:-}" in
+            rv_query) exit 42 ;;
+            rv_empty) exit 0 ;;
+            rv_unknown) printf UNKNOWN; exit 0 ;;
+            rv_encrypted) printf 'k8s:enc:secretbox:v1:key1:'; exit 0 ;;
+            rv_plain|rv_new|rv_foreign_prefix|rv_recreated|rv_bail) printf 'k8s\0SENSITIVE-PAYLOAD-MUST-NOT-LEAK'; exit 0 ;;
+          esac
+        fi
         p="${all#*get /registry/secrets/}"; p="${p%% *}"; cat "$ST/store/$p" 2>/dev/null ;;
     esac; exit 0 ;;
 esac
@@ -151,7 +184,7 @@ case "$fault:$all" in
     "$(dirname "$0")/kubectl-base" "$@"; exit 42 ;;
   secrets_rc:*"get secrets"*|default_rc:*"get secret --no-headers"*)
     "$(dirname "$0")/kubectl-base" "$@"; exit 42 ;;
-  rolled_list_rc:*"get secrets"*)
+  rv_bail:*"get secrets"*|rolled_list_rc:*"get secrets"*)
     if [ "$step" = rolled_list ]; then "$(dirname "$0")/kubectl-base" "$@"; exit 42; fi ;;
   health_rc:*"endpoint health"*) "$(dirname "$0")/kubectl-base" "$@"; exit 42 ;;
   health_malformed:*"endpoint health"*) printf '[{"health":true}'; exit 0 ;;
@@ -440,6 +473,33 @@ for mode in precheck postcheck; do
   name="S22_$mode"
   run_case "$name" "$mode" FAULT=seal_tar
   check "$name" "읽기 전용 모드도 봉인 실패 시 nonzero/INCOMPLETE, GO/PASS 없음" $([ "$RC" -ne 0 ] && has 'EVIDENCE_STATUS=INCOMPLETE' && ! has 'RESULT: GO' && not_pass; echo $?)
+  rm -rf "$CASE_FX"
+done
+
+# S23: non-test Secret updates/creation and every audit failure fail closed.
+for fault in rv_plain rv_new rv_foreign_prefix rv_recreated rv_query rv_unknown rv_empty rv_after_rc rv_after_bad rv_bail; do
+  name="S23_$fault"
+  run_case "$name" rollback-test FAULT="$fault"
+  check "$name" "B59-3 검사 실패 nonzero/PASS 없음" $([ "$RC" -ne 0 ] && not_pass && has B59-3; echo $?)
+  check "$name" "원복 및 UID cleanup 유지" $(enc_same && manifest_ok && no_leftover && no_name_delete; echo $?)
+  check "$name" "Secret payload가 원본·archive에 노출되지 않음" $(mkdir -p "$CASE_FX/audit-extract"; tar xzf "$RUNDIR.evidence.tar.gz" -C "$CASE_FX/audit-extract"; ! grep -rq SENSITIVE-PAYLOAD "$RUNDIR" "$CASE_FX/audit-extract"; echo $?)
+  if [[ "$fault" == rv_plain || "$fault" == rv_new || "$fault" == rv_foreign_prefix || "$fault" == rv_recreated || "$fault" == rv_bail ]]; then
+    check "$name" "실제 후보에 PLAIN 기록" $(grep -q 'class=PLAIN' "$RUNDIR/62-secret-audit.txt"; echo $?)
+  fi
+  rm -rf "$CASE_FX"
+done
+run_case S23_before rollback-test FAULT=rv_before_rc
+check S23_before "사전 snapshot 실패: 변경/재기동0, 소유 a 정리" $([ "$RC" -ne 0 ] && enc_same && manifest_ok && no_leftover && [ "$(cat "$CASE_FX/state/gen")" = 1 ]; echo $?)
+rm -rf "$CASE_FX"
+for fault in none rv_encrypted; do
+  name="S24_$fault"
+  run_case "$name" rollback-test FAULT="$fault"
+  check "$name" "변경 없음/변경 후 secretbox면 PASS" $([ "$RC" -eq 0 ] && has 'RESULT: PASS'; echo $?)
+  if [ "$fault" = none ]; then
+    check "$name" "자기 소유 UID만 제외하여 후보0" $([ ! -s "$RUNDIR/61-secret-candidates.txt" ] && has 'candidates=0'; echo $?)
+  else
+    check "$name" "갱신된 실제 Secret도 암호화 확인" $(grep -q 'fds-app/harbor-pull.*class=SECRETBOX' "$RUNDIR/62-secret-audit.txt"; echo $?)
+  fi
   rm -rf "$CASE_FX"
 done
 

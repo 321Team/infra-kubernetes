@@ -1,9 +1,9 @@
-# P1-SEC-01 AC-05 Secretbox rollback 시험 절차서 (v4.2, rev v4.2-20261005, 승인 전)
+# P1-SEC-01 AC-05 Secretbox rollback 시험 절차서 (v4.3, rev v4.3-20261005, 승인 전)
 
 대상: [#19](https://github.com/321Team/fds-project-baseline/issues/19) AC-05 `Secret encryption·backup·rotation·rollback` 중 **rollback**. [CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 "P1 필수 / Runtime 증적 미충족"으로 남은 항목이다.
 도구: `sec01-secretbox-rollback-v4.sh` (`precheck` / `rollback-test` / `postcheck`). 이 절차서와 스크립트는 **운영 클러스터에서 한 번도 실행하지 않았다.** v3는 PMO/QA 재리뷰([#19 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672), 2026-10-05)에서 소스 차단 3건(B1~B3)과 추적성 조건을 받았고, v4는 그 수정본이다. v4 재리뷰([#19 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302))가 **B3를 서버 측 UID precondition으로 원자적으로 고치라**고 하여 당시 문서와 스크립트는 **v4.1**로 갱신되었다(파일 이름은 그대로, 바이트와 revision이 다르다). v4.1도 가짜 클러스터(fixture)에서만 시험했다. **이 문서는 변경창 승인이 아니다.**
 
-현행 v4.2의 추가 변경·증적 경로·파서 전제는 11절을 따른다. 아래 v4/v4.1 시험 수치는 당시 이력이다.
+현행 v4.3은 12절 B59-3 탐지·수동 조치와 11절의 Gate·봉인 요건을 함께 따른다. 아래 v4/v4.1 시험 수치는 당시 이력이다.
 
 ## 0. v4 변경 이력 (재리뷰 반영)
 
@@ -78,6 +78,8 @@ Review Owner 정의: rollback은 키 회전이 아니라 **"잘못된 암호화 
 | 11 | 다른 변경 작업 없음(공유 Runtime, 증적 PR 적용 등) | 팀 채팅 |
 | 12 | 콘솔 접근 확보(SSH 불가 시) | 실행자 |
 
+대상 선택 권고(비차단): `kubectl -n kube-system get lease kube-controller-manager kube-scheduler -o custom-columns=NAME:.metadata.name,HOLDER:.spec.holderIdentity`로 리더를 확인하고 가능하면 controller-manager 비리더 CP를 선택한다. Lease는 이동할 수 있고 LB·다른 컨트롤러 쓰기도 있으므로 비리더 선택이 쓰기 격리나 B59-3 검사 대체는 아니다. Lease 변경·강제 리더 이동은 하지 않는다.
+
 **변경창 직전 재확인** (과거 T19 종료 사실만으로 이후 변경창의 비중첩을 보장하지 못한다. 변경창 시작 직전에 다시 확인하고 `#19`에 기록한다):
 
 | # | 재확인 | 방법 |
@@ -112,7 +114,7 @@ Review Owner 정의: rollback은 키 회전이 아니라 **"잘못된 암호화 
 
 ## 6. 증적 (수집·편입)
 
-스크립트가 `/root/p1-sec01-secretbox-rollback-test-<시각>.<고유값>/`에 남기는 파일: `run.log`, `00-identity.txt`(스크립트 SHA·rev·run_id), `pre-*`/`post-*`(nodes, readyz, etcd health/status, apiserver pods, secrets 목록, 설정 mode·해시, provider 순서, `pre-3cp-config-sha.txt`, `pre-enc-backup.txt`), `13`·`33`·`40`(etcd 앞 40바이트와 `class=`), `10-owned-secrets.txt`(이름과 UID)·`10-unowned-secrets.txt`(있다면 수동 확인 대상), `30`·`31`·`51`(목록 비교), `32`·`34`·`35`·`41`·`42`·`43`·`44`(읽기 결과), `restart-rollback-*`·`restart-restore-*`(재기동 증거 단계별), `50-cleanup.txt`, `00-orig-sha256.txt`, `99-restored-sha256.txt`.
+스크립트가 `/root/p1-sec01-secretbox-rollback-test-<시각>.<고유값>/`에 남기는 파일: `run.log`, `00-identity.txt`(스크립트 SHA·rev·run_id), `pre-*`/`post-*`(nodes, readyz, etcd health/status, apiserver pods, secrets 목록, 설정 mode·해시, provider 순서, `pre-3cp-config-sha.txt`, `pre-enc-backup.txt`), `13`·`33`·`40`(etcd 저장 형식 `class=`만), `10-owned-secrets.txt`(이름과 UID)·`10-unowned-secrets.txt`(있다면 수동 확인 대상), `30`·`31`·`51`(목록 비교), `32`·`34`·`35`·`41`·`42`·`43`·`44`(읽기 결과), `restart-rollback-*`·`restart-restore-*`(재기동 증거 단계별), `50-cleanup.txt`, `00-orig-sha256.txt`, `99-restored-sha256.txt`.
 아카이브 `…rollback-test-<시각>.<고유값>.evidence.tar.gz`(+ `.sha256`)에는 `.bak`·`.orig`·`.rolled`·`.db`(키 포함)와 etcd 원문 임시 파일이 **제외**된다. 증적 편입은 기존 방식(ansible01 취합 → 증적 PR → 독립 리뷰)을 따른다.
 
 ## 7. 수동 복구 (자동 복원이 실패했을 때)
@@ -132,7 +134,7 @@ Review Owner 정의: rollback은 키 회전이 아니라 **"잘못된 암호화 
 1. 설정을 바꾸기 **전** 실패는 재기동 없이 종료되는가(`bail`, `CHANGED` 플래그).
 2. 재배치 설정 생성(`awk`)이 `identity`를 앞으로 옮기고 `secretbox`·키를 보존하는가(가짜 설정으로 로컬 확인함).
 3. 재기동 후 Ready가 아니면 즉시 복원하는가, 복원 실패 시 실패로 처리하는가(`do_restore` 반환값).
-4. Secret **값**을 출력하지 않는가(목록은 `네임스페이스/이름`만, etcd는 앞 40바이트와 `class=`만, 시험 Secret 값은 dummy, etcd 원문 임시 파일은 즉시 삭제하고 아카이브에서 제외).
+4. Secret **값**을 출력하지 않는가(목록은 `네임스페이스/이름`만, etcd는 `class=`만, 시험 Secret 값은 dummy, etcd 원문 임시 파일은 즉시 삭제하고 아카이브에서 제외).
 5. 아카이브에서 키 포함 파일을 제외하는가.
 6. 이 CP 한 대만 재기동하는가(`manifests` 이동은 이 노드에서만).
 7. `set -e`를 쓰지 않고 단계별 검사로 대체한 판단이 타당한가. **v4에서는 조회 성공과 결과 의미를 분리한 함수(`etcd_prefix`, `secret_names`, `listening`, `secret_state`)가 실패를 빈 값·0건·down으로 바꾸지 않는가.**
@@ -161,3 +163,41 @@ Review Owner 정의: rollback은 키 회전이 아니라 **"잘못된 암호화 
 - 봉인 성공 전에는 최종 GO/PASS를 출력하지 않는다. 증적 압축/체크섬/sidecar/완료 기록 실패는 nonzero, INCOMPLETE다. 최종 결과는 `<OUT>.completion.txt`와 콘솔을 확인한다. 봉인 전 `run.log`/`99-operation-provisional.txt`만으로 승인하지 않는다.
 - 폴더/아카이브에는 고유 접미사가 붙는다. 수동 복구에서 `<시각>.<고유값>`은 실제 실행 폴더로 치환하고 `.orig` 등 키 포함 로컬 사본은 증적 저장소에 올리지 않는다. archive + checksum + completion을 함께 인계한다.
 - 기존 v4.1 152개 assertion 유지, 현행 결과: `validation/fixture-results-v4.2.txt`. 실제 실행 승인은 독립 리뷰 이후 별도다.
+
+## 12. v4.3-20261005 — B59-3 실제 Secret 평문 잔여 탐지와 수동 조치
+
+근거: [독립 리뷰 B59-3](https://github.com/321Team/infra-kubernetes/pull/59#pullrequestreview-5410017432), [Kubernetes 공식 encryption-at-rest 문서](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/). identity가 첫 provider인 동안 쓰인 Secret은 설정만 복원해도 자동 재암호화되지 않는다.
+
+- 3단계 설정 변경 직전 `21-secrets-before.txt`, 복원 재기동 직후 `60-secrets-after.txt`에 namespace/name/UID/resourceVersion만 capture(stdout/stderr/rc)한다. 사전 조회 실패·형식 오류는 설정 변경 전에 중단한다.
+- 새 객체·UID 교체·RV 변경을 `61-secret-candidates.txt`로 추출한다. 시험 이름 prefix 전체를 제외하지 않고, **이번 실행 생성 응답의 정확한 이름+UID만** 제외한다. `62-secret-audit.txt`에는 후보 이름/UID/RV/class, `62-prefix-N.txt`에는 class만 남긴다. 값 앞부분도 기록하지 않는다.
+- 후보가 SECRETBOX이면 정상, PLAIN/다른 암호화 형식/unknown/empty/조회 실패이면 ACFAILS로 최종 nonzero다. 사후 목록 실패도 확인 불가로 FAIL이다. 정상·bail·INT/TERM·EXIT의 복원 경로에서 검사를 시도하고, 실패해도 소유 UID cleanup과 봉인은 계속한다. 복원 자체가 실패하면 저장 상태 관측과 무관하게 전체 FAIL을 유지한다.
+- 최종 비교가 끝나기 전에 삭제된 Secret의 과거 평문 revision, 이미 삭제된 객체, 오래된 etcd snapshot/WAL까지 무결하게 암호화되었다는 증명은 아니다. 재암호화는 현재 값에 대한 조치이며 과거 revision·백업 처리나 credential rotation은 별도 사고/보안 판단 대상이다. SIGKILL·호스트 장애 등 trap 미실행 시 7절 복구 후 아래 수동 점검을 수행한다.
+
+### 수동 점검·재암호화 (대상 CP 콘솔, 기존 승인 관리자 권한)
+
+1. 먼저 7절로 대상 CP의 원본 설정·재기동·readyz를 복원하고 다른 CP 상태도 확인한다. identity 상태인 API를 경유해 replace하지 않는다. AC-05는 FAIL/미인수로 유지하고 `62-secret-audit.txt`와 RC를 #19에 보고한다. **이 도구는 실제 Secret을 자동으로 replace하지 않는다.** 아래 실제 객체 재쓰기는 담당자와 대상·창을 확인한 복구 승인 아래 수행한다.
+2. `60` 목록/비교가 실패했거나 trap이 실행되지 않았으면 metadata를 다시 수집해 `21`과 UID/RV를 비교한다. 기준선이 없거나 완전성을 입증하지 못하면 현재 전체 Secret의 저장 class를 읽기 전용으로 확인하여 범위를 확정한다. 추측으로 후보0 처리하지 않는다. 삭제된 후보의 EMPTY는 별도 metadata NotFound 및 삭제 이력으로 해소 여부를 판단한다.
+3. PLAIN 대상별로 새 GET → replace를 한다. 아래 `SELF_IP`, `NS`, `NAME`은 승인 대상의 실제 값으로 채우고, Secret JSON은 파이프 안에서만 전달한다. xtrace/tee/파일 저장을 사용하지 않는다. GET에 포함된 resourceVersion을 유지하므로 경쟁 갱신 시 Conflict로 중단한다. `--force`나 오래된 JSON 재사용은 금지한다.
+
+```bash
+# 대상 CP root, 복원된 직접 endpoint; 실행 전 실제 값 지정
+: "${SELF_IP:?}" "${NS:?}" "${NAME:?}"
+set +x
+set -o pipefail
+kubectl --kubeconfig=/etc/kubernetes/admin.conf --server="https://$SELF_IP:6443"   -n "$NS" get secret "$NAME" -o json |
+  kubectl --kubeconfig=/etc/kubernetes/admin.conf --server="https://$SELF_IP:6443" replace -f -
+rewrite_rc=("${PIPESTATUS[@]}")
+printf 'get_rc=%s replace_rc=%s\n' "${rewrite_rc[0]}" "${rewrite_rc[1]}"
+# 두 rc가 모두 0이어야 다음 확인으로 진행. 실패하면 STOP·보고.
+```
+
+4. 같은 대상의 etcd key를 읽어 **값을 출력하지 않고** class를 확인한다. 정상 기준은 조회 rc=0, classifier rc=0, class=SECRETBOX이다. 아래 명령은 metadata/RC만 증적으로 남기고 raw Secret은 저장하지 않는다. 오류·UNKNOWN·EMPTY·PLAIN이면 복구 미완료로 남긴다.
+
+```bash
+kubectl --kubeconfig=/etc/kubernetes/admin.conf --server="https://$SELF_IP:6443"   -n kube-system exec "etcd-$(hostname)" -- etcdctl --endpoints=https://127.0.0.1:2379   --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt   --key=/etc/kubernetes/pki/etcd/server.key get "/registry/secrets/$NS/$NAME" --print-value-only |
+  python3 -c 'import sys; v=sys.stdin.buffer.read(); c="SECRETBOX" if v.startswith(b"k8s:enc:secretbox:v1:") else "PLAIN" if v.startswith(b"k8s\0") else "EMPTY" if not v else "UNKNOWN"; print("class="+c); sys.exit(0 if c=="SECRETBOX" else 1)'
+verify_rc=("${PIPESTATUS[@]}")
+printf 'etcd_rc=%s class_rc=%s\n' "${verify_rc[0]}" "${verify_rc[1]}"
+```
+
+5. namespace/name·UID·RV 전후 값, 처리 시각·담당자·승인 링크, GET/replace/etcd/class RC와 최종 class를 별도 복구 증적으로 봉인한다. Secret 값이나 JSON은 포함하지 않는다. 모든 대상과 노드/API/etcd 상태가 해소되어도 원래 FAIL 로그를 덮어쓰지 않고 후속 인수로 연결한다. 재시험은 변경창 승인 범위를 따른다.

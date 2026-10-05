@@ -1,0 +1,3 @@
+source=v4.2 fault=existing_Secret_RV_change_PLAIN rc=0
+RESULT: PASS
+secret_write_audit=ABSENT

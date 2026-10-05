@@ -27,7 +27,7 @@
 #
 # FIXTURE=1 은 가짜 클러스터(스텁) 시험 전용이다. 운영에서 사용하지 않는다.
 set -uo pipefail
-REV="v4.2-20261005"
+REV="v4.3-20261005"
 MODE="${1:-}"
 FIXTURE="${FIXTURE:-0}"
 ENC="${ENC:-/etc/kubernetes/enc/encryption-config.yaml}"
@@ -50,6 +50,8 @@ SELF_IP="${SELF_IP:-$(hostname -I | awk '{print $1}')}"
 # B3: 실행별 고유 이름. 이름만으로 다른 실행의 객체와 구분하지 않고, 아래 UID 로 소유를 다시 확인한다.
 RUN_ID="$(date -u +%Y%m%d%H%M%S)-$(printf '%04x%04x' "$RANDOM" "$RANDOM")"
 CHANGED=0
+EXPOSURE=0
+AUDITED=0
 FINISHED=0
 FAILS=0
 ACFAILS=0
@@ -79,7 +81,7 @@ etcdctl_in_pod() {
     --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt \
     --key=/etc/kubernetes/pki/etcd/server.key "$@"
 }
-# B1: etcd 조회 성공 여부와 결과 의미를 분리한다. $1=ns $2=name $3=결과 파일(앞 40바이트만 기록, 값 노출 방지)
+# B1: etcd 조회 성공 여부와 결과 의미를 분리한다. $1=ns $2=name $3=결과 파일(class만 기록, 실제 Secret 바이트 금지)
 # 반환 0 = 조회 성공 + 값 존재. ETCD_CLASS = QUERY_FAILED | EMPTY | SECRETBOX | ENC | PLAIN | UNKNOWN_FORMAT
 etcd_prefix() {
   local raw="$OUT/.etcd-raw.$$" rc magic
@@ -93,7 +95,7 @@ etcd_prefix() {
     *)                ETCD_CLASS=UNKNOWN_FORMAT ;;
   esac
   if [ "$ETCD_CLASS" = ENC ] && head -c 24 "$raw" | grep -aq 'k8s:enc:secretbox:v1:'; then ETCD_CLASS=SECRETBOX; fi
-  { head -c 40 "$raw" | tr -c '[:print:]' '.'; echo; echo "class=$ETCD_CLASS"; } > "$3"
+  printf 'class=%s\n' "$ETCD_CLASS" > "$3"
   rm -f "$raw"
   return 0
 }
@@ -234,7 +236,10 @@ do_restore() {
   if [ "$rc" -ne 0 ]; then say "!!! 복원 중 재기동 실패(rc=$rc) - 즉시 수동 조치(runbook 7절)"; ok=0; fi
   sha256sum "$ENC" > "$OUT/99-restored-sha256.txt"
   if [ "$(awk '{print $1}' "$OUT/00-orig-sha256.txt")" = "$(awk '{print $1}' "$OUT/99-restored-sha256.txt")" ]; then say "복원 설정 해시가 원본과 일치"; else say "!!! 복원 설정 해시가 원본과 다름"; ok=0; fi
-  [ "$ok" = 1 ] && CHANGED=0
+  if [ "$ok" = 1 ]; then
+    CHANGED=0
+    audit_secret_writes || :  # audit failure must not prevent cleanup
+  fi
   [ "$ok" = 1 ]
 }
 # All gate inputs retain command status before any parsing/pipeline.
@@ -281,6 +286,41 @@ except (ValueError, TypeError, KeyError, OSError) as exc:
     sys.exit(1)
 PYJSON
 }
+# B59-3: metadata only; UID catches delete/recreate, RV catches same-name updates.
+secret_snapshot() {
+  local label="$1"
+  capture "$label" $KC get secrets -A --no-headers -o custom-columns=NS:.metadata.namespace,NAME:.metadata.name,UID:.metadata.uid,RV:.metadata.resourceVersion || return 1
+  awk 'NF!=4 || $1!~/^[a-z0-9][a-z0-9.-]*$/ || $2!~/^[a-z0-9][a-z0-9.-]*$/ || $3=="<none>" || $4=="<none>" {bad=1} {k=$1"/"$2; if(seen[k]++) bad=1} END {exit (bad || NR==0)}' "$OUT/$label.txt" || { acfail "$label metadata 형식/중복/빈 목록 오류"; return 1; }
+}
+audit_secret_writes() {
+  [ "$EXPOSURE" = 1 ] && [ "$AUDITED" = 0 ] || return 0
+  AUDITED=1
+  local ns name uid rv i=0 bad=0
+  mark audit_after
+  if ! secret_snapshot 60-secrets-after; then
+    acfail "B59-3 사후 metadata 조회 실패: 암호화 잔여 확인 불가, 수동 점검 필요"; return 1
+  fi
+  # Exclude only exact creation-response UID owned by this run, never a name prefix.
+  local owned="$OUT/10-owned-secrets.txt"
+  [ -f "$owned" ] || owned=/dev/null
+  awk 'FILENAME==ARGV[1] {own["default/"$1]=$2; next}
+       FILENAME==ARGV[2] {before[$1"/"$2]=$3" "$4; next}
+       {k=$1"/"$2; if(own[k]==$3) next; if(!(k in before) || before[k]!=$3" "$4) print}' \
+    "$owned" "$OUT/21-secrets-before.txt" "$OUT/60-secrets-after.txt" > "$OUT/61-secret-candidates.txt" || { acfail "B59-3 metadata 비교 실패"; return 1; }
+  : > "$OUT/62-secret-audit.txt" || { acfail "B59-3 audit 기록 실패"; return 1; }
+  while read -r ns name uid rv; do
+    [ -n "$ns" ] || continue
+    i=$((i+1))
+    if ! etcd_prefix "$ns" "$name" "$OUT/62-prefix-$i.txt"; then
+      acfail "B59-3 $ns/$name 저장 형식 확인 불가(class=$ETCD_CLASS)"; bad=1
+    elif [ "$ETCD_CLASS" != SECRETBOX ]; then
+      acfail "B59-3 $ns/$name 비정상 저장(class=$ETCD_CLASS): 수동 재암호화/확인 필요"; bad=1
+    fi
+    printf '%s/%s uid=%s rv=%s class=%s\n' "$ns" "$name" "$uid" "$rv" "$ETCD_CLASS" >> "$OUT/62-secret-audit.txt" || { acfail "B59-3 audit 기록 실패"; bad=1; }
+  done < "$OUT/61-secret-candidates.txt"
+  say "B59-3 변경 Secret 검사: candidates=$i failure=$bad (값 원문 미기록)"
+  [ "$bad" = 0 ]
+}
 finalize() {
   local arc="$OUT.evidence.tar.gz"
   tar czf "$arc" -C "$(dirname "$OUT")" --exclude='*.bak' --exclude='*.orig' --exclude='*.rolled' --exclude='*.db' --exclude='.etcd-raw.*' "$(basename "$OUT")" || return 1
@@ -293,6 +333,7 @@ finish() {  # requested success token; FAIL explicitly suppresses success
   [ "$FINISHED" = 1 ] && return "$FINAL_RC"
   local requested="${1:-FAIL}" operation=FAIL result=FAIL evidence=COMPLETE
   FINISHED=1; FINAL_RC=1
+  audit_secret_writes || :  # also runs after bail/INT/TERM/EXIT restore attempts
   cleanup_tests || :  # cleanup increments ACFAILS; never skip seal on cleanup failure
   if [ "$requested" != FAIL ] && [ "$FAILS" -eq 0 ] && [ "$ACFAILS" -eq 0 ] && [ "$CHANGED" -eq 0 ]; then operation="$requested"; fi
   printf 'OPERATION_RESULT=%s\nEVIDENCE_STATUS=PENDING\n' "$operation" > "$OUT/99-operation-provisional.txt" || evidence=INCOMPLETE
@@ -421,6 +462,9 @@ rollback-test)
   say "사전: secretbox 접두어 확인"
 
   say "[3] provider 순서 변경 후 apiserver 재기동 (여기서부터 변경 시작)"
+  mark snapshot_before
+  secret_snapshot 21-secrets-before || bail "B59-3 사전 metadata 확인 실패 - 설정 변경 없음"
+  EXPOSURE=1
   CHANGED=1
   cp -p "$OUT/encryption-config.yaml.rolled" "$ENC" && chmod 600 "$ENC" || bail "재배치 설정 적용 실패"
   restart_apiserver rollback; RC=$?
