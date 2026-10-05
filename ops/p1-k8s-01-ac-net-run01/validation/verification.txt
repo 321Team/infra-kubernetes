@@ -1,9 +1,10 @@
-base_origin_main=2fae629e57fc4ee3419bebc9a4b9a6d6a236dbcd
-previous_reviewed_head=35b18df9b2180de495f5d1d33ca0998a2f36b7ff (REQUEST_CHANGES B62-1 by GWONUK, pullrequestreview-5410329530)
-runtime_source_currently_approved=a24f0a23fa6ddb43a58bfc3de612e8677b359fc5 (unchanged; this change is NOT approved or deployed)
-verified_utc=2026-10-05T05:40:24Z
-lifecycle=67 PASS; 0 failures; rc0 (acnet-selftest.sh, mock kubectl; 40 previous + B62-1 verification-GET scenarios)
-b62_1_regression=the new scenarios run against the previous acnet-1 (HEAD 35b18df9b2180de495f5d1d33ca0998a2f36b7ff) give 15 failures, including rc0 + "data identical" + CREATE_COMPLETE when both verification GETs fail with empty stdout
-precheck=acnet-0-precheck.sh and acnet-precheck-selftest.py are byte-identical to origin/main; 17 tests OK / rc0 was reproduced on Linux by the reviewer (GWONUK) on the previous HEAD; not re-run on the author's Windows PC
-static=bash -n all 7 shell files; git diff --check PASS
-runtime=NOT RUN (no server access; kubelet acceptance of the copied secret is unverified)
+base_origin_main=98f30c089881350694ccfe3298f8f796a5521708
+purpose=2026-10-05 follow-up: precheck stderr false FAIL, acnet-3 capture polling, UDP4789 counting (NOT approved, NOT deployed)
+runtime_source_currently_approved=e469761c284e4057e11045307c2177ab1238c938 (unchanged; this change does not touch it)
+verified_utc=2026-10-05T07:51:46Z
+lifecycle=acnet-selftest.sh 67 PASS; 0 failures (unchanged files; re-run)
+precheck=acnet-precheck-selftest.py 20 OK (17 previous + stderr_warn, glued_marker, empty_stdout); the previous acnet-0-precheck.sh fails stderr_warn (reproduces "exact image unresolved")
+edge=acnet-edge-selftest.py 10 OK; origin/main acnet-3-edge.sh fails 5 of the 8 original cases (single status read, truncated status text, UDP counting) and HEAD 3b97294 fails the 2 B63-1 cases (status command rc ignored: a finished=1/rc=0 body with exit 4 gave CAPTURE=VALID; a failed first poll could be overwritten by a later success)
+static=bash -n all shell files; git diff --check
+environment=author's Windows PC resolves "bash" to WSL, so the python selftests were run from a temporary copy with the Git Bash absolute path, utf-8 decoding and a POSIX fixture path (no code change); a Linux re-run is requested from the reviewer
+runtime=NOT RUN (no server access)

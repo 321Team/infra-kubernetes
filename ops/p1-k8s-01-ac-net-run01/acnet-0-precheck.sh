@@ -38,7 +38,18 @@ EOF
 )
   remote_check nodes-readyz k8s-control01 "$gate_cmd" ACNET_NODES_READYZ_OK || { echo 'FAIL: nodes/readyz gate failed'; fail=1; }
   for w in k8s-worker01 k8s-worker02 k8s-worker03; do
-    image_cmd="images=\$(crictl images --digests --no-trunc) || exit \$?; printf '%s\\n' \"\$images\" | grep -F -- '$DIGEST' || exit 1; crictl inspecti '$IMAGE' >/dev/null || exit \$?; echo ACNET_IMAGE_OK"
+    # stderr of the crictl calls goes to a remote temp file, never into the command's stdout: ansible ad-hoc output appends stderr
+    # right after the last stdout line, which glued a crictl warning onto the success marker (false PRECHECK_FAIL, 2026-10-05).
+    # The marker still has to be a whole line (grep -Fx) and the exit status still counts; the stderr is printed only on failure.
+    image_cmd=$(cat <<EOF
+e=\$(mktemp) || exit 1
+images=\$(crictl images --digests --no-trunc 2>"\$e") || { rc=\$?; sed 's/^/crictl-images-stderr: /' "\$e"; rm -f "\$e"; exit \$rc; }
+printf '%s\\n' "\$images" | grep -F -- '$DIGEST' || { rm -f "\$e"; exit 1; }
+crictl inspecti '$IMAGE' >/dev/null 2>"\$e" || { rc=\$?; sed 's/^/crictl-inspecti-stderr: /' "\$e"; rm -f "\$e"; exit \$rc; }
+rm -f "\$e"
+echo ACNET_IMAGE_OK
+EOF
+)
     remote_check "$w-image" "$w" "$image_cmd" ACNET_IMAGE_OK || { echo "FAIL: $w exact image unresolved"; fail=1; }
   done
   [ "$fail" -eq 0 ]

@@ -1,22 +1,22 @@
-test_duplicate (__main__.Precheck.test_duplicate) ... ok
-test_extra_node (__main__.Precheck.test_extra_node) ... ok
-test_image_missing (__main__.Precheck.test_image_missing) ... ok
-test_images_rc (__main__.Precheck.test_images_rc) ... ok
-test_inspect_rc (__main__.Precheck.test_inspect_rc) ... ok
-test_log_error (__main__.Precheck.test_log_error) ... ok
-test_missing_marker (__main__.Precheck.test_missing_marker) ... ok
-test_nodes_rc (__main__.Precheck.test_nodes_rc) ... ok
-test_normal (__main__.Precheck.test_normal) ... ok
-test_notready (__main__.Precheck.test_notready) ... ok
-test_ns_error (__main__.Precheck.test_ns_error) ... ok
-test_ns_exists (__main__.Precheck.test_ns_exists) ... ok
-test_ready_bad (__main__.Precheck.test_ready_bad) ... ok
-test_ready_rc (__main__.Precheck.test_ready_rc) ... ok
-test_seal_error (__main__.Precheck.test_seal_error) ... ok
-test_transport (__main__.Precheck.test_transport) ... ok
-test_unsched (__main__.Precheck.test_unsched) ... ok
-
-----------------------------------------------------------------------
-Ran 17 tests in 0.972s
-
+test_duplicate ... ok
+test_empty_stdout ... ok
+test_extra_node ... ok
+test_glued_marker ... ok
+test_image_missing ... ok
+test_images_rc ... ok
+test_inspect_rc ... ok
+test_log_error ... ok
+test_missing_marker ... ok
+test_nodes_rc ... ok
+test_normal ... ok
+test_notready ... ok
+test_ns_error ... ok
+test_ns_exists ... ok
+test_ready_bad ... ok
+test_ready_rc ... ok
+test_seal_error ... ok
+test_stderr_warn ... ok
+test_transport ... ok
+test_unsched ... ok
+Ran 20 tests in 45.345s
 OK

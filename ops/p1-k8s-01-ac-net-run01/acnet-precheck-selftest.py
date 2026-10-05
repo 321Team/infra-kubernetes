@@ -17,8 +17,15 @@ class Precheck(unittest.TestCase):
 'ansible': '''#!/bin/bash
 while [ "$#" -gt 0 ]; do if [ "$1" = -a ]; then shift; command="$1"; break; fi; shift; done
 [ "$FAULT" = transport ] && { echo ACNET_NODES_READYZ_OK; exit 42; }
-/bin/bash -c "$command"; rc=$?
-[ "$FAULT" = missing_marker ] && exit 42
+out=$(mktemp); err=$(mktemp)
+/bin/bash -c "$command" >"$out" 2>"$err"; rc=$?
+[ "$FAULT" = missing_marker ] && rc=42
+[ "$FAULT" = empty_stdout ] && : >"$out"
+[ "$FAULT" = glued_marker ] && sed -i 's/^ACNET_IMAGE_OK$/ACNET_IMAGE_OKtime=x level=warning/' "$out"
+# real ad-hoc output: header, then stdout WITHOUT its trailing newline, then the remote stderr appended directly
+echo "host | CHANGED | rc=$rc >>"
+printf '%s' "$(cat "$out")"; cat "$err"; echo
+rm -f "$out" "$err"
 exit "$rc"
 ''',
 'kubectl': '''#!/bin/bash
@@ -47,6 +54,7 @@ esac
 exit 99
 ''',
 'crictl': '''#!/bin/bash
+[ "$FAULT" = stderr_warn ] && echo 'time="2026-10-05T15:00:50+09:00" level=warning msg="Config /etc/crictl.yaml does not exist, trying next"' >&2
 case "$1" in
  images)
    [ "$FAULT" != image_missing ] && echo 'app sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -68,7 +76,7 @@ exec /usr/bin/sha256sum "$@"
                 f=root/'bin'/name; f.write_text(content); f.chmod(0o755)
             env=dict(os.environ, FIXTURE_ROOT=temp, FAULT=fault, PATH=str(root/'bin')+':'+os.environ['PATH'])
             result=subprocess.run(['bash',str(root/'script.sh'),str(root/'manifest.yaml')],env=env,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
-            if fault == 'normal':
+            if fault in ('normal', 'stderr_warn'):
                 self.assertEqual(result.returncode,0,result.stdout)
                 self.assertIn('PRECHECK_PASS',result.stdout)
                 out=next((root/'out').iterdir())
@@ -77,6 +85,6 @@ exec /usr/bin/sha256sum "$@"
                 self.assertNotEqual(result.returncode,0,result.stdout)
                 self.assertNotIn('PRECHECK_PASS',result.stdout)
 
-for scenario in ['normal','transport','ns_error','ns_exists','notready','unsched','duplicate','extra_node','nodes_rc','ready_bad','ready_rc','image_missing','images_rc','inspect_rc','missing_marker','log_error','seal_error']:
+for scenario in ['normal','transport','ns_error','ns_exists','notready','unsched','duplicate','extra_node','nodes_rc','ready_bad','ready_rc','image_missing','images_rc','inspect_rc','missing_marker','log_error','seal_error','stderr_warn','glued_marker','empty_stdout']:
     setattr(Precheck, 'test_'+scenario, lambda self, scenario=scenario: self.run_case(scenario))
 if __name__ == '__main__': unittest.main(verbosity=2)
