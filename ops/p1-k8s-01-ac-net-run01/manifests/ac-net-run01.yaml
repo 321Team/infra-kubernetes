@@ -1,0 +1,160 @@
+# ac-net-run01: Pod/Service test fixtures for P1-K8S-01 (#10) T07/T08/T09/T14/T15.
+# Create-only fixtures in ONE namespace; cleanup deletes only this namespace (bound to its UID).
+# imagePullPolicy: Never -> no registry/pull path is involved; the digest must already exist on each worker.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ac-net-run01
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    fds.test/run: ac-net-run01
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-a
+  namespace: ac-net-run01
+  labels:
+    app: probe-a
+    fds.test/run: ac-net-run01
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker01
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: http
+    image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
+    imagePullPolicy: Never
+    command: [python3, -m, http.server, '8080', --bind, 0.0.0.0]
+    workingDir: /tmp
+    ports:
+    - containerPort: 8080
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 100m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probe-a-svc
+  namespace: ac-net-run01
+  labels:
+    fds.test/run: ac-net-run01
+spec:
+  type: ClusterIP
+  selector:
+    app: probe-a
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-b
+  namespace: ac-net-run01
+  labels:
+    app: probe-b
+    fds.test/run: ac-net-run01
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker02
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: http
+    image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
+    imagePullPolicy: Never
+    command: [python3, -m, http.server, '8080', --bind, 0.0.0.0]
+    workingDir: /tmp
+    ports:
+    - containerPort: 8080
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 100m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probe-b-svc
+  namespace: ac-net-run01
+  labels:
+    fds.test/run: ac-net-run01
+spec:
+  type: ClusterIP
+  selector:
+    app: probe-b
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probe-c
+  namespace: ac-net-run01
+  labels:
+    app: probe-c
+    fds.test/run: ac-net-run01
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: k8s-worker03
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: http
+    image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
+    imagePullPolicy: Never
+    command: [python3, -m, http.server, '8080', --bind, 0.0.0.0]
+    workingDir: /tmp
+    ports:
+    - containerPort: 8080
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {cpu: 100m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: probe-c-svc
+  namespace: ac-net-run01
+  labels:
+    fds.test/run: ac-net-run01
+spec:
+  type: ClusterIP
+  selector:
+    app: probe-c
+  ports:
+  - port: 80
+    targetPort: 8080
