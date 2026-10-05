@@ -1,12 +1,7 @@
-parent=d9ce0b6ce2195ec8fee6ea8d798aadacd40bfad1
-approved_original=a24f0a23fa6ddb43a58bfc3de612e8677b359fc5
-verified_utc=2026-10-05T03:48:06.649658+00:00
-precheck=17 tests OK; rc0
-lifecycle=28 PASS; 0 failures; rc0
+base_origin_main=2fae629e57fc4ee3419bebc9a4b9a6d6a236dbcd
+runtime_source_currently_approved=a24f0a23fa6ddb43a58bfc3de612e8677b359fc5 (unchanged; this change is NOT approved or deployed)
+verified_utc=2026-10-05T05:23:22Z
+lifecycle=40 PASS; 0 failures; rc0 (acnet-selftest.sh, mock kubectl, includes the new pull-secret scenarios)
+precheck=NOT RERUN on the author's Windows PC: acnet-precheck-selftest.py errors in subprocess output decoding for all 17 cases before reaching the script. acnet-0-precheck.sh and acnet-precheck-selftest.py are byte-identical to origin/main (git diff empty); the last recorded result is 17 OK in infra-kubernetes#61. Re-run on Linux is requested from the reviewer.
 static=bash -n all 7 shell files; git diff --check PASS
-runtime=NOT RUN
-original_repro=nodes/readyz Ansible stdout FAILED and rc42, other gates valid => PRECHECK_PASS/rc0; config/inventory/output paths only isolated in fixture
-aeaa4756c2cad0685f00a715835ddb08fa197f0adb4c38661589cab7db39bae6  acnet-0-precheck.sh
-04fc1a4d03a6972e24ef1e2d15438a057472f4b23396578a8f8c0959d0e83997  acnet-precheck-selftest.py
-433d9c164876ff1da49e67e9ac6aa2c236f9f0c9ccbb62436d62f450255dc378  validation/precheck-selftest.txt
-550c57cd40e099189778ab9e25cfb4c6569bf08deda87fcfa407824fe465c2ea  validation/lifecycle-selftest.txt
+runtime=NOT RUN (no server access; kubelet acceptance of the copied secret is unverified)

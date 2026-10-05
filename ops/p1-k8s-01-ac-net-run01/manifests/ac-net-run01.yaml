@@ -1,6 +1,9 @@
 # ac-net-run01: Pod/Service test fixtures for P1-K8S-01 (#10) T07/T08/T09/T14/T15.
 # Create-only fixtures in ONE namespace; cleanup deletes only this namespace (bound to its UID).
-# imagePullPolicy: Never -> no registry/pull path is involved; the digest must already exist on each worker.
+# The image digest must already exist on each worker. kubelet (v1.36) records which pull secrets an image was pulled with and
+# refuses it to a Pod without a matching secret under imagePullPolicy Never (ErrImageNeverPull on worker02/03, 2026-10-05).
+# So the Pods carry imagePullSecrets (a copy of fds-app/harbor-pull-secret made by acnet-1, removed with the namespace) and
+# imagePullPolicy IfNotPresent: the existing local image is used and kubelet only verifies the credentials against the registry.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -21,6 +24,8 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: k8s-worker01
   automountServiceAccountToken: false
+  imagePullSecrets:
+  - name: harbor-pull-secret
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -30,7 +35,7 @@ spec:
   containers:
   - name: http
     image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
-    imagePullPolicy: Never
+    imagePullPolicy: IfNotPresent
     command: [python3, -m, http.server, '8080', --bind, 0.0.0.0]
     workingDir: /tmp
     ports:
@@ -71,6 +76,8 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: k8s-worker02
   automountServiceAccountToken: false
+  imagePullSecrets:
+  - name: harbor-pull-secret
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -80,7 +87,7 @@ spec:
   containers:
   - name: http
     image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
-    imagePullPolicy: Never
+    imagePullPolicy: IfNotPresent
     command: [python3, -m, http.server, '8080', --bind, 0.0.0.0]
     workingDir: /tmp
     ports:
@@ -121,6 +128,8 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: k8s-worker03
   automountServiceAccountToken: false
+  imagePullSecrets:
+  - name: harbor-pull-secret
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -130,7 +139,7 @@ spec:
   containers:
   - name: http
     image: 10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33
-    imagePullPolicy: Never
+    imagePullPolicy: IfNotPresent
     command: [python3, -m, http.server, '8080', --bind, 0.0.0.0]
     workingDir: /tmp
     ports:
