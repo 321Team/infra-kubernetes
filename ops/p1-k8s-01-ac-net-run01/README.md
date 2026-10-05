@@ -97,3 +97,11 @@
 - 자체시험: `python3 acnet-precheck-selftest.py` (로컬 Python3 필요, 운영 precheck에는 Python3 불필요). 실제 원격 shell 문자열을 가짜 kubectl/crictl에 실행하며 서버에 접근하지 않는다. 테스트 복사본에서는 사용자 홈의 설정·inventory·출력 경로만 임시 폴더로 치환한다. 17개 정상/실패 case. 기존 생성·cleanup 회귀 `bash acnet-selftest.sh` 28개도 유지한다.
 - 생성/시험/정리 스크립트와 manifest는 변경하지 않았다. 수정 precheck의 source 승인은 기존 a24f0a23 승인과 별도이며, 구현자 본인이 독립 승인하지 않는다. Runtime GO·변경창과 AC 인수도 별도다.
 - 수정 전 SHA를 실행하는 경우 기존 PRECHECK_PASS 하나만으로 Fresh Gate를 대체하지 않는다. 기존 Gate 계약의 노드·readyz 원본/rc를 별도로 확인하는 운영 판단은 #10의 해당 실행 승인 기록을 따른다.
+
+## 2026-10-05 `ErrImageNeverPull` 대응 — pull secret 복사 + `IfNotPresent` (승인 대기, 서버 미적용)
+- 증상: 같은 digest 이미지가 3 Worker에 있고 정확한 reference `crictl inspecti`가 rc=0인데, worker02·03의 kubelet이 `imagePullPolicy: Never` Pod에 `ErrImageNeverPull`을 냄(worker01은 정상). 2회 재현([#10 보고](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5988467389)).
+- 원인(강한 정황, 확정 아님): worker02·03 kubelet의 `image_manager/pulled/sha256-e3f8f418…`(= `sha256("sha256:1972a9af…")`) 기록이 이 이미지를 `fds-app/harbor-pull-secret`, `fds-gate2-probe/harbor-pull-secret`으로 받은 것으로 적고 있고, worker01에는 그 기록이 없다. 시험 Pod는 그 secret이 없어 `Never`에서 거절된다([#10 5988570688](https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-5988570688)).
+- 변경(시험 객체 쪽만, 노드·containerd·kubelet은 건드리지 않음): ① Pod 3개에 `imagePullSecrets: [{name: harbor-pull-secret}]`과 `imagePullPolicy: IfNotPresent`, ② `acnet-1`이 namespace 생성 직후 `fds-app/harbor-pull-secret`을 시험 namespace로 복사(값은 출력하지 않음, 원본과 데이터 동일 여부는 내부 비교만, 라벨 `fds.test/run`), 실패 시 fixtures를 만들지 않고 STOP, ③ `acnet-9`의 허용 목록에 `secret/harbor-pull-secret` 1개만 추가(다른 secret은 STOP), namespace 삭제로 함께 제거.
+- 한계: kubelet이 새 namespace의 복사본을 받아들이는지는 **실제 실행으로만 확인**된다. secret uid 차이만으로 `Never`가 반드시 거절된다고 단정하지 않으며, 기록(credentialMapping·hash)과 실제 동작은 구분한다. `IfNotPresent`는 **레지스트리 인증 요청과, kubelet이 필요하다고 판단하면 해당 digest pull이 발생할 수 있고 로컬 cache만 쓴다고 보장하지 않는다**(수용 범위: 복사본 1개, 해당 namespace, 고정 digest).
+- B62-1(독립 리뷰): 복사 검증의 source/copy GET 종료 코드를 파이프로 가리지 않고, 두 값이 비어 있지 않을 때만 shell 변수 안에서 비교한다(값·base64·해시는 인자·환경변수·파일·로그로 내보내지 않음). 조회 실패·빈 값은 fixtures 생성 전에 STOP.
+- 모의 시험: `bash acnet-selftest.sh` 시나리오에 secret 복사 성공/값 비출력/순서, 원본 읽기 실패·잘못된 타입·생성 실패·라벨 실패·데이터 불일치, cleanup의 secret 허용·타 secret 거부를 추가했다. 이 변경은 [#10 승인](https://github.com/321Team/fds-project-baseline/issues/10)과 독립 리뷰 뒤에만 새 exact SHA로 실행한다.

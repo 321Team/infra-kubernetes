@@ -13,6 +13,43 @@ PASS  create: real manifest splits into 1 Namespace + 6 fixtures (mock parses th
 split check: ns=1 rest=6 pods=3 svcs=3 seps=5
 PASS  create: rest.yaml = Pod3 + Service3 with 5 separators, no Namespace
 PASS  create: unexpected UID format from create -> stop, not recorded (rc=1)
+PASS  secret: copy happens and is verified; the value is never printed (rc=0)
+PASS  secret: neither the value nor its base64 appears in the output
+PASS  secret: created BEFORE the fixtures (log lines 11 < 16)
+PASS  secret: source secret not readable -> STOP before fixtures (rc=1)
+PASS  secret: source secret has the wrong type -> STOP before fixtures (rc=1)
+PASS  secret: copy create FAILS -> STOP, cleanup hint, no fixtures (rc=1)
+PASS  secret: label fails -> STOP before fixtures (rc=1)
+PASS  secret: copied data differs from the source -> STOP before fixtures (rc=1)
+PASS  verify: source GET fails only (rc 42) (rc=1)
+PASS  verify: source GET fails only (rc 42): no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: source GET fails only (rc 42): namespace UID preserved for cleanup
+PASS  verify: copy GET fails only (rc 42) (rc=1)
+PASS  verify: copy GET fails only (rc 42): no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: copy GET fails only (rc 42): namespace UID preserved for cleanup
+PASS  verify: BOTH GETs fail with empty stdout (the reproduced bug) (rc=1)
+PASS  verify: BOTH GETs fail with empty stdout (the reproduced bug): no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: BOTH GETs fail with empty stdout (the reproduced bug): namespace UID preserved for cleanup
+PASS  verify: both-fail case recorded rc=42/42 match=0 in 2-apply.txt
+PASS  verify: source stdout looks fine but rc is nonzero (rc=1)
+PASS  verify: source stdout looks fine but rc is nonzero: no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: source stdout looks fine but rc is nonzero: namespace UID preserved for cleanup
+PASS  verify: copy stdout looks fine but rc is nonzero (rc=1)
+PASS  verify: copy stdout looks fine but rc is nonzero: no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: copy stdout looks fine but rc is nonzero: namespace UID preserved for cleanup
+PASS  verify: rc 0 but both data are empty (rc=1)
+PASS  verify: rc 0 but both data are empty: no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: rc 0 but both data are empty: namespace UID preserved for cleanup
+PASS  verify: rc 0 but only the copy is empty (rc=1)
+PASS  verify: rc 0 but only the copy is empty: no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: rc 0 but only the copy is empty: namespace UID preserved for cleanup
+PASS  verify: rc 0 but only the source is empty (rc=1)
+PASS  verify: rc 0 but only the source is empty: no 'verified', no CREATE_COMPLETE, no value
+PASS  verify: rc 0 but only the source is empty: namespace UID preserved for cleanup
+PASS  verify: identical non-empty data still passes (rc 0, CREATE_COMPLETE) (rc=0)
+PASS  verify: success recorded rc=0/0 match=1
+PASS  secret: the manifest Pods carry imagePullSecrets and IfNotPresent (static) (rc=0)
+PASS  secret: 3 Pods have imagePullSecrets + IfNotPresent
 == acnet-9-cleanup.sh
 PASS  cleanup: UID MISMATCH -> STOP with NONZERO exit, no delete call (rc=1)
 PASS  cleanup: delete ok but namespace stays Terminating -> NONZERO CLEANUP_INCOMPLETE (rc=1)
@@ -24,6 +61,8 @@ PASS  cleanup: PARTIAL creation - empty namespace (no pods/services) -> cleanabl
 PASS  cleanup: PARTIAL creation - only probe-a exists -> cleanable, rc 0 COMPLETE (rc=0)
 PASS  cleanup: subset + one FOREIGN object -> refused, no delete (rc=1)
 PASS  cleanup: only a FOREIGN object -> refused, no delete (rc=1)
+PASS  cleanup: the copied pull secret is allowed -> rc 0 COMPLETE (rc=0)
+PASS  cleanup: any OTHER secret -> STOP, no delete (rc=1)
 PASS  cleanup: unexpected pod/service set -> STOP, no delete (rc=1)
 PASS  cleanup: other-resource listing FAILS -> STOP, no delete (rc=1)
 PASS  cleanup: UID read fails (timeout) -> STOP, no delete (rc=1)

@@ -40,6 +40,29 @@ case "$NSOUT" in
   *) stop "namespace create returned an unexpected UID format ($NSOUT); not recording it";;
 esac
 echo "$NSOUT" > "$R/ns-uid.txt"; echo "NS_UID=$NSOUT (from this run's create response)" | tee -a "$R/2-apply.txt"
+set +x   # never trace the credential copy and the verification below
+SRC_NS=fds-app; SEC=harbor-pull-secret
+echo "## copy pull secret $SRC_NS/$SEC -> $NS/$SEC (the value is never printed)"
+STYPE=$($K -n $SRC_NS get secret $SEC -o jsonpath='{.type}' 2>"$R/secret-src.err"); STRC=$?
+[ "$STRC" = "0" ] && [ "$STYPE" = "kubernetes.io/dockerconfigjson" ] || stop "source pull secret is not readable or has an unexpected type (rc=$STRC type=$STYPE). Namespace $NS WAS created (UID recorded): run acnet-9-cleanup.sh, then report to #10"
+$K -n $SRC_NS get secret $SEC -o jsonpath='{.data.\.dockerconfigjson}' 2>"$R/secret-read.err" | base64 -d 2>"$R/secret-b64.err" | $K -n $NS create secret generic $SEC --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin >/dev/null 2>"$R/secret-create.err"
+SECRCS=("${PIPESTATUS[@]}")
+[ "${SECRCS[0]}" = "0" ] && [ "${SECRCS[1]}" = "0" ] && [ "${SECRCS[2]}" = "0" ] || stop "pull secret copy failed (read=${SECRCS[0]} decode=${SECRCS[1]} create=${SECRCS[2]}; error files in $R, values never logged). Namespace $NS WAS created (UID recorded): run acnet-9-cleanup.sh, then report to #10"
+$K -n $NS label secret $SEC fds.test/run=ac-net-run01 >/dev/null 2>&1 || stop "labelling the copied secret failed. Namespace $NS WAS created (UID recorded): run acnet-9-cleanup.sh, then report to #10"
+# B62-1: each GET's own exit status is kept (no pipeline masks it) and both values must be non-empty before they are compared;
+# the values stay in shell variables only (never an argument, environment export, file or log line) and are unset right after.
+SRCDATA=$($K -n "$SRC_NS" get secret "$SEC" -o jsonpath='{.data.\.dockerconfigjson}' 2>/dev/null); SRC_RC=$?
+CPYDATA=$($K -n "$NS" get secret "$SEC" -o jsonpath='{.data.\.dockerconfigjson}' 2>/dev/null); CPY_RC=$?
+MATCH=0
+if [ "$SRC_RC" -eq 0 ] && [ "$CPY_RC" -eq 0 ] &&
+   [ -n "$SRCDATA" ] && [ -n "$CPYDATA" ] &&
+   [ "$SRCDATA" = "$CPYDATA" ]; then
+  MATCH=1
+fi
+unset SRCDATA CPYDATA
+printf 'secret_verify_source_rc=%s copy_rc=%s match=%s\n' "$SRC_RC" "$CPY_RC" "$MATCH" >> "$R/2-apply.txt"
+[ "$MATCH" -eq 1 ] || stop "secret verification failed (source_rc=$SRC_RC copy_rc=$CPY_RC match=$MATCH; compared internally, values never printed). Namespace $NS WAS created (UID recorded): run acnet-9-cleanup.sh, then report to #10"
+echo "secret copy verified: type=$STYPE data identical to the source (hashes and values not printed)" | tee -a "$R/2-apply.txt"
 echo "## dry-run fixtures"
 $K create --dry-run=server -f "$R/rest.yaml" 2>&1 | tee -a "$R/2-apply.txt"
 [ "${PIPESTATUS[0]}" = "0" ] || stop "fixtures dry-run failed. Namespace $NS WAS created (UID recorded): run acnet-9-cleanup.sh, then report to #10"
@@ -50,7 +73,7 @@ echo "## wait pods Ready (120s)"
 $K -n $NS wait --for=condition=Ready pod --all --timeout=120s 2>&1 | tee -a "$R/2-apply.txt"
 WAIT_RC=${PIPESTATUS[0]}; echo "WAIT_RC=$WAIT_RC" | tee -a "$R/2-apply.txt"
 if [ "$WAIT_RC" != "0" ]; then
-  echo "STOP: test Pods are not all Ready. Do NOT create a pull secret or pull the image. Record pod state, then run acnet-9-cleanup.sh and report to #10."
+  echo "STOP: test Pods are not all Ready. Do NOT create another secret, change the pull policy or pull the image by hand. Record pod state, then run acnet-9-cleanup.sh and report to #10."
   $K -n $NS get pods -o wide | tee -a "$R/2-apply.txt"; $K -n $NS describe pods 2>&1 | grep -E 'Name:|State:|Reason:|Message:|Events:' | head -40 | tee -a "$R/2-apply.txt"
   exit 1
 fi

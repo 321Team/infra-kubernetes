@@ -37,7 +37,7 @@ done
 echo "## other user resources (excluding defaults)"
 ALL=$($K -n $NS get deploy,sts,ds,job,cronjob,cm,secret,sa,role,rolebinding,networkpolicy,pvc,ingress -o name 2>"$R/get-other.err"); ARC=$?
 [ "$ARC" = "0" ] || { cat "$R/get-other.err"; stop "resource listing failed (rc=$ARC); cannot confirm the namespace is clean"; }
-OTHER=$(echo "$ALL" | sed '/^$/d' | grep -v -E '^configmap/kube-root-ca.crt$|^serviceaccount/default$' || true)
+OTHER=$(echo "$ALL" | sed '/^$/d' | grep -v -E '^configmap/kube-root-ca.crt$|^serviceaccount/default$|^secret/harbor-pull-secret$' || true)
 [ -z "$OTHER" ] || { echo "$OTHER"; stop "unexpected resources in namespace"; }
 echo "## delete with UID precondition (no gap between the check and the delete)"
 echo "{\"kind\":\"DeleteOptions\",\"apiVersion\":\"v1\",\"preconditions\":{\"uid\":\"$REC\"}}" | $K delete --raw /api/v1/namespaces/$NS -f - ; DRC=$?
