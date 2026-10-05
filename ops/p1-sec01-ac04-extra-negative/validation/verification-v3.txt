@@ -1,0 +1,13 @@
+revision=v3-20261005
+parent_commit=d0a4a638bc00d999f9c0888af94d096756090760
+implementation_request=https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5987564325
+verification_utc=2026-10-05T03:34:18.074661+00:00
+environment=local Linux PATH stubs; no cluster/network access
+command=bash test-ac04-collector.sh ./collect-ac04-extra-negative.sh
+exit_code=0
+result=PASS=37 FAIL=0
+static=bash -n script and fixture; git diff --check PASS
+GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+4ba0ac9ad98c9a1dce7b4cf94ec7632ac0408aafbf6a7a934534cc142da699d0  collect-ac04-extra-negative.sh
+5227d39142fd3ad536f5e6bd23edfb095b6c905c0ac719e178a4423a5c0e6bf8  test-ac04-collector.sh
+d901d37616e1d9557e48fd1f3e65f5dcb13b613778901298b4182ce05d4aebc0  validation/local-test-results.txt
