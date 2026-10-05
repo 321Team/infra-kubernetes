@@ -45,13 +45,15 @@ if [ -n "$JID" ]; then
   while [ "$POLLS" -lt "$POLL_MAX" ]; do
     POLLS=$((POLLS+1))
     ST=$(ansible -i inventory/hosts.yml k8s-worker01 -b -m async_status -a "jid=$JID" 2>&1); POLL_RC=$?
+    # B63-1: a non-zero status command is a failed query. Keep its text and rc, stop polling, and never read finished/rc out of it.
+    if [ "$POLL_RC" -ne 0 ]; then FIN=""; break; fi
     FIN=$(echo "$ST" | grep -o '"finished": [01]' | head -1 | awk '{print $2}')
     [ "$FIN" = "1" ] && break
     sleep 5
   done
 else echo "no capture job id: the capture did not start"; fi
 echo "## capture job status (full original text, poll $POLLS of $POLL_MAX)"; echo "$ST"
-RC=$(echo "$ST" | grep -o '"rc": [0-9]*' | head -1 | awk '{print $2}')
+RC=""; [ "${POLL_RC:-1}" = "0" ] && RC=$(echo "$ST" | grep -o '"rc": [0-9]*' | head -1 | awk '{print $2}')
 echo "capture_status polls=$POLLS poll_rc=${POLL_RC:-?} finished=${FIN:-?} job_rc=${RC:-?}"
 echo "## counters after (worker01)"
 ansible -i inventory/hosts.yml k8s-worker01 -b -m shell -a "iptables-save -c > $D/t15-ipt-after.txt 2>&1; nft -a list ruleset > $D/t15-nft-after.txt 2>&1; echo saved"
@@ -65,7 +67,7 @@ LIS=$(g listening); KD=$(g kernel_dropped_zero); SL=$(g stats_line); SC=$(g ssh_
 ARR=$(( ${SYN:-0} + ${UDP:-0} + ${IPIP:-0} ))
 NOISE=$(( ${C1:-0} - ${C0:-0} )); TEST=$(( ${C2:-0} - ${C1:-0} )); EXTRA=$(( TEST - NOISE ))
 echo "## RESULT LINES (observations only; no PASS declared)"
-if [ "${LIS:-0}" -ge 1 ] && [ "${KD:-0}" -ge 1 ] && [ "${SL:-0}" -ge 1 ] && [ "${SC:-0}" -ge 1 ] && [ "${FIN:-0}" = "1" ] && [ "${RC:-1}" = "0" ]; then CAP=VALID; else CAP=INVALID; fi
+if [ "${LIS:-0}" -ge 1 ] && [ "${KD:-0}" -ge 1 ] && [ "${SL:-0}" -ge 1 ] && [ "${SC:-0}" -ge 1 ] && [ "${FIN:-0}" = "1" ] && [ "${RC:-1}" = "0" ] && [ "${POLL_RC:-1}" = "0" ]; then CAP=VALID; else CAP=INVALID; fi
 echo "CAPTURE=$CAP (listening=${LIS:-0} kernel_dropped_zero=${KD:-0} stats_line=${SL:-0} ssh_control_pkts=${SC:-0} job_finished=${FIN:-?} job_rc=${RC:-?})"
 if [ "$CAP" = "VALID" ]; then
   echo "ARRIVED tcp179_syn=${SYN:-0} udp4789=${UDP:-0} ipip_proto4=${IPIP:-0} total=$ARR"

@@ -38,6 +38,7 @@ case "$mod" in
   async_status)
     [ "$STATUS_FAIL" = 1 ] && { echo "ERROR! could not find job" >&2; exit 4; }
     n=$(( $(cat "$FIXTURE_ROOT/polls" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$FIXTURE_ROOT/polls"
+    exit_rc=0; [ "$STATUS_RC_WITH_OUTPUT" = 1 ] && exit_rc=4; [ "$FAIL_FIRST" = 1 ] && [ "$n" = 1 ] && exit_rc=4
     if [ "$n" -ge "${JOB_FINISH_AT:-1}" ]; then fin=1; else fin=0; fi
     rcline=""
     if [ "$fin" = 1 ]; then case "${JOB_RC:-0}" in none) ;; *) rcline="\"rc\": ${JOB_RC:-0},";; esac; fi
@@ -61,6 +62,7 @@ k8s-worker01 | CHANGED => {
     "LAST_STATUS_LINE": "present"
 }
 J
+    exit "$exit_rc"
     ;;
   script)
     case "$args" in
@@ -112,6 +114,7 @@ class Edge(unittest.TestCase):
         self.assertEqual(polls, 4, result.stdout)           # polled until finished=1, not once after a fixed sleep
         self.assertIn('CAPTURE=VALID', result.stdout)
         self.assertIn('job_finished=1 job_rc=0', result.stdout)
+        self.assertIn('poll_rc=0', result.stdout)
 
     def test_never_finishes_is_bounded_and_invalid(self):
         result, polls = self.run_case(JOB_FINISH_AT='99', ACNET_CAP_POLL_MAX='3')
@@ -134,6 +137,19 @@ class Edge(unittest.TestCase):
     def test_no_job_id_does_not_poll(self):
         result, polls = self.run_case(NO_JOB_ID='1', ACNET_CAP_POLL_MAX='3')
         self.assertEqual(polls, 0, result.stdout)
+        self.assert_invalid(result.stdout)
+
+    def test_nonzero_status_rc_with_a_finished_json_body_is_invalid(self):
+        # B63-1: the body looks perfect (finished=1, rc=0) but the status command exited 4 -> not VALID, polling stops
+        result, polls = self.run_case(STATUS_RC_WITH_OUTPUT='1', JOB_FINISH_AT='1', ACNET_CAP_POLL_MAX='5')
+        self.assertEqual(polls, 1, result.stdout)
+        self.assertIn('poll_rc=4', result.stdout)
+        self.assert_invalid(result.stdout)
+
+    def test_failed_first_poll_is_not_overwritten_by_a_later_success(self):
+        # B63-1: first query fails, a second one would succeed -> no further query, INVALID
+        result, polls = self.run_case(FAIL_FIRST='1', JOB_FINISH_AT='1', ACNET_CAP_POLL_MAX='5')
+        self.assertEqual(polls, 1, result.stdout)
         self.assert_invalid(result.stdout)
 
     def test_full_status_text_is_kept(self):
