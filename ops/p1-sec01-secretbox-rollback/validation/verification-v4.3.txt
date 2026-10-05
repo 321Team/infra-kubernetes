@@ -1,0 +1,24 @@
+B59-3 v4.3 local verification — 2026-10-05
+Parent: 3d3bc8cb7c46d1b6c98971c321246db7018b2cb5
+Parent local inputs: 8/8 Git blob SHA match against GitHub parent tree.
+Scope: PATH fixture only; no cluster/server access, deployment, Runtime GO or independent approval.
+Command: bash test-rollback-v4.sh ./sec01-secretbox-rollback-v4.sh
+Result: 231 PASS / 0 FAIL (existing 191 + 40 added assertions).
+Command: bash -n sec01-secretbox-rollback-v4.sh; bash -n test-rollback-v4.sh
+Result: both pass.
+Regression: v4.2 + RV/PLAIN fixture returns PASS/rc0 with audit absent (old-v4.2-B59-3.txt).
+Final targeted replay after message wording cleanup: v4.3 returns FAIL/nonzero, records PLAIN, restores ENC and cleans owned Secrets.
+The full test run included a Korean wording-only edit to an unexercised comparison-error message; the final B59-3 path was replayed afterward. No control-flow changes after the full run.
+Known harness limitation: ONLY selection evaluates skipped assertion arguments, causing irrelevant stderr; old-version comparison was rerun using only fixture helpers + one case. Published old-version log is that clean targeted run.
+
+Final targeted output:
+source=v4.3 fault=existing_Secret_RV_change_PLAIN rc=1
+RESULT: FAIL
+fds-app/harbor-pull uid=base-harbor-pull rv=2 class=PLAIN
+
+Environment: Linux-6.18.44-x86_64-with-glibc2.39
+GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+
+Validated source SHA-256:
+10144527bef979a48331a3447c5beef4b05d2ffb8e908b78b9b5c6596e0f3c5c  sec01-secretbox-rollback-v4.sh
+a4e630a2614cf629f3e15733bbe3a8fb0e659d3dace6854b01e603413166e5a2  test-rollback-v4.sh

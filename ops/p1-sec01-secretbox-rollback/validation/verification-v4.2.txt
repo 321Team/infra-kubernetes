@@ -1,0 +1,14 @@
+revision=v4.2-20261005
+parent_commit=c678bd891b06581693c9bca0b556f2b170a6bc93
+implementation_request=https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5987564325
+verification_utc=2026-10-05T03:38:29.320847+00:00
+environment=local Linux PATH stubs; no cluster/network access
+command=bash test-rollback-v4.sh ./sec01-secretbox-rollback-v4.sh
+exit_code=0
+result=PASS=191 FAIL=0
+static=bash -n script and fixture; git diff --check PASS
+fixture_note=python failure stub enabled at execution time; initial hook setup issue corrected before full rerun
+GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
+79ae8a308450d21cc5f3843c648843a6c5b4a8c26d7532b173feb71389116633  sec01-secretbox-rollback-v4.sh
+d8d8e2c20967d25cf00d832b26619a1026660aada8be6d05bfbe694590fda774  test-rollback-v4.sh
+b72390ae9767eccfd411af9891e4e36fada178973796458df2bb669cd7ff6512  validation/fixture-results-v4.2.txt
