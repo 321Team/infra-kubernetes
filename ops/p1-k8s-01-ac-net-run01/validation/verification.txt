@@ -1,7 +1,9 @@
 base_origin_main=2fae629e57fc4ee3419bebc9a4b9a6d6a236dbcd
+previous_reviewed_head=35b18df9b2180de495f5d1d33ca0998a2f36b7ff (REQUEST_CHANGES B62-1 by GWONUK, pullrequestreview-5410329530)
 runtime_source_currently_approved=a24f0a23fa6ddb43a58bfc3de612e8677b359fc5 (unchanged; this change is NOT approved or deployed)
-verified_utc=2026-10-05T05:23:22Z
-lifecycle=40 PASS; 0 failures; rc0 (acnet-selftest.sh, mock kubectl, includes the new pull-secret scenarios)
-precheck=NOT RERUN on the author's Windows PC: acnet-precheck-selftest.py errors in subprocess output decoding for all 17 cases before reaching the script. acnet-0-precheck.sh and acnet-precheck-selftest.py are byte-identical to origin/main (git diff empty); the last recorded result is 17 OK in infra-kubernetes#61. Re-run on Linux is requested from the reviewer.
+verified_utc=2026-10-05T05:40:24Z
+lifecycle=67 PASS; 0 failures; rc0 (acnet-selftest.sh, mock kubectl; 40 previous + B62-1 verification-GET scenarios)
+b62_1_regression=the new scenarios run against the previous acnet-1 (HEAD 35b18df9b2180de495f5d1d33ca0998a2f36b7ff) give 15 failures, including rc0 + "data identical" + CREATE_COMPLETE when both verification GETs fail with empty stdout
+precheck=acnet-0-precheck.sh and acnet-precheck-selftest.py are byte-identical to origin/main; 17 tests OK / rc0 was reproduced on Linux by the reviewer (GWONUK) on the previous HEAD; not re-run on the author's Windows PC
 static=bash -n all 7 shell files; git diff --check PASS
 runtime=NOT RUN (no server access; kubelet acceptance of the copied secret is unverified)

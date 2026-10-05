@@ -1,9 +1,11 @@
 # ac-net-run01: Pod/Service test fixtures for P1-K8S-01 (#10) T07/T08/T09/T14/T15.
 # Create-only fixtures in ONE namespace; cleanup deletes only this namespace (bound to its UID).
-# The image digest must already exist on each worker. kubelet (v1.36) records which pull secrets an image was pulled with and
-# refuses it to a Pod without a matching secret under imagePullPolicy Never (ErrImageNeverPull on worker02/03, 2026-10-05).
+# The fixed image digest is already present on each worker. On worker02/03 kubelet (v1.36) answered imagePullPolicy Never with
+# ErrImageNeverPull (2026-10-05) while its image_manager record lists fds-app/harbor-pull-secret and fds-gate2-probe/harbor-pull-secret
+# for this image (worker01 has no such record); this is the observed cause candidate, confirmed only by running the test.
 # So the Pods carry imagePullSecrets (a copy of fds-app/harbor-pull-secret made by acnet-1, removed with the namespace) and
-# imagePullPolicy IfNotPresent: the existing local image is used and kubelet only verifies the credentials against the registry.
+# imagePullPolicy IfNotPresent. IfNotPresent may send a registry authentication request and, if kubelet decides it must, pull that
+# digest; it is NOT guaranteed to use only the local cache.
 apiVersion: v1
 kind: Namespace
 metadata:

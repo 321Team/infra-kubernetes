@@ -43,10 +43,23 @@ case "$a" in
      if [ "${MOCK_SET_EMPTY:-0}" = "1" ]; then echo "No resources found in ac-net-run01 namespace." >&2; exit 0; fi
      printf '%b' "${MOCK_SET:-pod/probe-a\npod/probe-b\npod/probe-c\nservice/probe-a-svc\nservice/probe-b-svc\nservice/probe-c-svc\n}"; exit 0;;
   *"-n fds-app get secret harbor-pull-secret -o jsonpath={.type}"*) [ "${MOCK_SRC_SECRET_RC:-0}" = "0" ] && echo -n "${MOCK_SRC_SECRET_TYPE:-kubernetes.io/dockerconfigjson}" || echo "Error from server (Forbidden)" >&2; exit "${MOCK_SRC_SECRET_RC:-0}";;
-  *"-n fds-app get secret harbor-pull-secret -o jsonpath={.data"*) echo -n "${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}"; exit 0;;
+  *"-n fds-app get secret harbor-pull-secret -o jsonpath={.data"*)
+     # call 1 = the copy pipeline (always succeeds); call 2+ = the verification GET, which the MOCK_V* knobs can break (B62-1)
+     N=$(grep -cF 'fds-app get secret harbor-pull-secret -o jsonpath={.data' "$MOCK_LOG")
+     if [ "$N" -ge 2 ]; then
+       [ -z "${MOCK_V_STDOUT_ON_FAIL:-}" ] || [ "${MOCK_VSRC_RC:-0}" = "0" ] || echo -n "${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}"
+       [ "${MOCK_VSRC_RC:-0}" = "0" ] || { echo "Error from server (Forbidden)" >&2; exit "$MOCK_VSRC_RC"; }
+       [ "${MOCK_VSRC_OUT:-}" = "__EMPTY__" ] && exit 0
+       echo -n "${MOCK_VSRC_OUT:-${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}}"; exit 0
+     fi
+     echo -n "${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}"; exit 0;;
   *"-n ac-net-run01 create secret generic harbor-pull-secret"*) IN=$(cat); [ "$IN" = "SECRETVALUE" ] || { echo "mock: unexpected stdin for the secret copy" >&2; exit 9; }; [ "${MOCK_SECRET_CREATE_RC:-0}" = "0" ] || echo "Error from server (Forbidden)" >&2; exit "${MOCK_SECRET_CREATE_RC:-0}";;
   *"-n ac-net-run01 label secret"*) exit "${MOCK_LABEL_RC:-0}";;
-  *"-n ac-net-run01 get secret harbor-pull-secret -o jsonpath={.data"*) echo -n "${MOCK_COPY_B64:-${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}}"; exit 0;;
+  *"-n ac-net-run01 get secret harbor-pull-secret -o jsonpath={.data"*)
+     [ -z "${MOCK_V_STDOUT_ON_FAIL:-}" ] || [ "${MOCK_VCPY_RC:-0}" = "0" ] || echo -n "${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}"
+     [ "${MOCK_VCPY_RC:-0}" = "0" ] || { echo "Error from server (Forbidden)" >&2; exit "$MOCK_VCPY_RC"; }
+     [ "${MOCK_VCPY_OUT:-}" = "__EMPTY__" ] && exit 0
+     echo -n "${MOCK_VCPY_OUT:-${MOCK_COPY_B64:-${MOCK_SECRET_B64:-U0VDUkVUVkFMVUU=}}}"; exit 0;;
   *"-n ac-net-run01 get deploy,sts"*) [ "${MOCK_ALL_RC:-0}" = "0" ] && printf 'configmap/kube-root-ca.crt\nserviceaccount/default\n%b' "${MOCK_ALL_EXTRA:-}" || echo "Unable to connect" >&2; exit "${MOCK_ALL_RC:-0}";;
   *"-n ac-net-run01 get pods,svc -o wide"*|*"-n ac-net-run01 describe"*) echo "stub"; exit 0;;
   *"get nodes --no-headers"*) echo "k8s-control01 Ready"; exit 0;;
@@ -98,7 +111,24 @@ run "secret: source secret not readable -> STOP before fixtures" acnet-1-gate-cr
 run "secret: source secret has the wrong type -> STOP before fixtures" acnet-1-gate-create.sh nonzero 'create -f .*rest.yaml' 'unexpected type' MOCK_SRC_SECRET_TYPE=Opaque
 run "secret: copy create FAILS -> STOP, cleanup hint, no fixtures" acnet-1-gate-create.sh nonzero 'create -f .*rest.yaml' 'pull secret copy failed' MOCK_SECRET_CREATE_RC=1
 run "secret: label fails -> STOP before fixtures" acnet-1-gate-create.sh nonzero 'create -f .*rest.yaml' 'labelling the copied secret failed' MOCK_LABEL_RC=1
-run "secret: copied data differs from the source -> STOP before fixtures" acnet-1-gate-create.sh nonzero 'create -f .*rest.yaml' 'does not match the source' MOCK_COPY_B64=WFhY
+run "secret: copied data differs from the source -> STOP before fixtures" acnet-1-gate-create.sh nonzero 'create -f .*rest.yaml' 'secret verification failed' MOCK_COPY_B64=WFhY
+# B62-1: a failing verification GET must never be reported as "data identical" (empty strings used to hash equal)
+vfail(){ local name=$1; shift
+  run "$name" acnet-1-gate-create.sh nonzero 'create -f .*rest.yaml' 'secret verification failed' "$@"
+  if echo "$LASTOUT" | grep -Eq 'secret copy verified|CREATE_COMPLETE|SECRETVALUE|U0VDUkVUVkFMVUU='; then echo "FAIL  $name: verified/CREATE_COMPLETE/value appears in the output"; fails=$((fails+1)); else echo "PASS  $name: no 'verified', no CREATE_COMPLETE, no value"; fi
+  [ "$(cat "$LASTDIR/r/ns-uid.txt" 2>/dev/null)" = "11111111-2222-3333-4444-555555555555" ] && echo "PASS  $name: namespace UID preserved for cleanup" || { echo "FAIL  $name: namespace UID not preserved"; fails=$((fails+1)); }
+}
+vfail "verify: source GET fails only (rc 42)" MOCK_VSRC_RC=42
+vfail "verify: copy GET fails only (rc 42)" MOCK_VCPY_RC=42
+vfail "verify: BOTH GETs fail with empty stdout (the reproduced bug)" MOCK_VSRC_RC=42 MOCK_VCPY_RC=42
+grep -q 'secret_verify_source_rc=42 copy_rc=42 match=0' "$LASTDIR/r/2-apply.txt" && echo "PASS  verify: both-fail case recorded rc=42/42 match=0 in 2-apply.txt" || { echo "FAIL  verify: rc/match line missing in 2-apply.txt"; fails=$((fails+1)); }
+vfail "verify: source stdout looks fine but rc is nonzero" MOCK_VSRC_RC=42 MOCK_V_STDOUT_ON_FAIL=1
+vfail "verify: copy stdout looks fine but rc is nonzero" MOCK_VCPY_RC=42 MOCK_V_STDOUT_ON_FAIL=1
+vfail "verify: rc 0 but both data are empty" MOCK_VSRC_OUT=__EMPTY__ MOCK_VCPY_OUT=__EMPTY__
+vfail "verify: rc 0 but only the copy is empty" MOCK_VCPY_OUT=__EMPTY__
+vfail "verify: rc 0 but only the source is empty" MOCK_VSRC_OUT=__EMPTY__
+run "verify: identical non-empty data still passes (rc 0, CREATE_COMPLETE)" acnet-1-gate-create.sh zero '-' 'secret copy verified'
+grep -q 'secret_verify_source_rc=0 copy_rc=0 match=1' "$LASTDIR/r/2-apply.txt" && echo "PASS  verify: success recorded rc=0/0 match=1" || { echo "FAIL  verify: success line missing"; fails=$((fails+1)); }
 run "secret: the manifest Pods carry imagePullSecrets and IfNotPresent (static)" acnet-1-gate-create.sh zero '-' 'CREATE_COMPLETE'
 [ "$(grep -c 'imagePullSecrets' "$LASTDIR/r/rest.yaml")" = 3 ] && [ "$(grep -c 'imagePullPolicy: IfNotPresent' "$LASTDIR/r/rest.yaml")" = 3 ] && [ "$(grep -c 'name: harbor-pull-secret' "$LASTDIR/r/rest.yaml")" = 3 ] && echo "PASS  secret: 3 Pods have imagePullSecrets + IfNotPresent" || { echo "FAIL  secret: Pod pull settings wrong"; fails=$((fails+1)); }
 echo "== acnet-9-cleanup.sh"
