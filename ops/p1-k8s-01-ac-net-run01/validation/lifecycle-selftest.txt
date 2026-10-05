@@ -1,0 +1,32 @@
+== acnet-1-gate-create.sh
+PASS  create: namespace create TIMEOUT -> stop, nothing else created (rc=1)
+PASS  create: timeout recorded no UID
+PASS  create: namespace AlreadyExists (race/pre-existing) -> stop, never touched (rc=1)
+PASS  create: AlreadyExists recorded no UID
+PASS  create: namespace ok, fixtures create FAILS -> nonzero, UID recorded, cleanup hint (rc=1)
+PASS  create: partial failure recorded this run's UID
+PASS  create: fixtures dry-run FAILS -> nonzero (rc=1)
+PASS  create: pods not Ready (wait fails) -> nonzero, no CREATE_COMPLETE (rc=1)
+PASS  create: happy path -> rc 0 and CREATE_COMPLETE (rc=0)
+PASS  create: happy path recorded the create-response UID
+PASS  create: real manifest splits into 1 Namespace + 6 fixtures (mock parses the files) (rc=0)
+split check: ns=1 rest=6 pods=3 svcs=3 seps=5
+PASS  create: rest.yaml = Pod3 + Service3 with 5 separators, no Namespace
+PASS  create: unexpected UID format from create -> stop, not recorded (rc=1)
+== acnet-9-cleanup.sh
+PASS  cleanup: UID MISMATCH -> STOP with NONZERO exit, no delete call (rc=1)
+PASS  cleanup: delete ok but namespace stays Terminating -> NONZERO CLEANUP_INCOMPLETE (rc=1)
+PASS  cleanup: lookup error that is NOT NotFound -> NONZERO, not treated as absent (rc=1)
+PASS  cleanup: clean path (NotFound, leftover 0) -> rc 0 CLEANUP_COMPLETE (rc=0)
+PASS  cleanup: leftover query FAILS -> NONZERO (rc=1)
+PASS  cleanup: leftover resources exist -> NONZERO (rc=1)
+PASS  cleanup: PARTIAL creation - empty namespace (no pods/services) -> cleanable, rc 0 COMPLETE (rc=0)
+PASS  cleanup: PARTIAL creation - only probe-a exists -> cleanable, rc 0 COMPLETE (rc=0)
+PASS  cleanup: subset + one FOREIGN object -> refused, no delete (rc=1)
+PASS  cleanup: only a FOREIGN object -> refused, no delete (rc=1)
+PASS  cleanup: unexpected pod/service set -> STOP, no delete (rc=1)
+PASS  cleanup: other-resource listing FAILS -> STOP, no delete (rc=1)
+PASS  cleanup: UID read fails (timeout) -> STOP, no delete (rc=1)
+PASS  cleanup: UID-precondition delete refused -> NONZERO (rc=1)
+PASS  cleanup: no recorded UID -> NONZERO (rc=1)
+== result: 0 failure(s)
