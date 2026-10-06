@@ -65,6 +65,19 @@ spec:
     spec:
       serviceAccountName: transaction-api-sa
       automountServiceAccountToken: false
+      # P1-APP-01(#15) local endpoint 보장: Worker마다 1개씩 분산한다(externalTrafficPolicy: Local).
+      # DoNotSchedule로 한 노드 집중을 막고, nodeTaintsPolicy: Honor로 cordon·NotReady·control-plane 노드를
+      # 분모에서 빼서 drain 때 Pending이 생기지 않게 한다. pod-template-hash로 rolling update 세대별로 계산한다.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels:
+              app: transaction-api
+          matchLabelKeys:
+            - pod-template-hash
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -158,6 +171,19 @@ spec:
     spec:
       serviceAccountName: fds-engine-sa
       automountServiceAccountToken: false
+      # P1-APP-01(#15) local endpoint 보장: Worker마다 1개씩 분산한다(externalTrafficPolicy: Local).
+      # DoNotSchedule로 한 노드 집중을 막고, nodeTaintsPolicy: Honor로 cordon·NotReady·control-plane 노드를
+      # 분모에서 빼서 drain 때 Pending이 생기지 않게 한다. pod-template-hash로 rolling update 세대별로 계산한다.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          nodeTaintsPolicy: Honor
+          labelSelector:
+            matchLabels:
+              app: fds-engine
+          matchLabelKeys:
+            - pod-template-hash
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

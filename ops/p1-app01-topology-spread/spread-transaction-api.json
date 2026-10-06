@@ -1,0 +1,1 @@
+{"spec":{"template":{"spec":{"topologySpreadConstraints":[{"maxSkew":1,"topologyKey":"kubernetes.io/hostname","whenUnsatisfiable":"DoNotSchedule","nodeTaintsPolicy":"Honor","labelSelector":{"matchLabels":{"app":"transaction-api"}},"matchLabelKeys":["pod-template-hash"]}]}}}}
