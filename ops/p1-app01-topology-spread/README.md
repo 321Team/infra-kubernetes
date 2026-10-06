@@ -25,11 +25,9 @@
 1. **사전(읽기 전용)**
    - `$K -n fds-app get deploy transaction-api fds-engine -o yaml > pre-deploy.yaml`
    - `$K -n fds-app rollout history deploy/transaction-api`와 `deploy/fds-engine` → **현재 revision 번호를 기록**(롤백 대상 고정)
-   - 기존 분산 조건이 없는지: `$K -n fds-app get deploy -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.topologySpreadConstraints}{"
-"}{end}'`가 두 Deployment 모두 빈 값(있으면 중단하고 strategic merge 결과를 먼저 검토)
+   - 기존 분산 조건이 없는지: `$K -n fds-app get deploy transaction-api fds-engine -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.topologySpreadConstraints}{"\n"}{end}'`가 두 Deployment 모두 빈 값(있으면 중단하고 strategic merge 결과를 먼저 검토)
    - 노드 taint: `$K get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints,UNSCHED:.spec.unschedulable` — worker 3대는 taint 없음·schedulable, control-plane 3대는 `NoSchedule` taint
-   - Pod toleration: `$K -n fds-app get deploy transaction-api fds-engine -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.tolerations}{"
-"}{end}'`(control-plane·unschedulable을 견디는 toleration이 없어야 함)
+   - Pod toleration: `$K -n fds-app get deploy transaction-api fds-engine -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.tolerations}{"\n"}{end}'`(control-plane·unschedulable을 견디는 toleration이 없어야 함)
    - worker 3대 hostname label(`kubernetes.io/hostname`)과 가용 자원(`$K describe node <worker> | grep -A8 "Allocated resources"`), worker01·03의 Harbor 이미지 pull 가능 여부(최근 같은 이미지 Pull 이벤트 또는 `harbor01:443` 경로)
    - Pod·노드 배치, EndpointSlice 노드별 목록
    - MON 23/23
