@@ -1,6 +1,8 @@
 # P1-APP-01 — fds-app Worker 분산(topologySpreadConstraints) 적용 자료
 
-#15 [상태 갱신 6012339851](https://github.com/321Team/fds-project-baseline/issues/15#issuecomment-6012339851): 2026-10-06 17:21 KST에 fds-app Pod 6개가 모두 `k8s-worker02`에 있었고, `transaction-api-nodeport` endpoint가 worker01·03에 0개였습니다. `externalTrafficPolicy: Local`이므로 edge01 → `.105`·`.108:30080`은 거부되고, worker02 장애 시 앱 전체가 멈춥니다.
+#15 [상태 갱신 6012339851](https://github.com/321Team/fds-project-baseline/issues/15#issuecomment-6012339851)의 **Lead 화면 관측(원본 미보존)**: 2026-10-06 17:21 KST에 fds-app Pod 6개가 모두 `k8s-worker02`에 있었고, `transaction-api-nodeport` endpoint가 worker01·03에 0개였습니다. `externalTrafficPolicy: Local`이므로 edge01 → `.105`·`.108:30080`은 거부되고, worker02 장애 시 앱 전체가 멈춥니다.
+
+이 17:21 관측은 파일 원본이 없어 판정 근거로 쓰지 않습니다. 적용 창의 판단 근거는 아래 사전 단계(1)에서 파일로 저장하는 Deployment·Pod 배치·EndpointSlice 원본입니다.
 
 이 폴더는 **승인된 창에서만** 쓰는 적용 patch 2개(`spread-*.json`)와 되돌림 patch 2개(`unspread-*.json`), 확인 순서를 담습니다. 병합은 Runtime 실행 승인이 아닙니다.
 
@@ -38,8 +40,7 @@
 
 1. **사전(읽기 전용)**
    - `$K -n fds-app get deploy transaction-api fds-engine -o yaml > pre-deploy.yaml` 후 `sha256sum pre-deploy.yaml`
-   - 앱별 기준선을 기록합니다: `$K -n fds-app get deploy <이름> -o jsonpath='{.metadata.uid} {.metadata.resourceVersion} {.metadata.generation} {.spec.template.spec.containers[0].image} {.spec.strategy}{"
-"}'`. 이미지 digest가 승인값과 같은지 대조합니다
+   - 앱별 기준선을 기록합니다: `$K -n fds-app get deploy <이름> -o jsonpath='{.metadata.uid} {.metadata.resourceVersion} {.metadata.generation} {.spec.template.spec.containers[0].image} {.spec.strategy}{"\n"}'`. 이미지 digest가 승인값과 같은지 대조합니다
    - `$K -n fds-app rollout history deploy/transaction-api`와 `deploy/fds-engine` → **현재 revision 번호를 기록**(롤백 대상 고정)
    - 기존 분산 조건이 없는지: `$K -n fds-app get deploy transaction-api fds-engine -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.topologySpreadConstraints}{"\n"}{end}'`가 두 Deployment 모두 빈 값(있으면 중단하고 strategic merge 결과를 먼저 검토)
    - 노드 taint: `$K get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints,UNSCHED:.spec.unschedulable` — worker 3대는 taint 없음·schedulable, control-plane 3대는 `NoSchedule` taint
@@ -48,16 +49,18 @@
    - Pod·노드 배치, EndpointSlice 노드별 목록
    - MON 23/23
 2. **변경(순서 고정: `transaction-api` → 확인 → `fds-engine`)**
+   - 서비스 영향: 앱마다 Pod 3개가 rolling update로 다시 만들어집니다. 사전 단계에서 기록한 strategy가 기본값(maxSurge 1, maxUnavailable 0)이면 한 번에 1개씩 늘고 줄어 **가용 replica 3 미만이 없어야** 합니다. strategy가 다르면 변경하지 않고 중단합니다
    - `$K -n fds-app patch deploy/transaction-api --type=strategic --patch-file=spread-transaction-api.json --dry-run=server -o yaml | grep -A12 topologySpreadConstraints` (server dry-run 결과에서 추가 필드만 바뀌는지 확인)
    - `$K -n fds-app patch deploy/transaction-api --type=strategic --patch-file=spread-transaction-api.json`
    - `$K -n fds-app rollout status deploy/transaction-api --timeout=180s` → 성공하면 이 앱의 Pod 배치·Ready·EndpointSlice를 확인한 **뒤에만** 다음 앱으로 갑니다
+   - 같은 앱의 되돌림 patch가 지금 상태에 맞는지 `$K -n fds-app patch deploy/transaction-api --type=json --patch-file=unspread-transaction-api.json --dry-run=server`로 확인합니다(실제 제거 아님). 실패하면 다음 앱으로 가지 않고 중단·보고합니다
    - 같은 방식으로 `fds-engine`
 3. **사후(읽기 전용)**
    - 두 Deployment `rollout status` 완료, Pod가 Worker마다 1개씩, Pending 0
    - `transaction-api-nodeport` EndpointSlice가 worker01·02·03 각 1개(ready=true)
-   - edge01에서 `.105`·`.107`·`.108:30080/readyz` 각 200
+   - edge01에서 `.105`·`.107`·`.108:30080/readyz` 각 200. 명령·시각·RC·HTTP code를 파일로 남겨, #19 AC-04 edge 행 재수집 때 "Worker 3대 local endpoint" 전제의 근거로 같은 원본을 재사용할 수 있게 합니다(AC-04 판정 자체는 #19 범위)
    - MON 23/23(transaction-api·fds-engine target 포함)
-4. **중단 기준:** rollout이 180초 안에 끝나지 않거나, Pending 또는 readiness 실패가 남거나, edge01 `/readyz`·MON 이상이 보이면 다음 앱으로 가지 않고 되돌립니다.
+4. **중단 기준(하나라도 해당하면 다음 앱으로 가지 않고 되돌림):** `rollout status`가 180초 안에 끝나지 않음 / 변경 중 `AVAILABLE`이 3 미만으로 내려감 / 사후에 Pending 1개 이상 또는 Ready 아닌 Pod 1개 이상 / `transaction-api` 적용 뒤 `transaction-api-nodeport` ready endpoint가 Worker 3대에 각 1개가 아님 / edge01 `/readyz` 3개 중 200이 아닌 응답 1개 이상 / MON `count(up)`이 23 미만.
 5. **되돌림(이번에 넣은 필드만 제거):**
    - 먼저 이미지·generation 외 template이 기준선과 같은지 확인합니다. 다른 변경이 끼어들었으면 **되돌리지 말고 중단·보고**합니다
    - `$K -n fds-app patch deploy/<이름> --type=json --patch-file=unspread-<이름>.json --dry-run=server` → 이어서 실제 실행
