@@ -34,6 +34,29 @@
 
 어느 경우든 `externalTrafficPolicy: Local`에서 local endpoint가 없는 worker는 해당 Service 트래픽을 받지 못합니다. 분산 설정은 이것을 없애지 않습니다. edge01 backend 제외 통제는 #19 범위입니다.
 
+## MON 23/23 판정 기준 (사전·변경 중·사후·되돌림 공통)
+
+`count(up)`은 값이 아니라 series 수만 세므로 health 판정에 쓰지 않습니다(target 하나가 `up=0`이어도 23이 됨). 아래 네 가지를 **모두** 만족해야 "MON 23/23"입니다. 하나라도 어긋나거나, 조회 실패·빈 결과·응답 형식 이상이면 **미충족**입니다.
+
+1. `count(up)` = 23 (전체 series 23개)
+2. `count(up == 1)` = 23 (정상 23개)
+3. `up == 0` 결과가 빈 목록 (실패 target 없음)
+4. 실제 `(job, instance)` 집합이 아래 **기대 집합 23개와 정확히 같음** (빠짐·추가 모두 미충족)
+
+| 구분 | job | instance | 개수 |
+|---|---|---|---|
+| 고정 | `kubelet` | `10.1.93.102`·`.103`·`.104`·`.105`·`.107`·`.108` `:10250` | 6 |
+| 고정 | `kubelet-cadvisor` | 위와 같은 6개 `:10250` | 6 |
+| 고정 | `node-exporter` | `10.1.93.105`·`.107`·`.108` `:9100` | 3 |
+| 고정 | `kube-state-metrics` | `kube-state-metrics.monitoring-api.svc.cluster.local:8080` | 1 |
+| 고정 | `prometheus` | `localhost:9090` | 1 |
+| 앱 | `transaction-api` | 그 시점 `transaction-api` Pod IP 3개 `:9091` | 3 |
+| 앱 | `fds-engine` | 그 시점 `fds-engine` Pod IP 3개 `:9090` | 3 |
+
+- 고정 17개는 2026-10-05 기준선(fds-project-evidence `evidence/P1-K8S-01/ro-evidence-20261005/` 안 `up-targets.txt`)과 같은 값입니다. 앱 6개는 Pod가 새로 만들어지면 IP가 바뀌므로, 같은 시점의 `$K -n fds-app get pods -o wide` IP 목록으로 기대 집합을 만듭니다(Running·Ready Pod만, 앱마다 정확히 3개).
+- 조회: control01에서 이 세션 전용 포트로 `port-forward svc/prometheus`를 열고, `query=count(up)`, `count(up==1)`, `up==0`, `up` 네 결과를 각각 파일로 저장합니다. 끝나면 자기 포트의 port-forward만 종료합니다. `status`가 `success`가 아니거나 결과가 비면 미충족입니다.
+- 변경 직후에는 Prometheus의 target 발견과 scrape에 시간이 걸립니다. 각 앱의 `rollout status` 성공 뒤 **최대 60초 동안 15초 간격으로** 다시 조회하고, 60초 안에 위 네 조건을 모두 만족하지 못하면 중단 기준에 해당합니다. 사전 단계에서는 재조회 없이 한 번에 만족해야 시작합니다.
+
 ## 적용 순서 (control01, 승인된 창에서)
 
 전제: `sudo -v`, `K='sudo kubectl --kubeconfig=/etc/kubernetes/admin.conf'`, 이 폴더의 두 JSON을 control01에 두고 SHA-256을 이 저장소 값과 대조.
@@ -47,7 +70,7 @@
    - Pod toleration: `$K -n fds-app get deploy transaction-api fds-engine -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.tolerations}{"\n"}{end}'`(control-plane·unschedulable을 견디는 toleration이 없어야 함)
    - worker 3대 hostname label(`kubernetes.io/hostname`)과 가용 자원(`$K describe node <worker> | grep -A8 "Allocated resources"`), worker01·03의 Harbor 이미지 pull 가능 여부(최근 같은 이미지 Pull 이벤트 또는 `harbor01:443` 경로)
    - Pod·노드 배치, EndpointSlice 노드별 목록
-   - MON 23/23
+   - MON 23/23(위 판정 기준 4가지 모두. 사전 단계에서 미충족이면 시작하지 않음)
 2. **변경(순서 고정: `transaction-api` → 확인 → `fds-engine`)**
    - 서비스 영향: 앱마다 Pod 3개가 rolling update로 다시 만들어집니다. 사전 단계에서 기록한 strategy가 기본값(maxSurge 1, maxUnavailable 0)이면 한 번에 1개씩 늘고 줄어 **가용 replica 3 미만이 없어야** 합니다. strategy가 다르면 변경하지 않고 중단합니다
    - `$K -n fds-app patch deploy/transaction-api --type=strategic --patch-file=spread-transaction-api.json --dry-run=server -o yaml | grep -A12 topologySpreadConstraints` (server dry-run 결과에서 추가 필드만 바뀌는지 확인)
@@ -59,8 +82,8 @@
    - 두 Deployment `rollout status` 완료, Pod가 Worker마다 1개씩, Pending 0
    - `transaction-api-nodeport` EndpointSlice가 worker01·02·03 각 1개(ready=true)
    - edge01에서 `.105`·`.107`·`.108:30080/readyz` 각 200. 명령·시각·RC·HTTP code를 파일로 남겨, #19 AC-04 edge 행 재수집 때 "Worker 3대 local endpoint" 전제의 근거로 같은 원본을 재사용할 수 있게 합니다(AC-04 판정 자체는 #19 범위)
-   - MON 23/23(transaction-api·fds-engine target 포함)
-4. **중단 기준(하나라도 해당하면 다음 앱으로 가지 않고 되돌림):** `rollout status`가 180초 안에 끝나지 않음 / 변경 중 `AVAILABLE`이 3 미만으로 내려감 / 사후에 Pending 1개 이상 또는 Ready 아닌 Pod 1개 이상 / `transaction-api` 적용 뒤 `transaction-api-nodeport` ready endpoint가 Worker 3대에 각 1개가 아님 / edge01 `/readyz` 3개 중 200이 아닌 응답 1개 이상 / MON `count(up)`이 23 미만.
+   - MON 23/23(위 판정 기준 4가지 모두. 앱 6개 target은 새 Pod IP 기준)
+4. **중단 기준(하나라도 해당하면 다음 앱으로 가지 않고 되돌림):** `rollout status`가 180초 안에 끝나지 않음 / 변경 중 `AVAILABLE`이 3 미만으로 내려감 / 사후에 Pending 1개 이상 또는 Ready 아닌 Pod 1개 이상 / `transaction-api` 적용 뒤 `transaction-api-nodeport` ready endpoint가 Worker 3대에 각 1개가 아님 / edge01 `/readyz` 3개 중 200이 아닌 응답 1개 이상 / MON 23/23 판정 기준(전체 23·정상 23·`up==0` 없음·기대 집합 일치) 중 하나라도 미충족, 또는 조회 실패·빈 결과(변경 직후는 60초 재조회 뒤 판정).
 5. **되돌림(이번에 넣은 필드만 제거):**
    - 먼저 이미지·generation 외 template이 기준선과 같은지 확인합니다. 다른 변경이 끼어들었으면 **되돌리지 말고 중단·보고**합니다
    - `$K -n fds-app patch deploy/<이름> --type=json --patch-file=unspread-<이름>.json --dry-run=server` → 이어서 실제 실행
