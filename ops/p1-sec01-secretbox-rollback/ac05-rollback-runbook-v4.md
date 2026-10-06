@@ -1,4 +1,4 @@
-# P1-SEC-01 AC-05 Secretbox rollback 시험 절차서 (v4.3, rev v4.3-20261005, 승인 전)
+# P1-SEC-01 AC-05 Secretbox rollback 시험 절차서 (v4.4, rev v4.4-20261006, 승인 전)
 
 대상: [#19](https://github.com/321Team/fds-project-baseline/issues/19) AC-05 `Secret encryption·backup·rotation·rollback` 중 **rollback**. [CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 "P1 필수 / Runtime 증적 미충족"으로 남은 항목이다.
 도구: `sec01-secretbox-rollback-v4.sh` (`precheck` / `rollback-test` / `postcheck`). 이 절차서와 스크립트는 **운영 클러스터에서 한 번도 실행하지 않았다.** v3는 PMO/QA 재리뷰([#19 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672), 2026-10-05)에서 소스 차단 3건(B1~B3)과 추적성 조건을 받았고, v4는 그 수정본이다. v4 재리뷰([#19 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302))가 **B3를 서버 측 UID precondition으로 원자적으로 고치라**고 하여 당시 문서와 스크립트는 **v4.1**로 갱신되었다(파일 이름은 그대로, 바이트와 revision이 다르다). v4.1도 가짜 클러스터(fixture)에서만 시험했다. **이 문서는 변경창 승인이 아니다.**
@@ -201,3 +201,10 @@ printf 'etcd_rc=%s class_rc=%s\n' "${verify_rc[0]}" "${verify_rc[1]}"
 ```
 
 5. namespace/name·UID·RV 전후 값, 처리 시각·담당자·승인 링크, GET/replace/etcd/class RC와 최종 class를 별도 복구 증적으로 봉인한다. Secret 값이나 JSON은 포함하지 않는다. 모든 대상과 노드/API/etcd 상태가 해소되어도 원래 FAIL 로그를 덮어쓰지 않고 후속 인수로 연결한다. 재시험은 변경창 승인 범위를 따른다.
+
+## 13. v4.4-20261006 — post 점검 apiserver Pod Ready 제한 시간 반복 확인
+
+2026-10-06 rollback-test는 복원 재기동 관측 1초 뒤의 단회 Pod 조회에서 `Ready=false`가 읽혀 `RESULT: FAIL`이었다([결과 기록](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6008210758)). v4.4는 `post` 점검의 mirror Pod 확인만 `APISERVER_POD_WAIT_SEC`(기본 120초) deadline 안에서 반복하고, 정확한 이름·행 수(`EXPECT_APISERVER_PODS`, 선택 `APISERVER_POD_NAMES`)와 개별 호출 timeout(`CALL_TIMEOUT_SEC`, 기본 15초)을 검사한다. deadline 후에도 미충족이면 기존처럼 FAIL이며 마지막 관측 원본과 시도 기록(`post-apiserver-pods{.txt,.stderr,.rc}`, `post-apiserver-pods-attempts.txt`)을 남긴다. `pre` 점검은 단회·엄격하다.
+
+- 시간 예산: post 점검이 최대 약 120초 더 걸릴 수 있다. 11:45 복구 우선·12:00 회복 목표 계산에 포함한다.
+- 이 절은 소스 변경 기록이며 Runtime·재시험 GO가 아니다. 아래 §1~§12의 Gate, 중단 기준, 복구 절차는 v4.3과 같다.

@@ -1,0 +1,248 @@
+=== fixture 시험 결과
+  PASS  S1: 정상 경로가 PASS(rc=0, RESULT: PASS)
+  PASS  S1: 원래 설정 해시 복원
+  PASS  S1: 시험 Secret 잔존 0
+  PASS  S1: 재기동 관측 기록(container ID 변경)
+  PASS  S1: LB 와 다른 CP 를 각각 읽음
+  PASS  S1: 원복 후 읽기: 대상 CP 직접·LB·다른 CP
+  PASS  S1: rollback/restore 재기동 증거가 별도 파일(6개)
+  PASS  S1: rollback 과 restore 의 before container ID 가 서로 다름(덮어쓰기 없음)
+  PASS  S1: 소유 Secret 3개가 UID 와 함께 기록
+  PASS  S1: 삭제는 서버 측 UID precondition(--raw DELETE + DeleteOptions.preconditions.uid)으로, 본문 UID 가 생성 응답 UID 와 일치
+  PASS  S1: 이름 기반 삭제(fallback)는 한 번도 호출되지 않음
+  PASS  S1: 50-cleanup.txt 에 삭제 본문(preconditions.uid) 기록
+  PASS  S1: 시험 Secret 이름에 실행 고유 ID 포함
+  PASS  S1: etcd 접두어 파일에 class 기록(SECRETBOX/PLAIN/SECRETBOX)
+  PASS  S1: 아카이브에 .orig/.rolled/.bak/.db 없음
+  PASS  S1: 아카이브 전체에 키 원문(FAKEKEY) 없음
+  PASS  S1: 아카이브에 etcd 원문 임시 파일(.etcd-raw.*) 없음
+  PASS  S1: run.log 에 스크립트 SHA-256 기록
+  PASS  S2: listener 가 안 내려가면 FAIL(rc!=0)
+  PASS  S2: 재기동 미관측 사유 기록
+  PASS  S2: PASS 로 끝나지 않음
+  PASS  S2: 설정 원복·manifest 복원
+  PASS  S2: 시험 Secret 잔존 0
+  PASS  S2b: container ID 가 안 바뀌면 FAIL
+  PASS  S2b: 설정 원복·시험 Secret 0
+  PASS  S2c: ss_error: 관측 오류면 FAIL(rc!=0)
+  PASS  S2c: ss_error: '관측 오류'로 기록, down 으로 오인하지 않음
+  PASS  S2c: ss_error: PASS 로 끝나지 않음
+  PASS  S2c: ss_error: 설정 원복·manifest 복원
+  PASS  S2c: ss_error: 시험 Secret 잔존 0
+  PASS  S2d: ss_empty: 관측 오류면 FAIL(rc!=0)
+  PASS  S2d: ss_empty: '관측 오류'로 기록, down 으로 오인하지 않음
+  PASS  S2d: ss_empty: PASS 로 끝나지 않음
+  PASS  S2d: ss_empty: 설정 원복·manifest 복원
+  PASS  S2d: ss_empty: 시험 Secret 잔존 0
+  PASS  S3: lb_read_fail 주입 시 FAIL(rc!=0)
+  PASS  S3: 사유 기록: LB(
+  PASS  S3: PASS 로 끝나지 않음
+  PASS  S3: 설정 원복(복원 경로)
+  PASS  S3: 시험 Secret 정리
+  PASS  S4: peer_read_fail 주입 시 FAIL(rc!=0)
+  PASS  S4: 사유 기록: 다른 CP(
+  PASS  S4: PASS 로 끝나지 않음
+  PASS  S4: 설정 원복(복원 경로)
+  PASS  S4: 시험 Secret 정리
+  PASS  S5: restored_prefix_plain 주입 시 FAIL(rc!=0)
+  PASS  S5: 사유 기록: 복원 후 신규 Secret 이 secretbox
+  PASS  S5: PASS 로 끝나지 않음
+  PASS  S5: 설정 원복(복원 경로)
+  PASS  S5: 시험 Secret 정리
+  PASS  S6: post_read_fail 주입 시 FAIL(rc!=0)
+  PASS  S6: 사유 기록: 복원 후 평문 b 읽기 실패
+  PASS  S6: PASS 로 끝나지 않음
+  PASS  S6: 설정 원복(복원 경로)
+  PASS  S6: 시험 Secret 정리
+  PASS  S7b: read_old_fail 주입 시 FAIL(rc!=0)
+  PASS  S7b: 사유 기록: 기존 암호화 Secret 을 읽지 못함
+  PASS  S7b: PASS 로 끝나지 않음
+  PASS  S7b: 설정 원복(복원 경로)
+  PASS  S7b: 시험 Secret 정리
+  PASS  S5b: post_self_write_plain(LB 등 다른 경로는 정상) 주입 시 FAIL(rc!=0)
+  PASS  S5b: 사유 기록: 복원 후 신규 Secret 이 secretbox
+  PASS  S5b: PASS 로 끝나지 않음
+  PASS  S5b: 설정 원복
+  PASS  S5b: 시험 Secret 정리
+  PASS  S6b: post_self_read_fail(LB 등 다른 경로는 정상) 주입 시 FAIL(rc!=0)
+  PASS  S6b: 사유 기록: 복원 후 평문 b 읽기 실패
+  PASS  S6b: PASS 로 끝나지 않음
+  PASS  S6b: 설정 원복
+  PASS  S6b: 시험 Secret 정리
+  PASS  S6c: post_self_read_a_fail(LB 등 다른 경로는 정상) 주입 시 FAIL(rc!=0)
+  PASS  S6c: 사유 기록: 복원 후 암호화 a 읽기 실패
+  PASS  S6c: PASS 로 끝나지 않음
+  PASS  S6c: 설정 원복
+  PASS  S6c: 시험 Secret 정리
+  PASS  S6d: post_lb_read_fail(LB 등 다른 경로는 정상) 주입 시 FAIL(rc!=0)
+  PASS  S6d: 사유 기록: 복원 후 LB(
+  PASS  S6d: PASS 로 끝나지 않음
+  PASS  S6d: 설정 원복
+  PASS  S6d: 시험 Secret 정리
+  PASS  S6e: post_peer_read_fail(LB 등 다른 경로는 정상) 주입 시 FAIL(rc!=0)
+  PASS  S6e: 사유 기록: 복원 후 다른 CP(
+  PASS  S6e: PASS 로 끝나지 않음
+  PASS  S6e: 설정 원복
+  PASS  S6e: 시험 Secret 정리
+  PASS  S13: etcd_query_fail_b 주입 시 FAIL(rc!=0)
+  PASS  S13: 사유 기록: etcd 조회 실패 또는 값 없음(class=QUERY_FAILED)
+  PASS  S13: PASS 로 끝나지 않음
+  PASS  S13: 설정 원복·manifest 복원
+  PASS  S13: 시험 Secret 정리
+  PASS  S13b: etcd_empty_b 주입 시 FAIL(rc!=0)
+  PASS  S13b: 사유 기록: etcd 조회 실패 또는 값 없음(class=EMPTY)
+  PASS  S13b: PASS 로 끝나지 않음
+  PASS  S13b: 설정 원복·manifest 복원
+  PASS  S13b: 시험 Secret 정리
+  PASS  S13c: etcd_unknown_b 주입 시 FAIL(rc!=0)
+  PASS  S13c: 사유 기록: 평문(identity)으로 확인하지 못함(class=UNKNOWN_FORMAT)
+  PASS  S13c: PASS 로 끝나지 않음
+  PASS  S13c: 설정 원복·manifest 복원
+  PASS  S13c: 시험 Secret 정리
+  PASS  S13d: etcd_query_fail_c 주입 시 FAIL(rc!=0)
+  PASS  S13d: 사유 기록: 복원 후 c: etcd 조회 실패
+  PASS  S13d: PASS 로 끝나지 않음
+  PASS  S13d: 설정 원복·manifest 복원
+  PASS  S13d: 시험 Secret 정리
+  PASS  S14: default Secret 조회 실패면 NO-GO(rc!=0)
+  PASS  S14: 사유: default Namespace Secret 조회 실패
+  PASS  S14: GO 로 끝나지 않음
+  PASS  S14b: 전체 Secret 목록 조회 실패면 NO-GO
+  PASS  S14c: rollback-test 도 게이트에서 중단, 변경 없음
+  PASS  S7: 변경 전 실패는 FAIL
+  PASS  S7: 시험 Secret a 정리(잔존 0)
+  PASS  S7: 재기동 안 함(설정 변경 전 복원 불필요 기록)
+  PASS  S7: 설정 파일 그대로
+  PASS  S7: 정리 확인(NotFound) 기록
+  PASS  S8: 정리 실패(잔존)는 FAIL
+  PASS  S8: PASS 로 끝나지 않음
+  PASS  S8: 이름 기반 삭제 fallback 없음
+  PASS  S15: AlreadyExists 면 FAIL(rc!=0)
+  PASS  S15: 소유 불명확·삭제하지 않음 기록
+  PASS  S15: 외부 객체가 보존됨(삭제 요청 자체를 보내지 않음, 이름 삭제 없음)
+  PASS  S15: PASS 로 끝나지 않음
+  PASS  S15: 설정 파일 그대로(변경 전 중단)
+  PASS  S16: UID 불일치면 FAIL(rc!=0)
+  PASS  S16: UID precondition conflict·삭제하지 않음·fallback 하지 않음 기록
+  PASS  S16: 외부 b 보존: 서버가 Conflict 로 거부했고 이름 삭제로 fallback 하지 않음
+  PASS  S16: 이번 실행의 a, c 는 UID precondition 으로 삭제됨
+  PASS  S16: PASS 로 끝나지 않음
+  PASS  S16: 원래 설정 해시는 복원됨
+  PASS  S17: 응답 유실이면 FAIL(rc!=0)
+  PASS  S17: 소유 불명확·수동 확인 기록
+  PASS  S17: 응답 유실 객체 b 는 삭제 요청도 보내지 않음(소유 미확정)
+  PASS  S17: 소유가 확인된 a 는 UID precondition 으로 삭제됨
+  PASS  S17: 원래 설정 복원·manifest 복원
+  PASS  S17: PASS 로 끝나지 않음
+  PASS  S19: 삭제 요청 실패면 FAIL(rc!=0)
+  PASS  S19: 삭제 요청 실패·결과 불명확·fallback 하지 않음 기록
+  PASS  S19: 이름 기반 삭제 fallback 이 호출되지 않음
+  PASS  S19: PASS 로 끝나지 않음
+  PASS  S19: 삭제 실패한 b 는 남고, a·c 는 정리됨
+  PASS  S9: precheck NO-GO(rc!=0)
+  PASS  S9: 사유: 승인 LB 가 아님
+  PASS  S9b: rollback-test 도 게이트에서 중단, 변경 없음
+  PASS  S10: PEER_SHAS 없으면 NO-GO
+  PASS  S10b: 다른 CP 해시 불일치 NO-GO
+  PASS  S10c: 정상 precheck 는 GO
+  PASS  S18: ENC_BACKUP 미지정이면 NO-GO
+  PASS  S18b: ENC_BACKUP 해시 불일치면 NO-GO
+  PASS  S18c: ENC_BACKUP 없으면 rollback-test 도 게이트에서 중단, 변경 없음
+  PASS  S18d: ENC_BACKUP 경로가 이 CP 에 없으면 NO-GO
+  PASS  S11: etcd unhealthy 이면 NO-GO
+  PASS  S12: 재실행도 PASS(재실행 안전)
+  PASS  S20_health_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_health_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_health_malformed: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_health_malformed: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_health_duplicate: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_health_duplicate: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_health_unexpected: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_health_unexpected: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_health_missing: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_health_missing: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_readyz_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_readyz_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_nodes_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_nodes_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_status_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_status_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_pods_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_pods_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_config_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_config_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_secrets_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_secrets_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_default_rc: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_default_rc: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S20_no_parser: 조회 실패/잘못된 JSON: nonzero, GO/PASS 없음
+  PASS  S20_no_parser: Gate 거부: ENC 동일, manifest 존재, 재기동/Secret 생성 없음
+  PASS  S21_seal_tar: nonzero, 전체 PASS 없음
+  PASS  S21_seal_tar: ENC/manifest 복구 및 UID cleanup 계속
+  PASS  S21_seal_tar: 봉인 실패가 완료 기록과 stdout에 INCOMPLETE
+  PASS  S21_seal_checksum: nonzero, 전체 PASS 없음
+  PASS  S21_seal_checksum: ENC/manifest 복구 및 UID cleanup 계속
+  PASS  S21_seal_checksum: 봉인 실패가 완료 기록과 stdout에 INCOMPLETE
+  PASS  S21_seal_sidecar: nonzero, 전체 PASS 없음
+  PASS  S21_seal_sidecar: ENC/manifest 복구 및 UID cleanup 계속
+  PASS  S21_seal_sidecar: 봉인 실패가 완료 기록과 stdout에 INCOMPLETE
+  PASS  S21_rolled_list_rc: nonzero, 전체 PASS 없음
+  PASS  S21_rolled_list_rc: ENC/manifest 복구 및 UID cleanup 계속
+  PASS  S22_precheck: 읽기 전용 모드도 봉인 실패 시 nonzero/INCOMPLETE, GO/PASS 없음
+  PASS  S22_postcheck: 읽기 전용 모드도 봉인 실패 시 nonzero/INCOMPLETE, GO/PASS 없음
+  PASS  S23_rv_plain: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_plain: 원복 및 UID cleanup 유지
+  PASS  S23_rv_plain: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_plain: 실제 후보에 PLAIN 기록
+  PASS  S23_rv_new: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_new: 원복 및 UID cleanup 유지
+  PASS  S23_rv_new: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_new: 실제 후보에 PLAIN 기록
+  PASS  S23_rv_foreign_prefix: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_foreign_prefix: 원복 및 UID cleanup 유지
+  PASS  S23_rv_foreign_prefix: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_foreign_prefix: 실제 후보에 PLAIN 기록
+  PASS  S23_rv_recreated: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_recreated: 원복 및 UID cleanup 유지
+  PASS  S23_rv_recreated: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_recreated: 실제 후보에 PLAIN 기록
+  PASS  S23_rv_query: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_query: 원복 및 UID cleanup 유지
+  PASS  S23_rv_query: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_unknown: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_unknown: 원복 및 UID cleanup 유지
+  PASS  S23_rv_unknown: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_empty: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_empty: 원복 및 UID cleanup 유지
+  PASS  S23_rv_empty: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_after_rc: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_after_rc: 원복 및 UID cleanup 유지
+  PASS  S23_rv_after_rc: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_after_bad: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_after_bad: 원복 및 UID cleanup 유지
+  PASS  S23_rv_after_bad: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_bail: B59-3 검사 실패 nonzero/PASS 없음
+  PASS  S23_rv_bail: 원복 및 UID cleanup 유지
+  PASS  S23_rv_bail: Secret payload가 원본·archive에 노출되지 않음
+  PASS  S23_rv_bail: 실제 후보에 PLAIN 기록
+  PASS  S23_before: 사전 snapshot 실패: 변경/재기동0, 소유 a 정리
+  PASS  S24_none: 변경 없음/변경 후 secretbox면 PASS
+  PASS  S24_none: 자기 소유 UID만 제외하여 후보0
+  PASS  S24_rv_encrypted: 변경 없음/변경 후 secretbox면 PASS
+  PASS  S24_rv_encrypted: 갱신된 실제 Secret도 암호화 확인
+  PASS  P1_transient: 방금 재기동한 Pod 의 일시적 NotReady 는 deadline 안에서 회복되면 PASS(rc=0)
+  PASS  P1_transient: 시도 기록에 NotReady 시도와 마지막 OK 가 함께 남음
+  PASS  P1_transient: 회복 전 일시 실패는 FAIL 로 집계되지 않음(로그에 apiserver Pod 확인 실패 없음)
+  PASS  P1_transient: 시험 Secret 정리·원설정 복원은 그대로
+  PASS  P2_never: 끝까지 NotReady 면 FAIL(기존 검사 약화 없음, rc≠0, RESULT: PASS 아님)
+  PASS  P2_never: 실패 사유에 시도 횟수·deadline·마지막 rc 가 남음
+  PASS  P2_never: 마지막 관측 원본(NotReady 행)과 rc 보존
+  PASS  P2_never: 시도가 deadline 안에서 여러 번 반복됨(2회 이상)
+  PASS  P2_never: 점검 실패여도 복원·정리는 완료
+  PASS  P3_missing: CP Pod 행이 2개뿐이면 FAIL(정확한 행 수)
+  PASS  P4_rcfail: 조회 실패(rc=1)는 FAIL 이고 rc 와 stderr 가 보존됨
+  PASS  P5_timeout: 개별 호출 timeout 은 rc=124 로 기록되고 FAIL
+  PASS  P6_pre: pre 점검은 단회(대기 없음): NotReady 면 NO-GO, 시도 1회
+  PASS  P7_names: APISERVER_POD_NAMES 가 정확히 일치하면 PASS
+  PASS  P8_badnames: 기대 이름 집합과 다르면 FAIL
+=== PASS=246 FAIL=0

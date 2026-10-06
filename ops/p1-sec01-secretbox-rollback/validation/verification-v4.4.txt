@@ -1,0 +1,15 @@
+# v4.4-20261006 검증 기록 (작성: Claude Code 보조, 이하영 실행 환경 2026-10-06)
+
+대상: sec01-secretbox-rollback-v4.sh rev v4.4-20261006 (post 점검 apiserver mirror Pod 제한 시간 반복 확인)
+환경: Windows 10 Git Bash. `python3`가 실제 파이썬이 아니라 Windows 스토어 별칭이어서 `py -3` 를 가리키는 `python3` shim 을 PATH 에 두고 실행했다(운영 서버가 아님, 클러스터 접근 없음).
+
+1. 기준선(옛 v4.3 스크립트 + 옛 시험): 231 PASS / 0 FAIL. shim 없이 실행하면 166 PASS / 65 FAIL 이며 원인은 python3 별칭이다(코드 결함이 아니다).
+2. 새 시험 15개를 옛 v4.3 스크립트에 적용(선택 케이스 P1_transient, P2_never, P3_missing): 5 PASS / 5 FAIL.
+   - P1_transient 가 실패한다: 복원 직후 일시적 NotReady 를 단회 조회로 FAIL 처리하는 2026-10-06 rollback-test 의 상황이 재현된다.
+3. v4.4 스크립트 + 새 시험: **246 PASS / 0 FAIL** (기존 231 + 추가 15, validation/fixture-results-v4.4.txt).
+4. 스텁이 pods 3행으로 바뀐 것(기존 1행)과 시험 환경 변수(APISERVER_POD_WAIT_SEC=6, CALL_TIMEOUT_SEC=2)가 기존 케이스에 적용되었다. 기존 231개 단언은 수정하지 않았다.
+
+한계
+- 가짜 kubectl 스텁 시험이다. 실제 kube-apiserver mirror Pod 의 상태 전이·`kubectl` 출력 형식·`timeout` 동작은 서버에서 검증되지 않았다.
+- Linux 서버가 아닌 Windows Git Bash 에서 실행했다. 독립 리뷰어가 Linux 에서 다시 실행하는 것을 권장한다.
+- 이 변경은 Runtime 승인이나 재시험 GO가 아니다.

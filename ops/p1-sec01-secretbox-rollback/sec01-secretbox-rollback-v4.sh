@@ -27,7 +27,7 @@
 #
 # FIXTURE=1 은 가짜 클러스터(스텁) 시험 전용이다. 운영에서 사용하지 않는다.
 set -uo pipefail
-REV="v4.3-20261005"
+REV="v4.4-20261006"
 MODE="${1:-}"
 FIXTURE="${FIXTURE:-0}"
 ENC="${ENC:-/etc/kubernetes/enc/encryption-config.yaml}"
@@ -39,6 +39,11 @@ LB_URL="${LB_URL:-https://10.1.93.109:6443}"
 CP_IPS="${CP_IPS:-10.1.93.102 10.1.93.103 10.1.93.104}"
 EXPECT_NODES="${EXPECT_NODES:-6}"
 READY_WAIT_SEC="${READY_WAIT_SEC:-300}"
+# v4.4: 사후 점검의 apiserver mirror Pod 확인은 단회 조회가 아니라 제한 시간 안의 반복 확인이다.
+APISERVER_POD_WAIT_SEC="${APISERVER_POD_WAIT_SEC:-120}"   # post 점검 전체 deadline(초). pre 점검은 단회
+CALL_TIMEOUT_SEC="${CALL_TIMEOUT_SEC:-15}"                  # 개별 kubectl 호출 상한(초)
+EXPECT_APISERVER_PODS="${EXPECT_APISERVER_PODS:-$(echo ${CP_IPS:-} | wc -w)}"  # 정확한 행 수(기본 = CP 수)
+APISERVER_POD_NAMES="${APISERVER_POD_NAMES:-}"              # 지정하면 이 이름 집합과 정확히 같아야 한다(공백 구분)
 DOWN_WAIT_SEC="${DOWN_WAIT_SEC:-90}"
 POLL="${POLL_SEC:-5}"
 STEP_FILE="${STEP_FILE:-/dev/null}"
@@ -363,6 +368,50 @@ on_exit() {
 }
 trap on_exit EXIT
 
+# v4.4: apiserver mirror Pod 의 정확한 이름·행 수·Ready 를 제한 시간 안에 반복 확인한다.
+# $1=파일 접두어 $2=전체 deadline(초, 0 이면 단회). 개별 호출은 CALL_TIMEOUT_SEC 로 제한한다.
+# 일시적 NotReady 는 deadline 안에서는 실패로 세지 않고, deadline 후에도 미충족이면 FAIL 로 처리한다(기존 검사를 약화하지 않는다).
+# 마지막 관측(stdout/stderr/rc)은 $1-apiserver-pods.{txt,stderr,rc} 에 남기고, 시도별 요약은 $1-apiserver-pods-attempts.txt 에 남긴다.
+apiserver_pods_eval() {  # $1=파일 $2=조회 rc -> 미충족 사유(비어 있으면 충족)
+  local f="$1" rc="$2"
+  [ "$rc" -eq 0 ] || { echo "조회 실패(rc=$rc)"; return; }
+  awk -v exp_n="$EXPECT_APISERVER_PODS" -v self="kube-apiserver-$HOST" -v want="$APISERVER_POD_NAMES" '
+    NR==1 { if ($1 != "NAME") hdr_bad=1; next }
+    { n++; seen[$1]++; if (seen[$1]>1) dup=dup" "$1
+      if ($1 !~ /^kube-apiserver-/) badname=badname" "$1
+      if ($2 != "true") nr=nr" "$1"("$2")"
+      if ($1 == self) hasself=1 }
+    END {
+      r=""
+      if (hdr_bad || NR==0) r=r" 헤더 없음;"
+      if (n != exp_n) r=r" 행 수 "n+0"!="exp_n";"
+      if (dup != "") r=r" 중복:"dup";"
+      if (badname != "") r=r" 이름 이상:"badname";"
+      if (!hasself) r=r" 자신("self") 없음;"
+      if (nr != "") r=r" NotReady:"nr";"
+      if (want != "") { m=split(want, a, " "); for (i=1;i<=m;i++) if (!(a[i] in seen)) r=r" 기대 Pod 없음:"a[i]";"; if (m != n) r=r" 기대 이름 수 "m"!="n+0";" }
+      print r }' "$f"
+}
+apiserver_pods_ready() {
+  local p="$1" wait="${2:-0}" start deadline attempt=0 rc reason="" now
+  start="$(date +%s)"; deadline=$((start+wait))
+  : > "$OUT/$p-apiserver-pods-attempts.txt" || { fail "$p apiserver Pod 시도 기록 파일 생성 실패"; return 1; }
+  while :; do
+    attempt=$((attempt+1))
+    timeout "${CALL_TIMEOUT_SEC}s" $KC -n kube-system get pods -l component=kube-apiserver \
+      -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount \
+      > "$OUT/$p-apiserver-pods.txt" 2> "$OUT/$p-apiserver-pods.stderr"; rc=$?
+    printf '%s\n' "$rc" > "$OUT/$p-apiserver-pods.rc" || { fail "$p apiserver Pod rc 기록 실패"; return 1; }
+    reason="$(apiserver_pods_eval "$OUT/$p-apiserver-pods.txt" "$rc")"
+    printf '%s attempt=%s rc=%s %s\n' "$(date -u +%H:%M:%SZ)" "$attempt" "$rc" "${reason:-OK}" >> "$OUT/$p-apiserver-pods-attempts.txt" || { fail "$p apiserver Pod 시도 기록 실패"; return 1; }
+    [ -z "$reason" ] && return 0
+    now="$(date +%s)"; [ "$now" -ge "$deadline" ] && break
+    sleep "$POLL"
+  done
+  fail "apiserver Pod 확인 실패($p): ${reason# } — 시도 ${attempt}회, deadline ${wait}초, 마지막 rc=$rc (마지막 관측은 $p-apiserver-pods.txt)"
+  return 1
+}
+
 # 읽기 전용 점검. $1 = 파일 접두어
 checks() {
   local p="$1" n ip r left srv lout lrc
@@ -384,10 +433,9 @@ checks() {
     validate_health "$OUT/$p-etcd-health.txt" 2> "$OUT/$p-etcd-health-validation.stderr" || fail "etcd health 구조/endpoint/상태 검증 실패"
   fi
   capture "$p-etcd-status" etcdctl_in_pod endpoint status --cluster -w table || :
-  if capture "$p-apiserver-pods" $KC -n kube-system get pods -l component=kube-apiserver \
-    -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount; then
-    awk 'NR>1 {n++; if ($2 != "true") bad=1} END {exit (n==0 || bad)}' "$OUT/$p-apiserver-pods.txt" || fail "apiserver Pod 상태 비어 있음/NotReady"
-  fi
+  # v4.4: post 점검만 제한 시간 안에서 반복 확인한다(방금 재기동한 Pod 의 일시적 NotReady). pre 점검은 현재 상태를 단회로 엄격히 본다.
+  local pw=0; [ "$p" = post ] && pw="$APISERVER_POD_WAIT_SEC"
+  apiserver_pods_ready "$p" "$pw" || :
   if capture "$p-secrets-raw" $KC get secrets -A --no-headers; then
     [ -s "$OUT/$p-secrets-raw.txt" ] || fail "Secret 목록 수집 실패(비어 있음)"
     awk '{print $1"/"$2}' "$OUT/$p-secrets-raw.txt" | sort > "$OUT/$p-secrets.txt" || fail "Secret 목록 변환 실패"

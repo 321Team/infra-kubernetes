@@ -1,4 +1,4 @@
-# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.3)
+# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.4)
 
 - 책임: [#19 P1-SEC-01](https://github.com/321Team/fds-project-baseline/issues/19) AC "Secret encryption·backup·rotation·**rollback**" 중 rollback Runtime 증적([CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 P1 필수·미충족으로 남은 항목).
 - 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → v4.1 → v4.2 → **v4.3(B59-3 독립 리뷰 반영)**.
@@ -8,10 +8,10 @@
 
 | 파일 | 역할 |
 |---|---|
-| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.3-20261005` |
+| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.4-20261006` |
 | `test-rollback-v4.sh` | 가짜 클러스터(fixture) 시험. 스텁 `kubectl`·`ss`·`hostname`을 PATH에 두고 클러스터에는 접근하지 않는다 |
-| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.3-20261005`) |
-| `validation/fixture-results-v4.3.txt` | 현행 **231 PASS / 0 FAIL**(기존 191 + 추가 40). v4.1/v4.2 로그는 이력 보존 |
+| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.4-20261006`) |
+| `validation/fixture-results-v4.4.txt` | 현행 **246 PASS / 0 FAIL**(v4.3의 231 + 추가 15). v4.1~v4.3 로그는 이력 보존 |
 | `SHA256SUMS` | 위 파일의 SHA-256(자기 자신 제외) |
 
 ## 실행 방법(승인된 변경창에서만, 대상 CP 콘솔 root)
@@ -56,3 +56,19 @@ fixture 시험(로컬, 약 7분): `bash test-rollback-v4.sh ./sec01-secretbox-ro
 [독립 리뷰](https://github.com/321Team/infra-kubernetes/pull/59#pullrequestreview-5410017432)의 실제 Secret 평문 잔여를 탐지한다. 변경 직전/복원 직후 metadata의 UID·RV로 생성·교체·갱신 후보를 추출하고, 정확한 소유 UID만 제외한 뒤 etcd 저장 class를 확인한다. PLAIN/조회 실패/불명확 형식은 최종 nonzero이며 원복·cleanup은 계속한다. 실제 Secret 바이트를 증적으로 노출하지 않도록 기존 앞 40바이트 출력도 class-only로 바꿨다.
 
 수동 재암호화의 전제·경쟁 갱신 처리·원문 비저장·복구 기록·과거 revision 한계는 runbook 12절을 따른다. 자동 재암호화와 Runtime 승인은 포함하지 않는다. 구현자 이권욱과 독립 Reviewer 이재환을 분리하며 변경분 재리뷰를 요청한다.
+
+## v4.4-20261006 — post 점검 apiserver Pod Ready 보완 (2026-10-06 rollback-test FAIL 후속)
+
+근거: [결과 기록 6008210758](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6008210758)(`RESULT: FAIL`: 복원 재기동 관측 1초 뒤 `kube-apiserver-k8s-control03` `Ready=false` 단회 조회), Review Owner [딥리뷰 6010258709](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6010258709) §1("`checks post`의 mirror Pod Ready 단회 조회가 부족한 부분. 기존 검사를 삭제하거나 FAIL을 무시하는 방식으로 고치지 않는다").
+
+| 변경 | 내용 |
+|---|---|
+| 반복 확인 | `post` 점검의 apiserver mirror Pod 확인만 `APISERVER_POD_WAIT_SEC`(기본 120초) deadline 안에서 `POLL_SEC` 간격으로 반복한다. **`pre` 점검은 현재 상태를 단회로 엄격히 본다**(시작 Gate 약화 없음) |
+| 정확한 이름·행 수 | 행 수 = `EXPECT_APISERVER_PODS`(기본 `CP_IPS` 개수 = 3), 이름은 `kube-apiserver-*`이고 중복 없음, **자기 Pod(`kube-apiserver-$HOST`) 존재**, 모두 `Ready=true`. `APISERVER_POD_NAMES`(공백 구분)를 지정하면 그 집합과 정확히 같아야 한다 |
+| 개별 호출 timeout | 호출마다 `timeout ${CALL_TIMEOUT_SEC}s`(기본 15초). 응답 없음은 rc 124로 기록한다 |
+| 실패 보존 | deadline까지 미충족이면 **기존처럼 FAIL**이다. 마지막 관측은 `post-apiserver-pods.{txt,stderr,rc}`, 시도별 요약(시각·시도 번호·rc·사유)은 `post-apiserver-pods-attempts.txt`, FAIL 사유에 시도 횟수·deadline·마지막 rc가 남는다 |
+| 일시 실패 집계 | deadline 안의 일시적 NotReady·조회 실패는 FAIL로 세지 않는다(`capture()`를 쓰지 않음). deadline 후에도 미충족이면 1회 FAIL |
+
+- **GO 조건과 시간 예산:** 최악의 경우 post 점검이 최대 `APISERVER_POD_WAIT_SEC`(120초) + 마지막 호출 시간만큼 길어진다. 11:45 복구 우선·12:00 회복 목표 계산에 반영한다. SIGKILL로 시간을 맞추지 않는 원칙은 그대로다.
+- 이번 변경은 **Runtime 승인이나 재시험 GO가 아니다.** 원래 승인된 v4.3(HEAD `504b2523…`, script `10144527…`)의 승인·증적은 그대로 유지하며, v4.4로 재시험하려면 소스 승인과 새 창·LB 복구 담당·평문 잔여 처리 계획이 별도로 필요하다(Review Owner 6010258709).
+- 변경하지 않은 것: 복원·정리 로직, B59-3 탐지, 봉인, Gate, 다른 점검 항목.
