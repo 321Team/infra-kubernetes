@@ -5,6 +5,7 @@
 SCRIPT="$(cd "$(dirname "${1:-./sec01-secretbox-rollback-v4.sh}")" && pwd)/$(basename "${1:-./sec01-secretbox-rollback-v4.sh}")"
 PASS=0; FAILN=0; RESULTS=()
 export FIXTURE_PYTHON="$(command -v python3)"
+export FIXTURE_AWK="$(command -v awk)"
 
 make_fixture() {   # $1 = dir
   local FX="$1"
@@ -229,6 +230,19 @@ WRAP
 #!/usr/bin/env bash
 [ "${FAULT:-}" = no_parser ] && exit 127
 exec "$FIXTURE_PYTHON" "$@"
+WRAP
+  # B2: 실제 awk 바이너리 실패를 Pod 파서 호출에만 주입한다.
+  # kubectl rc=0, parser stdout 없음/rc=42; 다른 awk 호출은 원본으로 전달한다.
+  cat > "$FX/bin/awk" <<'WRAP'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  case "${FAULT:-}:$arg" in
+    pods_parser_pre:*/pre-apiserver-pods.txt|pods_parser_post:*/post-apiserver-pods.txt)
+      echo 'fixture apiserver parser failed (rc=42)' >&2
+      exit 42 ;;
+  esac
+done
+exec "$FIXTURE_AWK" "$@"
 WRAP
   chmod +x "$FX/bin/"*
 }
@@ -551,6 +565,48 @@ check P7_names "APISERVER_POD_NAMES 가 정확히 일치하면 PASS" $([ "$RC" -
 rm -rf "$CASE_FX"
 run_case P8_badnames rollback-test APISERVER_POD_NAMES="kube-apiserver-k8s-control01 kube-apiserver-k8s-control02 kube-apiserver-k8s-control09"
 check P8_badnames "기대 이름 집합과 다르면 FAIL" $([ "$RC" -ne 0 ] && not_pass && has "기대 Pod 없음:kube-apiserver-k8s-control09"; echo $?)
+rm -rf "$CASE_FX"
+
+# ---- B2: Pod 파서 nonzero/빈 stdout 은 GO/PASS 로 바꾸지 않는다 ----
+parser_evidence_ok() {
+  local phase="$1"
+  [ "$(cat "$RUNDIR/$phase-apiserver-pods.rc")" = 0 ] &&
+  [ "$(cat "$RUNDIR/$phase-apiserver-pods-parser.rc")" = 42 ] &&
+  grep -q 'fixture apiserver parser failed (rc=42)' "$RUNDIR/$phase-apiserver-pods-parser.stderr" &&
+  grep -q 'parser_rc=42' "$RUNDIR/$phase-apiserver-pods-attempts.txt" &&
+  [ "$(wc -l < "$RUNDIR/$phase-apiserver-pods-attempts.txt")" -eq 1 ] &&
+  ! grep -q ' OK$' "$RUNDIR/$phase-apiserver-pods-attempts.txt"
+}
+parser_seal_ok() {
+  local phase="$1"
+  [ -s "$RUNDIR.evidence.tar.gz" ] &&
+  [ -s "$RUNDIR.evidence.tar.gz.sha256" ] &&
+  (cd "$(dirname "$RUNDIR")" && sha256sum -c "$(basename "$RUNDIR").evidence.tar.gz.sha256" >/dev/null) &&
+  grep -q 'EVIDENCE_STATUS=COMPLETE' "$RUNDIR.completion.txt" &&
+  tar tzf "$RUNDIR.evidence.tar.gz" | grep -q "/$phase-apiserver-pods-parser.rc$"
+}
+for spec in "P9_parser_precheck:precheck" "P10_parser_gate:rollback-test"; do
+  IFS=: read -r name mode <<<"$spec"
+  run_case "$name" "$mode" FAULT=pods_parser_pre
+  check "$name" "파서 rc42/빈 stdout: nonzero, GO/PASS 금지" $([ "$RC" -ne 0 ] && ! has 'RESULT: GO' && not_pass; echo $?)
+  check "$name" "파서 실패 원인 보존" $(has '파서 실행 실패(rc=42)'; echo $?)
+  check "$name" "조회 rc0와 파서 rc42·stderr·단회 시도 구분" $(parser_evidence_ok pre; echo $?)
+  check "$name" "Gate 실패: 설정/manifest 보존, 재기동·Secret 생성 0" $(enc_same && manifest_ok && [ "$(cat "$CASE_FX/state/gen")" = 1 ] && [ ! -e "$CASE_FX/state/uidseq" ] && no_leftover; echo $?)
+  check "$name" "실패 증적 봉인·SHA256 검증과 파서 기록 포함" $(parser_seal_ok pre; echo $?)
+  rm -rf "$CASE_FX"
+done
+run_case P11_parser_post rollback-test FAULT=pods_parser_post
+check P11_parser_post "사후 파서 rc42: nonzero/RESULT FAIL, PASS 금지" $([ "$RC" -ne 0 ] && has 'RESULT: FAIL' && not_pass && has '파서 실행 실패(rc=42)'; echo $?)
+check P11_parser_post "조회 rc0와 파서 rc42·stderr·단회 시도 구분" $(parser_evidence_ok post; echo $?)
+check P11_parser_post "변경 후 ENC 원복/manifest 복구와 restore 재기동 증거" $(enc_same && manifest_ok && [ -s "$RUNDIR/restart-restore-observed.txt" ] && [ -s "$RUNDIR/00-orig-sha256.txt" ]; echo $?)
+check P11_parser_post "소유 Secret a/b/c 모두 UID precondition 정리, 이름 삭제 금지" $(no_leftover && raw_attempted a && raw_attempted b && raw_attempted c && raw_body_ok && no_name_delete; echo $?)
+check P11_parser_post "복구·정리 후 실패 증적 봉인/SHA256 검증" $(parser_seal_ok post; echo $?)
+rm -rf "$CASE_FX"
+run_case P12_parser_postcheck postcheck FAULT=pods_parser_post
+check P12_parser_post "읽기 전용 사후 점검도 nonzero/FAIL, PASS 금지" $([ "$RC" -ne 0 ] && has 'RESULT: FAIL' && not_pass; echo $?)
+check P12_parser_post "사후 파서 rc42·stderr·단회 시도 보존" $(parser_evidence_ok post; echo $?)
+check P12_parser_post "읽기 전용 상태 유지, 변경/재기동/Secret 생성 0" $(enc_same && manifest_ok && [ "$(cat "$CASE_FX/state/gen")" = 1 ] && [ ! -e "$CASE_FX/state/uidseq" ]; echo $?)
+check P12_parser_post "실패 증적 봉인/SHA256 검증" $(parser_seal_ok post; echo $?)
 rm -rf "$CASE_FX"
 
 echo "=== fixture 시험 결과"

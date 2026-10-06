@@ -1,17 +1,17 @@
-# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.4)
+# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.4-b2)
 
 - 책임: [#19 P1-SEC-01](https://github.com/321Team/fds-project-baseline/issues/19) AC "Secret encryption·backup·rotation·**rollback**" 중 rollback Runtime 증적([CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 P1 필수·미충족으로 남은 항목).
 - 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → v4.1 → v4.2 → **v4.3(B59-3 독립 리뷰 반영)**.
-- 상태: **Runtime 코드다. 운영 클러스터에서 한 번도 실행하지 않았다.** 이 PR의 병합·fixture PASS는 Runtime PASS나 AC credit이 아니며, 설정 변경·apiserver 재기동·변경창을 승인하지 않는다. 실행은 PMO/QA 승인 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
+- 상태: **이 B2 후보는 Runtime 미실행이다.** 이 PR의 병합·fixture PASS는 Runtime PASS나 AC credit이 아니며, 설정 변경·apiserver 재기동·변경창을 승인하지 않는다. 실행은 PMO/QA 승인 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
 
 ## 파일
 
 | 파일 | 역할 |
 |---|---|
-| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.4-20261006` |
+| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.4-b2-20261006` |
 | `test-rollback-v4.sh` | 가짜 클러스터(fixture) 시험. 스텁 `kubectl`·`ss`·`hostname`을 PATH에 두고 클러스터에는 접근하지 않는다 |
-| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.4-20261006`) |
-| `validation/fixture-results-v4.4.txt` | 현행 **246 PASS / 0 FAIL**(v4.3의 231 + 추가 15). v4.1~v4.3 로그는 이력 보존 |
+| `ac05-rollback-runbook-v4.md` | 시험 절차서(v4.4 + B2 보완) |
+| `validation/fixture-results-v4.4-b2.txt` | B2 후보 전체 fixture 결과. 기존 246 단언을 유지하고 파서 실패 19 단언을 추가. v4.1~v4.4 로그는 이력 보존 |
 | `SHA256SUMS` | 위 파일의 SHA-256(자기 자신 제외) |
 
 ## 실행 방법(승인된 변경창에서만, 대상 CP 콘솔 root)
@@ -72,3 +72,27 @@ fixture 시험(로컬, 약 7분): `bash test-rollback-v4.sh ./sec01-secretbox-ro
 - **GO 조건과 시간 예산:** 최악의 경우 post 점검이 최대 `APISERVER_POD_WAIT_SEC`(120초) + 마지막 호출 시간만큼 길어진다. 11:45 복구 우선·12:00 회복 목표 계산에 반영한다. SIGKILL로 시간을 맞추지 않는 원칙은 그대로다.
 - 이번 변경은 **Runtime 승인이나 재시험 GO가 아니다.** 원래 승인된 v4.3(HEAD `504b2523…`, script `10144527…`)의 승인·증적은 그대로 유지하며, v4.4로 재시험하려면 소스 승인과 새 창·LB 복구 담당·평문 잔여 처리 계획이 별도로 필요하다(Review Owner 6010258709).
 - 변경하지 않은 것: 복원·정리 로직, B59-3 탐지, 봉인, Gate, 다른 점검 항목.
+
+
+## v4.4-b2-20261006 — Pod 파서 실패를 정상으로 판정하지 않음
+
+근거: [PR66 B2 검토](https://github.com/321Team/infra-kubernetes/pull/66#issuecomment-6018117821),
+[#19 재시험 전제](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6018175392).
+기준 소스는 PR66 HEAD `007c4a11b006404f8dfe6603b1c90e7a6a3b8e6a`이다.
+
+- `kubectl` rc=0이어도 `apiserver_pods_eval`이 nonzero이면 즉시 FAIL한다.
+  파서 stdout이 빈 경우에도 Ready 충족으로 처리하지 않는다.
+- 조회 rc와 파서 rc를 분리해 기록한다. `<phase>-apiserver-pods-parser.rc`,
+  `<phase>-apiserver-pods-parser.stderr`, 시도 기록의 `parser_rc`를 함께 보존한다.
+  파서 실행 실패는 일시적 NotReady와 구분하여 재시도하지 않는다.
+- 추가 fixture: precheck NO-GO, rollback-test 시작 Gate 차단(변경/재기동/Secret 생성 0),
+  변경 후 사후 FAIL과 원복·UID 정리·증적 봉인, 읽기 전용 postcheck FAIL.
+  주입 조건은 실제 awk 스텁의 rc=42·빈 stdout이며 나머지 awk 호출은 정상 바이너리로 전달한다.
+- 원본 소스에 새 fixture를 적용한 재현 로그, 수정본의 전체 fixture 원본 로그,
+  실행 시각·명령·종료 코드·환경·해시를 `validation/*v4.4-b2*`에 보존한다.
+
+이 후보의 STATIC/MOCK 결과는 Linux 독립 재실행, CI, Runtime 또는 AC-05 인수 증적을 대신하지 않는다.
+이 보완 자체는 Runtime 미실행이다. 10월 7일 13:00은 제안된 재시험 목표이며
+[운영안](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6017468611)에 대한
+Review Owner의 별도 GO가 필요하다. 문서 내 과거 창의 시각이나 기존 승인을 새 창의 승인으로 사용하지 않는다.
+AI 사용: CODEX_ASSISTED. 새 HEAD에 대한 독립 판단·병합·현장 GO는 별도 단계다.

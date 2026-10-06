@@ -209,3 +209,22 @@ printf 'etcd_rc=%s class_rc=%s\n' "${verify_rc[0]}" "${verify_rc[1]}"
 - 변수: `EXPECT_APISERVER_PODS`의 기본값은 `CP_IPS`의 단어 수(기본 3)이므로 현장에서 `CP_IPS`를 바꿔 넘기면 기대 행 수도 함께 바뀐다. `APISERVER_POD_NAMES`를 지정하면 그 이름 집합과 정확히 같아야 한다. 변경하면 실행 기록에 값을 남긴다.
 - 시간 예산: post 점검이 최대 약 120초 더 걸릴 수 있다. 11:45 복구 우선·12:00 회복 목표 계산에 포함한다.
 - 이 절은 소스 변경 기록이며 Runtime·재시험 GO가 아니다. 아래 §1~§12의 Gate, 중단 기준, 복구 절차는 v4.3과 같다.
+
+
+## 14. v4.4-b2-20261006 — Pod 파서 실행 오류
+
+PR66 HEAD `007c4a11b006404f8dfe6603b1c90e7a6a3b8e6a`에서 Pod 파서가 nonzero/빈 stdout을
+내면 정상으로 해석될 수 있었던 B2를 보완한다. 호출 종료 코드를 확인하여 즉시 FAIL하고
+`pre/post-apiserver-pods-parser.{rc,stderr}` 및 시도 기록의 `parser_rc`를 보존한다.
+조회 rc와 파서 rc는 각각 확인한다. 파서 실행 오류는 NotReady 대기 대상이 아니다.
+
+- precheck: NO-GO. rollback-test 사전 Gate: 설정 변경·apiserver 재기동·Secret 생성 전에 중단한다.
+- 사후 점검: 전체 FAIL. 원복, 소유 Secret의 UID precondition 정리 및 증적 봉인은 기존 경로를 유지한다.
+- 파서 로그/rc 기록에 실패해도 전체 FAIL이다. 로그 부재를 Ready 충족으로 해석하지 않는다.
+- 운영 성공 기준에는 파서 rc=0이 추가로 추적되며 기존 이름·행 수·Ready, 복구·정리·봉인 기준을 유지한다.
+
+후보 소스의 Windows Git Bash fixture만 수행했다. 운영 실행과 Linux 독립 재실행은 별도다.
+실행 전 소스 파일의 새 SHA256, manifest 및 승인된 HEAD를 대조한다.
+본 문서의 과거 시각은 새 창의 승인 근거가 아니다.
+현재 재시험 운영안과 시각은 [#19의 운영안](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6017468611)을
+최신 GO 기록과 함께 확인한다. 본 보완만으로 재시험 GO나 AC-05 충족을 선언하지 않는다.

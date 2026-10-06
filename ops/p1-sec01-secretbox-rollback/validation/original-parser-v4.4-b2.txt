@@ -1,0 +1,21 @@
+=== fixture 시험 결과
+  FAIL  P9_parser_precheck: 파서 rc42/빈 stdout: nonzero, GO/PASS 금지
+  FAIL  P9_parser_precheck: 파서 실패 원인 보존
+  FAIL  P9_parser_precheck: 조회 rc0와 파서 rc42·stderr·단회 시도 구분
+  PASS  P9_parser_precheck: Gate 실패: 설정/manifest 보존, 재기동·Secret 생성 0
+  FAIL  P9_parser_precheck: 실패 증적 봉인·SHA256 검증과 파서 기록 포함
+  FAIL  P10_parser_gate: 파서 rc42/빈 stdout: nonzero, GO/PASS 금지
+  FAIL  P10_parser_gate: 파서 실패 원인 보존
+  FAIL  P10_parser_gate: 조회 rc0와 파서 rc42·stderr·단회 시도 구분
+  FAIL  P10_parser_gate: Gate 실패: 설정/manifest 보존, 재기동·Secret 생성 0
+  FAIL  P10_parser_gate: 실패 증적 봉인·SHA256 검증과 파서 기록 포함
+  FAIL  P11_parser_post: 사후 파서 rc42: nonzero/RESULT FAIL, PASS 금지
+  FAIL  P11_parser_post: 조회 rc0와 파서 rc42·stderr·단회 시도 구분
+  PASS  P11_parser_post: 변경 후 ENC 원복/manifest 복구와 restore 재기동 증거
+  PASS  P11_parser_post: 소유 Secret a/b/c 모두 UID precondition 정리, 이름 삭제 금지
+  FAIL  P11_parser_post: 복구·정리 후 실패 증적 봉인/SHA256 검증
+  FAIL  P12_parser_post: 읽기 전용 사후 점검도 nonzero/FAIL, PASS 금지
+  FAIL  P12_parser_post: 사후 파서 rc42·stderr·단회 시도 보존
+  PASS  P12_parser_post: 읽기 전용 상태 유지, 변경/재기동/Secret 생성 0
+  FAIL  P12_parser_post: 실패 증적 봉인/SHA256 검증
+=== PASS=4 FAIL=15

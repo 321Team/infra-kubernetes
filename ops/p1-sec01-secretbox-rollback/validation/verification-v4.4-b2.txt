@@ -1,0 +1,36 @@
+P1-SEC-01 B2 verification — CODEX_ASSISTED
+Base repository: 321Team/infra-kubernetes
+Base PR: 66
+Base commit: 007c4a11b006404f8dfe6603b1c90e7a6a3b8e6a
+Base Git tree: 585502008dd8423756d221b9358f627063943f5a
+Candidate revision: v4.4-b2-20261006
+Candidate script SHA256: df915e720be9b85897970e50990dce2b35c902ff9ef2b4c42fa57442dfd74662
+Candidate fixture SHA256: f5d25f10d26f4c75c2cc978d3c70868b330ad5c5e37569a7bdfa888afb7e388e
+Source blobs fetched at pinned HEAD and independently recomputed with Git blob SHA1 header (14/14).
+Started: 2026-10-06T23:44:01.026742+09:00
+Completed: 2026-10-07T00:03:27.009074+09:00
+Environment: SERVER01 / Windows / Git Bash / Python 3.14.6 python3 shim.
+STATIC: bash -n for source and fixture, exit 0.
+MOCK baseline negative regression: PASS=4 FAIL=15, exit 1 (expected reproduction).
+MOCK fixed focused regression: PASS=19 FAIL=0, exit 0.
+MOCK fixed full regression: PASS=265 FAIL=0, exit 0 (existing 246 + added 19).
+Existing assertion lines preserved unchanged.
+Injection: Pod parser awk stub returns rc=42, stderr marker and empty stdout; kubectl remains rc=0.
+Precheck and rollback-test pre Gate rejected; no fixture mutation/restart/Secret creation.
+Post rollback-test failed while ENC restoration, manifest, UID-conditioned a/b/c deletion and archive sealing/checksum remained valid.
+Read-only postcheck also failed and retained parser evidence.
+Raw stdout/stderr for original, focused and full runs retained. Command, host, timestamps, process rc and hashes: execution-v4.4-b2.json.
+Full-regression stderr is empty. Focused ONLY runs retain pre-existing harness diagnostics: skipped assertions still evaluate command substitutions against /nonexistent; baseline also lacks the new parser evidence files. These stderr bytes are not suppressed and are separate from fixture assertion totals.
+Historical validation files from v4.1-v4.4 preserved byte-for-byte.
+CI: NOT PERFORMED at packaging.
+Native Linux independent re-run: NOT PERFORMED.
+RUNTIME: NOT PERFORMED.
+REVIEW: independent human judgment PENDING.
+MERGE / PUBLICATION / AC-05 acceptance / ticket closure: NOT PERFORMED.
+Reproduce in candidate folder (isolated development host with bash/python3/awk/timeout):
+  bash -n sec01-secretbox-rollback-v4.sh
+  bash -n test-rollback-v4.sh
+  bash test-rollback-v4.sh ./sec01-secretbox-rollback-v4.sh
+  sha256sum -c SHA256SUMS
+Fixture uses synthetic kubectl/ss/hostname/awk only. These are not target-server execution logs.
+SHA256 matching proves file integrity and is reported separately from test success.
