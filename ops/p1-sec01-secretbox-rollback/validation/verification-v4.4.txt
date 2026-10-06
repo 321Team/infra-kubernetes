@@ -13,3 +13,8 @@
 - 가짜 kubectl 스텁 시험이다. 실제 kube-apiserver mirror Pod 의 상태 전이·`kubectl` 출력 형식·`timeout` 동작은 서버에서 검증되지 않았다.
 - Linux 서버가 아닌 Windows Git Bash 에서 실행했다. 독립 리뷰어가 Linux 에서 다시 실행하는 것을 권장한다.
 - 이 변경은 Runtime 승인이나 재시험 GO가 아니다.
+
+정정·재검증 (PR #66 독립 리뷰 B1 반영, 2026-10-06 23시)
+- SHA256SUMS 의 `.sh` 두 줄(sec01-secretbox-rollback-v4.sh, test-rollback-v4.sh)이 커밋된 바이트가 아니라 Windows 작업 사본(CRLF) 기준으로 계산되어 있었다. 작성자의 계산 실수이며 커밋된 LF 바이트 기준으로 다시 계산했다(`git show :경로 | sha256sum`). 새 값은 리뷰어가 계산한 값과 같다. `.gitattributes` 에 `*.sh text eol=lf` 를 추가했다.
+- 커밋될 LF 바이트를 그대로 내보낸 폴더(CRLF 0)에서 `sha256sum -c SHA256SUMS` 12/12 OK, fixture 246 PASS / 0 FAIL 을 다시 확인했다. 출력이 직전 실행(validation/fixture-results-v4.4.txt)과 한 글자도 다르지 않다.
+- 이 PC 의 WSL 은 가상화 미설치로 실행되지 않아 **Linux 실행은 하지 못했다.** 위 재검증은 Windows Git Bash(MSYS)이며, Linux 재실행은 독립 리뷰어에게 남는다(비차단 2).

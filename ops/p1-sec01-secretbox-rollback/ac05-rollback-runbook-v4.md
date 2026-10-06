@@ -206,5 +206,6 @@ printf 'etcd_rc=%s class_rc=%s\n' "${verify_rc[0]}" "${verify_rc[1]}"
 
 2026-10-06 rollback-test는 복원 재기동 관측 1초 뒤의 단회 Pod 조회에서 `Ready=false`가 읽혀 `RESULT: FAIL`이었다([결과 기록](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6008210758)). v4.4는 `post` 점검의 mirror Pod 확인만 `APISERVER_POD_WAIT_SEC`(기본 120초) deadline 안에서 반복하고, 정확한 이름·행 수(`EXPECT_APISERVER_PODS`, 선택 `APISERVER_POD_NAMES`)와 개별 호출 timeout(`CALL_TIMEOUT_SEC`, 기본 15초)을 검사한다. deadline 후에도 미충족이면 기존처럼 FAIL이며 마지막 관측 원본과 시도 기록(`post-apiserver-pods{.txt,.stderr,.rc}`, `post-apiserver-pods-attempts.txt`)을 남긴다. `pre` 점검은 단회·엄격하다.
 
+- 변수: `EXPECT_APISERVER_PODS`의 기본값은 `CP_IPS`의 단어 수(기본 3)이므로 현장에서 `CP_IPS`를 바꿔 넘기면 기대 행 수도 함께 바뀐다. `APISERVER_POD_NAMES`를 지정하면 그 이름 집합과 정확히 같아야 한다. 변경하면 실행 기록에 값을 남긴다.
 - 시간 예산: post 점검이 최대 약 120초 더 걸릴 수 있다. 11:45 복구 우선·12:00 회복 목표 계산에 포함한다.
 - 이 절은 소스 변경 기록이며 Runtime·재시험 GO가 아니다. 아래 §1~§12의 Gate, 중단 기준, 복구 절차는 v4.3과 같다.
