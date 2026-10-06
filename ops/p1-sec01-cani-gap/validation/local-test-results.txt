@@ -1,0 +1,21 @@
+PASS: 정상 TIER=A: 종료코드 0
+PASS: 정상: 53행 PASS, 기록 전용 2행
+PASS: 정상: 봉인 COMPLETE
+PASS: 정상: SHA256SUMS 검산 일치
+PASS: 모든 행에 RC 기록
+PASS: 행별 stdout/stderr/rc 원본 보존
+PASS: TIER=AB: 81행 + 기록 전용 2행
+PASS: yes + rc2: 종료코드 11
+PASS: yes+rc2 는 ERROR(PASS 아님)
+PASS: timeout: 종료코드 11
+PASS: timeout 은 TIMEOUT 행(rc124)
+PASS: no + rc0: 종료코드 11
+PASS: no+rc0 은 ERROR
+PASS: 기대 불일치: 종료코드 10
+PASS: 기대 no 인데 yes/rc0 은 FAIL
+PASS: kubectl version 실패여도 사전 점검 결과 유지(폴더 생성 후 진행): 종료코드 0
+PASS: 사전 점검(관리자 yes/rc0) 실패: 종료코드 2
+PASS: 사전 점검 실패 시 시험 미시작(completion 없음)
+PASS: TSV 쓰기 실패: 즉시 중단 종료코드 3
+PASS: 잘못된 TIER 는 거부(종료코드 3)
+합계: PASS=20 FAIL=0
