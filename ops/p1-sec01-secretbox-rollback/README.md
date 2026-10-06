@@ -11,7 +11,7 @@
 | `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.4-20261006` |
 | `test-rollback-v4.sh` | 가짜 클러스터(fixture) 시험. 스텁 `kubectl`·`ss`·`hostname`을 PATH에 두고 클러스터에는 접근하지 않는다 |
 | `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.4-20261006`) |
-| `validation/fixture-results-v4.4.txt` | 현행 **246 PASS / 0 FAIL**(v4.3의 231 + 추가 15). v4.1~v4.3 로그는 이력 보존 |
+| `validation/fixture-results-v4.4.txt` | 현행 **254 PASS / 0 FAIL**(v4.3의 231 + 추가 23). v4.1~v4.3 로그는 이력 보존 |
 | `SHA256SUMS` | 위 파일의 SHA-256(자기 자신 제외) |
 
 ## 실행 방법(승인된 변경창에서만, 대상 CP 콘솔 root)

@@ -393,7 +393,7 @@ apiserver_pods_eval() {  # $1=파일 $2=조회 rc -> 미충족 사유(비어 있
       print r }' "$f"
 }
 apiserver_pods_ready() {
-  local p="$1" wait="${2:-0}" start deadline attempt=0 rc reason="" now
+  local p="$1" wait="${2:-0}" start deadline attempt=0 rc parser_rc reason="" now
   start="$(date +%s)"; deadline=$((start+wait))
   : > "$OUT/$p-apiserver-pods-attempts.txt" || { fail "$p apiserver Pod 시도 기록 파일 생성 실패"; return 1; }
   while :; do
@@ -402,8 +402,12 @@ apiserver_pods_ready() {
       -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount \
       > "$OUT/$p-apiserver-pods.txt" 2> "$OUT/$p-apiserver-pods.stderr"; rc=$?
     printf '%s\n' "$rc" > "$OUT/$p-apiserver-pods.rc" || { fail "$p apiserver Pod rc 기록 실패"; return 1; }
-    reason="$(apiserver_pods_eval "$OUT/$p-apiserver-pods.txt" "$rc")"
-    printf '%s attempt=%s rc=%s %s\n' "$(date -u +%H:%M:%SZ)" "$attempt" "$rc" "${reason:-OK}" >> "$OUT/$p-apiserver-pods-attempts.txt" || { fail "$p apiserver Pod 시도 기록 실패"; return 1; }
+    # B2: 판정 파서 자체의 실패(awk 실행·입력 오류)를 "충족(빈 사유)"으로 오인하지 않는다. 종료코드·stderr 를 보존하고 즉시 FAIL 한다.
+    reason="$(apiserver_pods_eval "$OUT/$p-apiserver-pods.txt" "$rc" 2> "$OUT/$p-apiserver-pods-parser.stderr")"; parser_rc=$?
+    printf '%s\n' "$parser_rc" > "$OUT/$p-apiserver-pods-parser.rc" || { fail "$p apiserver Pod 파서 rc 기록 실패"; return 1; }
+    [ "$parser_rc" -eq 0 ] || reason="파서 실행 실패(rc=$parser_rc)"
+    printf '%s attempt=%s rc=%s parser_rc=%s %s\n' "$(date -u +%H:%M:%SZ)" "$attempt" "$rc" "$parser_rc" "${reason:-OK}" >> "$OUT/$p-apiserver-pods-attempts.txt" || { fail "$p apiserver Pod 시도 기록 실패"; return 1; }
+    [ "$parser_rc" -eq 0 ] || { fail "$p apiserver Pod $reason"; return 1; }
     [ -z "$reason" ] && return 0
     now="$(date +%s)"; [ "$now" -ge "$deadline" ] && break
     sleep "$POLL"
