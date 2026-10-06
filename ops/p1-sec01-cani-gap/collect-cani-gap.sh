@@ -110,7 +110,7 @@ case "$TIER" in
 esac
 EXPECTED_N=$(printf '%s\n' "$ROWS" | grep -c .)
 {
-  echo "# rev: $REV"; echo "# tier: $TIER expected_rows: $EXPECTED_N (+1 record-only /metrics)"
+  echo "# rev: $REV"; echo "# tier: $TIER expected_rows: $EXPECTED_N (+2 record-only: M001·M002)"
   echo "# collected_at_utc: $(date -u +%FT%TZ)"; echo "# host: $(hostname)"
   echo "# script_sha256: $(sha256sum "$0" | cut -d' ' -f1)"
   echo "# check_timeout_sec: $CHECK_TIMEOUT_SEC"
@@ -132,9 +132,10 @@ check() {  # id exp sa ns verb res sub   (ns "-" => -A, "NONRES" => 비리소스
   args=(auth can-i "$verb" "$res" --as="$sa")
   if [ "$ns" = "-" ]; then args+=(-A); elif [ "$ns" != "NONRES" ]; then args+=(-n "$ns"); fi
   [ -n "$sub" ] && args+=(--subresource="$sub")
-  out="$(timeout "${CHECK_TIMEOUT_SEC}s" $KUBECTL "${args[@]}" 2>"$OUT/raw/$id.stderr")"; rc=$?
-  printf '%s\n' "$out" > "$OUT/raw/$id.stdout" || die "raw 쓰기 실패 $id"
-  printf '%s\n' "$rc" > "$OUT/raw/$id.rc" || die "raw 쓰기 실패 $id"
+  timeout "${CHECK_TIMEOUT_SEC}s" $KUBECTL "${args[@]}" >"$OUT/raw/$id.stdout" 2>"$OUT/raw/$id.stderr"; rc=$?
+  [ -f "$OUT/raw/$id.stdout" ] && [ -f "$OUT/raw/$id.stderr" ] || die "raw 출력 파일 생성 실패 $id"
+  printf '%s\n' "$rc" > "$OUT/raw/$id.rc" || die "raw rc 쓰기 실패 $id"
+  out="$(cat "$OUT/raw/$id.stdout")" || die "raw 읽기 실패 $id"
   err="$(head -c 200 "$OUT/raw/$id.stderr" | tr '\n\t' '  ')"
   if [ "$rc" = 124 ]; then act=TIMEOUT
   elif [ "$out" = yes ] && [ "$rc" = 0 ]; then act=yes
@@ -161,6 +162,8 @@ for k in clusterrolebindings rolebindings clusterroles roles; do
 done
 timeout "${CHECK_TIMEOUT_SEC}s" $KUBECTL get clusterrolebindings -o json > "$OUT/21-clusterrolebindings.json" 2> "$OUT/21-clusterrolebindings.stderr"; echo $? > "$OUT/21-clusterrolebindings.rc"
 
+# 보조 수집(Binding/Role) 의 비0 RC 개수: 판정에는 쓰지 않지만 summary·completion 에 노출한다
+AUX=0; for f in "$OUT"/20-*.rc "$OUT"/21-*.rc; do [ "$(cat "$f" 2>/dev/null)" = 0 ] || AUX=$((AUX+1)); done
 # 행 누락·중복 검사
 GOT=$(awk -F'\t' 'NR>1&&$1 ~ /^R/' "$R" | wc -l)
 UNIQ=$(awk -F'\t' 'NR>1{print $1}' "$R" | sort | uniq | wc -l)
@@ -172,7 +175,7 @@ RC=0; STATUS=COMPLETE
 [ "$E" -gt 0 ] && RC=11
 if [ "$GOT" != "$EXPECTED_N" ] || [ "$UNIQ" != "$TOTAL" ]; then RC=12; STATUS=INCOMPLETE; fi
 {
-  echo "EXPECTED=$EXPECTED_N GOT=$GOT TOTAL=$TOTAL UNIQUE_IDS=$UNIQ PASS=$P FAIL=$F ERROR_OR_TIMEOUT=$E RECORD_ONLY=$O"
+  echo "EXPECTED=$EXPECTED_N GOT=$GOT TOTAL=$TOTAL UNIQUE_IDS=$UNIQ PASS=$P FAIL=$F ERROR_OR_TIMEOUT=$E RECORD_ONLY=$O AUX_RC_NONZERO=$AUX"
   awk -F'\t' 'NR>1&&($2=="FAIL"||$2=="ERROR"||$2=="TIMEOUT"){print $2 ": " $1 " " $6 " " $8 " " $9 " " $10 " (expect " $3 ", actual " $4 ", rc " $5 ")"}' "$R"
 } | tee "$OUT/99-summary-provisional.txt" || die "요약 쓰기 실패"
 
@@ -182,6 +185,9 @@ SEAL=COMPLETE
 tar czf "$OUT.tar.gz" "$OUT" 2>"$OUT.tar.err" || SEAL=FAILED
 sha256sum "$OUT.tar.gz" > "$OUT.tar.gz.sha256" 2>/dev/null || SEAL=FAILED
 [ "$SEAL" = FAILED ] && { RC=13; echo "봉인 실패: 이 실행을 완료로 보고하지 않는다" >&2; }
-{ echo "COLLECTOR_STATUS=$STATUS"; echo "SEAL_STATUS=$SEAL"; echo "EXIT_CODE=$RC"; echo "ARCHIVE=$OUT.tar.gz"; } > "$OUT.completion.txt"
-cat "$OUT.completion.txt"; cat "$OUT.tar.gz.sha256" 2>/dev/null
+{ echo "COLLECTOR_STATUS=$STATUS"; echo "SEAL_STATUS=$SEAL"; echo "EXIT_CODE=$RC"; echo "AUX_RC_NONZERO=$AUX"; echo "ARCHIVE=$OUT.tar.gz"; } > "$OUT.completion.txt" || die "완료 기록 쓰기 실패"
+cat "$OUT.completion.txt" || die "완료 기록 출력 실패"
+if [ "$SEAL" = COMPLETE ]; then
+  cat "$OUT.tar.gz.sha256" || die "archive sidecar 출력 실패"
+fi
 exit $RC

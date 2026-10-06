@@ -54,18 +54,18 @@ KUBECTL='sudo kubectl --kubeconfig=/etc/kubernetes/admin.conf' TIER=AB bash coll
 | 12 | 행 누락·ID 중복 (`COLLECTOR_STATUS=INCOMPLETE`) |
 | 13 | 봉인(`SHA256SUMS`·`tar`·sidecar) 실패 |
 | 2 | 사전 점검 실패(관리자 `can-i` yes/rc0, 가짜 SA no/rc1) — 시험 시작 안 함 |
-| 3 | 파일 쓰기 실패·잘못된 `TIER` — 즉시 중단 |
+| 3 | 파일 쓰기 실패(결과 TSV, raw 원본, **완료 기록 `*.completion.txt`**)·잘못된 `TIER` — 즉시 중단 |
 
-ERROR·TIMEOUT은 FAIL과 **별도 집계**하고 비0으로 끝난다. `COLLECTOR_STATUS`/`SEAL_STATUS`/`EXIT_CODE`는 아카이브 밖 `*.completion.txt`에 쓴다. 이 값은 AC 판정이 아니라 Review Owner 판단의 입력이다.
+ERROR·TIMEOUT은 FAIL과 **별도 집계**하고 비0으로 끝난다. `COLLECTOR_STATUS`/`SEAL_STATUS`/`EXIT_CODE`/`AUX_RC_NONZERO`는 아카이브 밖 `*.completion.txt`에 쓴다. 완료 기록을 쓰지 못하면 성공으로 끝내지 않고 비0(3)으로 종료한다. 보조 수집(Binding/Role, `20-*`·`21-*`)의 비0 RC 개수는 `AUX_RC_NONZERO`로 summary·completion에 노출한다(판정·종료코드에는 쓰지 않으므로 실행 후 해당 `.rc`와 적용 Role 연결을 별도로 확인한다). stdout은 파일로 직접 받아 수신 바이트를 그대로 보존한다. 이 값은 AC 판정이 아니라 Review Owner 판단의 입력이다.
 
 ## 시험
 
-`bash test-cani-gap-collector.sh ./collect-cani-gap.sh` — `kubectl` 스텁만 쓰는 로컬 시험이며 클러스터·네트워크에 접근하지 않는다. **20 PASS / 0 FAIL**(`validation/local-test-results.txt`). 다룬 경우: 정상(Tier A 53행·Tier AB 81행), 행별 RC·원본 보존, `SHA256SUMS` 검산, yes+rc2, timeout, no+rc0, 기대 불일치 FAIL, 사전 점검 실패(시험 미시작), `kubectl version` 실패, TSV 쓰기 실패, 잘못된 `TIER`.
+`bash test-cani-gap-collector.sh ./collect-cani-gap.sh` — `kubectl` 스텁만 쓰는 로컬 시험이며 클러스터·네트워크에 접근하지 않는다. **28 PASS / 0 FAIL**(`validation/local-test-results.txt`). 다룬 경우: 정상(Tier A 53행·Tier AB 81행), 행별 RC·원본 보존, `SHA256SUMS` 검산, yes+rc2, timeout, no+rc0, 기대 불일치 FAIL, 사전 점검 실패(시험 미시작), `kubectl version` 실패, TSV 쓰기 실패, 잘못된 `TIER`, **완료 기록 쓰기 실패(B1)**, **봉인(tar) 실패(종료코드 13)**, 보조 수집 RC 노출, stdout 바이트 보존. B1 시험은 수정 전 소스에서는 실패(종료코드 0)함을 확인했다.
 
 ## 한계
 
 - **서버 실행 전이다.** 실제 `kubectl` 출력 형식(로캘 포함)과 `timeout` 동작은 서버에서 검증되지 않았다.
-- 봉인(`tar`) 실패와 행 누락·중복 경로(종료코드 12, 13)는 코드로 구현했으나 **로컬 시험으로 재현하지 못했다.**
+- 행 누락·중복 경로(종료코드 12)는 코드로 구현했으나 **로컬 시험으로 재현하지 못했다.** 봉인 실패(13)와 완료 기록 쓰기 실패(3)는 시험으로 확인했다.
 - `sudo`가 비밀번호를 요구하면 `timeout` 아래에서 막힐 수 있어 실행 전 `sudo -v`가 필요하다.
 - 한 시점 결과이다. Admission(PSA 등)·SA 외 주체(사용자·그룹)·TokenRequest 정책은 범위 밖이다.
 - 기존 `collect-cani-core36*.sh`와 증적은 수정하지 않았다.

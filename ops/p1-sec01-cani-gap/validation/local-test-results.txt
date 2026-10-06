@@ -18,4 +18,12 @@ PASS: 사전 점검(관리자 yes/rc0) 실패: 종료코드 2
 PASS: 사전 점검 실패 시 시험 미시작(completion 없음)
 PASS: TSV 쓰기 실패: 즉시 중단 종료코드 3
 PASS: 잘못된 TIER 는 거부(종료코드 3)
-합계: PASS=20 FAIL=0
+PASS: B1: 완료 기록 쓰기 실패는 비0(종료코드 3)
+PASS: B1: 완료 기록 실패 사유 출력
+PASS: 봉인(tar) 실패: 종료코드 13
+PASS: 봉인 실패는 completion 에 SEAL_STATUS=FAILED
+PASS: 보조 수집(clusterroles) 실패: 판정 종료코드는 유지(0)
+PASS: 보조 수집 비0 RC 가 summary 에 노출
+PASS: 보조 수집 비0 RC 가 completion 에 노출
+PASS: 수신 바이트 보존: stdout 끝의 빈 줄 유지
+합계: PASS=28 FAIL=0
