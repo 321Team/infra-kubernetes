@@ -18,3 +18,12 @@
 - SHA256SUMS 의 `.sh` 두 줄(sec01-secretbox-rollback-v4.sh, test-rollback-v4.sh)이 커밋된 바이트가 아니라 Windows 작업 사본(CRLF) 기준으로 계산되어 있었다. 작성자의 계산 실수이며 커밋된 LF 바이트 기준으로 다시 계산했다(`git show :경로 | sha256sum`). 새 값은 리뷰어가 계산한 값과 같다. `.gitattributes` 에 `*.sh text eol=lf` 를 추가했다.
 - 커밋될 LF 바이트를 그대로 내보낸 폴더(CRLF 0)에서 `sha256sum -c SHA256SUMS` 12/12 OK, fixture 246 PASS / 0 FAIL 을 다시 확인했다. 출력이 직전 실행(validation/fixture-results-v4.4.txt)과 한 글자도 다르지 않다.
 - 이 PC 의 WSL 은 가상화 미설치로 실행되지 않아 **Linux 실행은 하지 못했다.** 위 재검증은 Windows Git Bash(MSYS)이며, Linux 재실행은 독립 리뷰어에게 남는다(비차단 2).
+
+B2 반영 (PR #66 Review Owner 보완 리뷰, 2026-10-07 00시)
+- 결함: `apiserver_pods_eval`(awk 판정 파서)가 실행·입력 오류로 nonzero 종료하고 stdout 에 사유를 쓰지 못해도 command substitution 의 종료코드를 버려 빈 사유를 "충족"으로 처리했다(pre GO / post PASS 오인 가능). 첫 v4.4(64979df)에서 생긴 회귀이며 작성자의 실수다.
+- 수정: 파서 종료코드·stderr 를 `$p-apiserver-pods-parser.{rc,stderr}` 로 보존하고, nonzero 면 "파서 실행 실패(rc=N)"로 즉시 FAIL 한다(pre 는 NO-GO·변경 0, post 는 FAIL 이며 원복·UID 정리·봉인은 유지). 시도 기록에 `parser_rc=` 를 남긴다. 리뷰어가 제안한 diff 와 같다.
+- 시험: awk 래퍼로 파서 실패(rc42, 빈 stdout)를 주입하는 P9_parser_pre(4 단언), P10_parser_post(4 단언) 추가. **수정 전(007c4a1) 소스에서는 새 시험 8개 중 5개가 실패**하고 수정본에서는 모두 통과한다.
+- 결과: LF 사본(CR 0)에서 fixture **254 PASS / 0 FAIL**(기존 246 + 추가 8, validation/fixture-results-v4.4.txt). 기존 246개 단언은 수정하지 않았다.
+- runbook §13 시간 예산 정정(비차단): 최악 `APISERVER_POD_WAIT_SEC`(120초) + 마지막 호출 15초 + POLL 5초 정도, 11:45/12:00은 10/6 과거 창의 값임을 명시했다.
+- 한계: 스텁·Windows Git Bash(MSYS) 시험이다. **Linux 실행·전체 fixture 의 독립 재실행은 하지 못했다.**
+

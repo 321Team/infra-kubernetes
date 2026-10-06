@@ -27,7 +27,7 @@
 #
 # FIXTURE=1 은 가짜 클러스터(스텁) 시험 전용이다. 운영에서 사용하지 않는다.
 set -uo pipefail
-REV="v4.4-b2-20261006"
+REV="v4.4-20261006"
 MODE="${1:-}"
 FIXTURE="${FIXTURE:-0}"
 ENC="${ENC:-/etc/kubernetes/enc/encryption-config.yaml}"
@@ -402,7 +402,7 @@ apiserver_pods_ready() {
       -o custom-columns=NAME:.metadata.name,READY:.status.containerStatuses[0].ready,RESTARTS:.status.containerStatuses[0].restartCount \
       > "$OUT/$p-apiserver-pods.txt" 2> "$OUT/$p-apiserver-pods.stderr"; rc=$?
     printf '%s\n' "$rc" > "$OUT/$p-apiserver-pods.rc" || { fail "$p apiserver Pod rc 기록 실패"; return 1; }
-    # 파서 실행 실패는 빈 결과(Ready 충족)와 구분한다. 즉시 FAIL, 재시도로 덮지 않는다.
+    # B2: 판정 파서 자체의 실패(awk 실행·입력 오류)를 "충족(빈 사유)"으로 오인하지 않는다. 종료코드·stderr 를 보존하고 즉시 FAIL 한다.
     reason="$(apiserver_pods_eval "$OUT/$p-apiserver-pods.txt" "$rc" 2> "$OUT/$p-apiserver-pods-parser.stderr")"; parser_rc=$?
     printf '%s\n' "$parser_rc" > "$OUT/$p-apiserver-pods-parser.rc" || { fail "$p apiserver Pod 파서 rc 기록 실패"; return 1; }
     [ "$parser_rc" -eq 0 ] || reason="파서 실행 실패(rc=$parser_rc)"

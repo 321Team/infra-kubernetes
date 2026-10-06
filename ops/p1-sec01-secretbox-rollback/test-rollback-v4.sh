@@ -5,7 +5,6 @@
 SCRIPT="$(cd "$(dirname "${1:-./sec01-secretbox-rollback-v4.sh}")" && pwd)/$(basename "${1:-./sec01-secretbox-rollback-v4.sh}")"
 PASS=0; FAILN=0; RESULTS=()
 export FIXTURE_PYTHON="$(command -v python3)"
-export FIXTURE_AWK="$(command -v awk)"
 
 make_fixture() {   # $1 = dir
   local FX="$1"
@@ -31,6 +30,21 @@ Y
 #!/usr/bin/env bash
 [ "${1:-}" = "-I" ] && { echo "10.1.93.104 "; exit 0; }
 echo k8s-control03
+S
+  cat > "$FX/bin/awk" <<'S'
+#!/usr/bin/env bash
+# B2 시험용: apiserver Pod 판정 파서(-v exp_n=...)에만 실패를 주입한다. 나머지 awk 호출은 실제 awk 로 위임한다.
+step="$(cat "$STEP_FILE" 2>/dev/null)"; phase=other; [[ "$step" == cleanup || "$step" == audit_after ]] && phase=post; [ -z "$step" ] && phase=pre
+for arg in "$@"; do
+  case "$arg" in
+    */pre-apiserver-pods.txt) phase=pre ;;
+    */post-apiserver-pods.txt) phase=post ;;
+  esac
+done
+if [[ " $* " == *" exp_n="* ]] && { [ "${FAULT:-}:$phase" = parser_pre:pre ] || [ "${FAULT:-}:$phase" = parser_post:post ]; }; then
+  echo "awk: injected parser failure" >&2; exit 42
+fi
+REAL="$(PATH="${PATH#"$FX"/bin:}" command -v awk)"; exec "$REAL" "$@"
 S
   cat > "$FX/bin/ss" <<'S'
 #!/usr/bin/env bash
@@ -230,19 +244,6 @@ WRAP
 #!/usr/bin/env bash
 [ "${FAULT:-}" = no_parser ] && exit 127
 exec "$FIXTURE_PYTHON" "$@"
-WRAP
-  # B2: 실제 awk 바이너리 실패를 Pod 파서 호출에만 주입한다.
-  # kubectl rc=0, parser stdout 없음/rc=42; 다른 awk 호출은 원본으로 전달한다.
-  cat > "$FX/bin/awk" <<'WRAP'
-#!/usr/bin/env bash
-for arg in "$@"; do
-  case "${FAULT:-}:$arg" in
-    pods_parser_pre:*/pre-apiserver-pods.txt|pods_parser_post:*/post-apiserver-pods.txt)
-      echo 'fixture apiserver parser failed (rc=42)' >&2
-      exit 42 ;;
-  esac
-done
-exec "$FIXTURE_AWK" "$@"
 WRAP
   chmod +x "$FX/bin/"*
 }
@@ -567,12 +568,26 @@ run_case P8_badnames rollback-test APISERVER_POD_NAMES="kube-apiserver-k8s-contr
 check P8_badnames "기대 이름 집합과 다르면 FAIL" $([ "$RC" -ne 0 ] && not_pass && has "기대 Pod 없음:kube-apiserver-k8s-control09"; echo $?)
 rm -rf "$CASE_FX"
 
+# ---- B2: 판정 파서 자체의 실패를 OK 로 처리하지 않는다 (PR #66 독립 리뷰 B2) ----
+run_case P9_parser_pre rollback-test FAULT=parser_pre
+check P9_parser_pre "pre 파서 오류(rc42·빈 stdout)는 NO-GO(rc≠0, 변경 0)" $([ "$RC" -ne 0 ] && not_pass && enc_same && manifest_ok && [ ! -e "$CASE_FX/state/was_down" ] && no_leftover; echo $?)
+check P9_parser_pre "파서 rc(42)와 stderr 보존" $([ "$(cat "$RUNDIR/pre-apiserver-pods-parser.rc")" = 42 ] && grep -q 'injected parser failure' "$RUNDIR/pre-apiserver-pods-parser.stderr"; echo $?)
+check P9_parser_pre "시도 기록에 parser_rc=42 와 사유, OK 로 기록되지 않음" $(grep -q 'parser_rc=42 파서 실행 실패(rc=42)' "$RUNDIR/pre-apiserver-pods-attempts.txt" && ! grep -q ' OK$' "$RUNDIR/pre-apiserver-pods-attempts.txt"; echo $?)
+check P9_parser_pre "단회 즉시 실패(재시도로 덮지 않음, 시도 1회)" $([ "$(wc -l < "$RUNDIR/pre-apiserver-pods-attempts.txt")" = 1 ]; echo $?)
+rm -rf "$CASE_FX"
+run_case P10_parser_post rollback-test FAULT=parser_post
+check P10_parser_post "post 파서 오류는 FAIL(rc≠0, RESULT: PASS 아님)" $([ "$RC" -ne 0 ] && not_pass && has "파서 실행 실패(rc=42)"; echo $?)
+check P10_parser_post "원 설정 복원·시험 Secret 정리·봉인 유지" $(enc_same && manifest_ok && no_leftover && [ -s "$RUNDIR.evidence.tar.gz" ]; echo $?)
+check P10_parser_post "파서 rc(42)와 stderr 보존, 시도 기록에 parser_rc=42" $([ "$(cat "$RUNDIR/post-apiserver-pods-parser.rc")" = 42 ] && grep -q 'injected parser failure' "$RUNDIR/post-apiserver-pods-parser.stderr" && grep -q 'parser_rc=42' "$RUNDIR/post-apiserver-pods-attempts.txt"; echo $?)
+check P10_parser_post "조회 자체는 정상(kubectl rc 0)이라 조회 실패와 구분됨" $([ "$(cat "$RUNDIR/post-apiserver-pods.rc")" = 0 ]; echo $?)
+rm -rf "$CASE_FX"
+
 # ---- B2: Pod 파서 nonzero/빈 stdout 은 GO/PASS 로 바꾸지 않는다 ----
 parser_evidence_ok() {
   local phase="$1"
   [ "$(cat "$RUNDIR/$phase-apiserver-pods.rc")" = 0 ] &&
   [ "$(cat "$RUNDIR/$phase-apiserver-pods-parser.rc")" = 42 ] &&
-  grep -q 'fixture apiserver parser failed (rc=42)' "$RUNDIR/$phase-apiserver-pods-parser.stderr" &&
+  grep -q 'awk: injected parser failure' "$RUNDIR/$phase-apiserver-pods-parser.stderr" &&
   grep -q 'parser_rc=42' "$RUNDIR/$phase-apiserver-pods-attempts.txt" &&
   [ "$(wc -l < "$RUNDIR/$phase-apiserver-pods-attempts.txt")" -eq 1 ] &&
   ! grep -q ' OK$' "$RUNDIR/$phase-apiserver-pods-attempts.txt"
@@ -587,7 +602,7 @@ parser_seal_ok() {
 }
 for spec in "P9_parser_precheck:precheck" "P10_parser_gate:rollback-test"; do
   IFS=: read -r name mode <<<"$spec"
-  run_case "$name" "$mode" FAULT=pods_parser_pre
+  run_case "$name" "$mode" FAULT=parser_pre
   check "$name" "파서 rc42/빈 stdout: nonzero, GO/PASS 금지" $([ "$RC" -ne 0 ] && ! has 'RESULT: GO' && not_pass; echo $?)
   check "$name" "파서 실패 원인 보존" $(has '파서 실행 실패(rc=42)'; echo $?)
   check "$name" "조회 rc0와 파서 rc42·stderr·단회 시도 구분" $(parser_evidence_ok pre; echo $?)
@@ -595,14 +610,14 @@ for spec in "P9_parser_precheck:precheck" "P10_parser_gate:rollback-test"; do
   check "$name" "실패 증적 봉인·SHA256 검증과 파서 기록 포함" $(parser_seal_ok pre; echo $?)
   rm -rf "$CASE_FX"
 done
-run_case P11_parser_post rollback-test FAULT=pods_parser_post
+run_case P11_parser_post rollback-test FAULT=parser_post
 check P11_parser_post "사후 파서 rc42: nonzero/RESULT FAIL, PASS 금지" $([ "$RC" -ne 0 ] && has 'RESULT: FAIL' && not_pass && has '파서 실행 실패(rc=42)'; echo $?)
 check P11_parser_post "조회 rc0와 파서 rc42·stderr·단회 시도 구분" $(parser_evidence_ok post; echo $?)
 check P11_parser_post "변경 후 ENC 원복/manifest 복구와 restore 재기동 증거" $(enc_same && manifest_ok && [ -s "$RUNDIR/restart-restore-observed.txt" ] && [ -s "$RUNDIR/00-orig-sha256.txt" ]; echo $?)
 check P11_parser_post "소유 Secret a/b/c 모두 UID precondition 정리, 이름 삭제 금지" $(no_leftover && raw_attempted a && raw_attempted b && raw_attempted c && raw_body_ok && no_name_delete; echo $?)
 check P11_parser_post "복구·정리 후 실패 증적 봉인/SHA256 검증" $(parser_seal_ok post; echo $?)
 rm -rf "$CASE_FX"
-run_case P12_parser_postcheck postcheck FAULT=pods_parser_post
+run_case P12_parser_postcheck postcheck FAULT=parser_post
 check P12_parser_post "읽기 전용 사후 점검도 nonzero/FAIL, PASS 금지" $([ "$RC" -ne 0 ] && has 'RESULT: FAIL' && not_pass; echo $?)
 check P12_parser_post "사후 파서 rc42·stderr·단회 시도 보존" $(parser_evidence_ok post; echo $?)
 check P12_parser_post "읽기 전용 상태 유지, 변경/재기동/Secret 생성 0" $(enc_same && manifest_ok && [ "$(cat "$CASE_FX/state/gen")" = 1 ] && [ ! -e "$CASE_FX/state/uidseq" ]; echo $?)

@@ -1,17 +1,18 @@
-# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.4-b2)
+# P1-SEC-01 AC-05 Secretbox rollback 증적 도구 (v4.4)
 
 - 책임: [#19 P1-SEC-01](https://github.com/321Team/fds-project-baseline/issues/19) AC "Secret encryption·backup·rotation·**rollback**" 중 rollback Runtime 증적([CR #125](https://github.com/321Team/fds-project-baseline/issues/125)에서 P1 필수·미충족으로 남은 항목).
 - 검토 이력: v3 → [소스 차단 B1~B3 5986339672](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986339672) → v4 → [재리뷰 5986833302](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5986833302)(B3를 서버 측 UID precondition으로 요구, 이 경로 지정) → v4.1 → v4.2 → **v4.3(B59-3 독립 리뷰 반영)**.
-- 상태: **이 B2 후보는 Runtime 미실행이다.** 이 PR의 병합·fixture PASS는 Runtime PASS나 AC credit이 아니며, 설정 변경·apiserver 재기동·변경창을 승인하지 않는다. 실행은 PMO/QA 승인 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
+- 상태: **Runtime 코드다. 운영 클러스터에서 한 번도 실행하지 않았다.** 이 PR의 병합·fixture PASS는 Runtime PASS나 AC credit이 아니며, 설정 변경·apiserver 재기동·변경창을 승인하지 않는다. 실행은 PMO/QA 승인 뒤에만 하고, 실행 SHA는 이 PR의 독립 리뷰 완료 SHA와 정확히 같아야 한다.
 
 ## 파일
 
 | 파일 | 역할 |
 |---|---|
-| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.4-b2-20261006` |
+| `sec01-secretbox-rollback-v4.sh` | `precheck`(읽기 전용) / `rollback-test`(대상 CP 1대 apiserver만 재기동, `CONFIRM=YES`) / `postcheck`(읽기 전용). 내부 revision `v4.4-20261006` |
 | `test-rollback-v4.sh` | 가짜 클러스터(fixture) 시험. 스텁 `kubectl`·`ss`·`hostname`을 PATH에 두고 클러스터에는 접근하지 않는다 |
-| `ac05-rollback-runbook-v4.md` | 시험 절차서(v4.4 + B2 보완) |
-| `validation/fixture-results-v4.4-b2.txt` | B2 후보 전체 fixture 결과. 기존 246 단언을 유지하고 파서 실패 19 단언을 추가. v4.1~v4.4 로그는 이력 보존 |
+| `ac05-rollback-runbook-v4.md` | 시험 절차서(rev `v4.4-20261006`) |
+| `validation/fixture-results-v4.4.txt` | PR66 `dfb9a3c` 작성자의 전체 254 PASS/0 FAIL 이력. 통합 fixture는 273 단언이며 전체273은 미실행 |
+| `validation/parser-consolidation-20261007.txt` | 통합 후보에서 실제 재실행한 파서 27 PASS/0 FAIL. 이전 HEAD의 전체 결과와 구분 |
 | `SHA256SUMS` | 위 파일의 SHA-256(자기 자신 제외) |
 
 ## 실행 방법(승인된 변경창에서만, 대상 CP 콘솔 root)
@@ -74,25 +75,20 @@ fixture 시험(로컬, 약 7분): `bash test-rollback-v4.sh ./sec01-secretbox-ro
 - 변경하지 않은 것: 복원·정리 로직, B59-3 탐지, 봉인, Gate, 다른 점검 항목.
 
 
-## v4.4-b2-20261006 — Pod 파서 실패를 정상으로 판정하지 않음
+## 2026-10-07 B2 소스 통합 및 추가 fixture
 
-근거: [PR66 B2 검토](https://github.com/321Team/infra-kubernetes/pull/66#issuecomment-6018117821),
-[#19 재시험 전제](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6018175392).
-기준 소스는 PR66 HEAD `007c4a11b006404f8dfe6603b1c90e7a6a3b8e6a`이다.
+기준 실행 소스는 PR66 `dfb9a3c9d10baf22c2efe7143f1d5538eb4bff29`이며 script SHA256
+`e80d8936cd6e846ebc04d999e9df68052497fbccfc7786d3f5bf8bd3584bb61e`, 내부 REV `v4.4-20261006`을 그대로 유지한다.
+PR67과 PR66에 같은 수정이 들어온 뒤 [검토 5430584477](https://github.com/321Team/infra-kubernetes/pull/67#pullrequestreview-5430584477)의 통합안 1을 적용했다.
+PR67은 이제 추가 fixture·증적 보완이며 원래 작성자 브랜치의 실행 스크립트를 바꾸지 않는다.
 
-- `kubectl` rc=0이어도 `apiserver_pods_eval`이 nonzero이면 즉시 FAIL한다.
-  파서 stdout이 빈 경우에도 Ready 충족으로 처리하지 않는다.
-- 조회 rc와 파서 rc를 분리해 기록한다. `<phase>-apiserver-pods-parser.rc`,
-  `<phase>-apiserver-pods-parser.stderr`, 시도 기록의 `parser_rc`를 함께 보존한다.
-  파서 실행 실패는 일시적 NotReady와 구분하여 재시도하지 않는다.
-- 추가 fixture: precheck NO-GO, rollback-test 시작 Gate 차단(변경/재기동/Secret 생성 0),
-  변경 후 사후 FAIL과 원복·UID 정리·증적 봉인, 읽기 전용 postcheck FAIL.
-  주입 조건은 실제 awk 스텁의 rc=42·빈 stdout이며 나머지 awk 호출은 정상 바이너리로 전달한다.
-- 원본 소스에 새 fixture를 적용한 재현 로그, 수정본의 전체 fixture 원본 로그,
-  실행 시각·명령·종료 코드·환경·해시를 `validation/*v4.4-b2*`에 보존한다.
+- 기존 254 단언을 그대로 두고 precheck/rollback Gate/post 실패 후 원복·UID 정리·봉인/read-only postcheck의 19 단언을 추가했다.
+- awk 스텁은 파서 파일의 pre/post 접두어를 반영하므로 읽기 전용 postcheck에도 정확히 실패를 주입한다. 다른 awk 호출은 기존처럼 실제 바이너리로 전달한다.
+- 현재 실제 재실행은 파서 **27 PASS/0 FAIL**와 STATIC3개다. 선택 실행은 전체 fixture의 같은 helper와 파서 절을 추출해 쓰며 ONLY 미선택 절의 진단 잡음을 피한다.
+- 전체 통합 fixture **273개는 미실행**이다. PR66 작성자254와 옛 PR67 `3270aac`의 전체265 결과는 각각 해당 HEAD의 이력이다.
+  `validation/*v4.4-b2*`는 옛3270 후보의 source SHA `df915e72...`에 결속된 원본이며 현재 실행 번들 해시로 사용하지 않는다.
+- 기존3270과 현재dfb9 소스는 전체 주석 행과 REV 대입만 제외하면 모든 실행 행이 일치한다. 기존 영향 없는 회귀 결과는 이 근거로 재사용하며 새 전체273 실행으로 표시하지 않는다.
+- 상세 명령/환경/시각/종료코드/해시/재사용 비교는 `validation/*consolidation-20261007*`에 기록했다. 현재 소스·runbook 및 기존 원본 로그는 바이트 그대로다.
 
-이 후보의 STATIC/MOCK 결과는 Linux 독립 재실행, CI, Runtime 또는 AC-05 인수 증적을 대신하지 않는다.
-이 보완 자체는 Runtime 미실행이다. 10월 7일 13:00은 제안된 재시험 목표이며
-[운영안](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6017468611)에 대한
-Review Owner의 별도 GO가 필요하다. 문서 내 과거 창의 시각이나 기존 승인을 새 창의 승인으로 사용하지 않는다.
-AI 사용: CODEX_ASSISTED. 새 HEAD에 대한 독립 판단·병합·현장 GO는 별도 단계다.
+새 HEAD에 대한 사람의 독립 판단과 최종 승인·원 PR 반영·병합·현장 재시험 GO는 각각 별도다.
+이 문서와 모의시험만으로 AC-05 충족이나 시험 승인으로 표시하지 않는다. AI 사용: CODEX_ASSISTED.
