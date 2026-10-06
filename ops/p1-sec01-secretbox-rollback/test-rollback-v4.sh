@@ -31,6 +31,15 @@ Y
 [ "${1:-}" = "-I" ] && { echo "10.1.93.104 "; exit 0; }
 echo k8s-control03
 S
+  cat > "$FX/bin/awk" <<'S'
+#!/usr/bin/env bash
+# B2 시험용: apiserver Pod 판정 파서(-v exp_n=...)에만 실패를 주입한다. 나머지 awk 호출은 실제 awk 로 위임한다.
+step="$(cat "$STEP_FILE" 2>/dev/null)"; phase=other; [[ "$step" == cleanup || "$step" == audit_after ]] && phase=post; [ -z "$step" ] && phase=pre
+if [[ " $* " == *" exp_n="* ]] && { [ "${FAULT:-}:$phase" = parser_pre:pre ] || [ "${FAULT:-}:$phase" = parser_post:post ]; }; then
+  echo "awk: injected parser failure" >&2; exit 42
+fi
+REAL="$(PATH="${PATH#"$FX"/bin:}" command -v awk)"; exec "$REAL" "$@"
+S
   cat > "$FX/bin/ss" <<'S'
 #!/usr/bin/env bash
 # 관측 오류 주입: ss_error(rc!=0), ss_empty(rc=0 이지만 출력 없음)
@@ -62,7 +71,24 @@ case "${args[0]:-} ${args[1]:-}" in
   "get --raw=/readyz") if self_down; then echo "connection refused" >&2; exit 1; fi; printf 'ok'; exit 0 ;;
   "config view") echo -n "${FX_KUBECONFIG_SERVER:-https://10.1.93.109:6443}"; exit 0 ;;
   "get pod") echo -n "containerd://cid-$(cat "$ST/gen")"; exit 0 ;;
-  "get pods") echo "NAME READY RESTARTS"; echo "kube-apiserver-k8s-control03 true 0"; exit 0 ;;
+  "get pods")
+    # v4.4: 3 CP mirror Pod. FAULT 로 post(step=cleanup/audit_after)·pre(step 비어 있음) 구간에 결함을 주입한다.
+    phase=other; [[ "$step" == cleanup || "$step" == audit_after ]] && phase=post; [ -z "$step" ] && phase=pre
+    r3=true; rows=3; c=0
+    if [ "$phase" = post ]; then c=$(( $(cat "$ST/podcalls" 2>/dev/null || echo 0) + 1 )); echo "$c" > "$ST/podcalls"; fi
+    case "${FAULT:-}:$phase" in
+      pods_transient:post) [ "$c" -le 2 ] && r3=false ;;
+      pods_never:post)     r3=false ;;
+      pods_missing_row:post) rows=2 ;;
+      pods_pre_notready:pre) r3=false ;;
+      pods_rc_fail:post)   echo "Error from server: etcdserver: request timed out" >&2; exit 1 ;;
+      pods_timeout:post)   sleep 5 ;;
+    esac
+    echo "NAME READY RESTARTS"
+    echo "kube-apiserver-k8s-control01 true 4"
+    [ "$rows" -ge 3 ] && echo "kube-apiserver-k8s-control02 true 25"
+    echo "kube-apiserver-k8s-control03 $r3 0"
+    exit 0 ;;
   "get secrets")
     [ "${FAULT:-}" = secrets_all_fail ] && { echo 'Error from server (Forbidden): secrets is forbidden' >&2; exit 1; }
     if [[ " ${args[*]} " == *"custom-columns="* ]]; then
@@ -226,7 +252,7 @@ run_case() {   # $1 name, $2 mode, rest = env assignments
   local BKF="$FX/root/enc-backup.yaml"; cp -p "$ENC" "$BKF"; [ "${BK:-}" = mismatch ] && echo changed >> "$BKF"; chmod 600 "$BKF"
   [ "${BK:-}" = none ] && BKF=""
   local envs=(ENC_BACKUP="$BKF" FIXTURE=1 ENC="$ENC" MANIFEST="$MANIFEST" PARK="$FX/etc/manifests-parked" ADMIN="$FX/etc/admin.conf" OUT_BASE="$FX/root" \
-    STEP_FILE="$FX/state/step" HOST=k8s-control03 SELF_IP=10.1.93.104 POLL_SEC=1 DOWN_WAIT_SEC=3 READY_WAIT_SEC=4 \
+    STEP_FILE="$FX/state/step" HOST=k8s-control03 SELF_IP=10.1.93.104 POLL_SEC=1 DOWN_WAIT_SEC=3 READY_WAIT_SEC=4 APISERVER_POD_WAIT_SEC=6 CALL_TIMEOUT_SEC=2 \
     PEER_SHAS="$ORIG_ENC_SHA $ORIG_ENC_SHA" FX="$FX" PATH="$FX/bin:$PATH" CONFIRM=YES)
   env "${envs[@]}" "$@" bash "$SCRIPT" "$mode" > "$FX/out.log" 2>&1
   RC=$?
@@ -445,7 +471,7 @@ rm -rf "$CASE_FX"
 # 재실행 안전: 같은 fixture 에서 정상 실행 2회(이름이 실행마다 달라 충돌하지 않음)
 run_case S12 rollback-test
 FX1="$CASE_FX"; ENC_AFTER1="$(sha256sum "$ENC" | awk '{print $1}')"
-env FIXTURE=1 ENC_BACKUP="$FX1/root/enc-backup.yaml" ENC="$ENC" MANIFEST="$MANIFEST" PARK="$FX1/etc/manifests-parked" ADMIN="$FX1/etc/admin.conf" OUT_BASE="$FX1/root" STEP_FILE="$FX1/state/step" HOST=k8s-control03 SELF_IP=10.1.93.104 POLL_SEC=1 DOWN_WAIT_SEC=3 READY_WAIT_SEC=4 PEER_SHAS="$ORIG_ENC_SHA $ORIG_ENC_SHA" FX="$FX1" PATH="$FX1/bin:$PATH" CONFIRM=YES bash "$SCRIPT" rollback-test > "$FX1/out2.log" 2>&1; RC2=$?
+env FIXTURE=1 ENC_BACKUP="$FX1/root/enc-backup.yaml" ENC="$ENC" MANIFEST="$MANIFEST" PARK="$FX1/etc/manifests-parked" ADMIN="$FX1/etc/admin.conf" OUT_BASE="$FX1/root" STEP_FILE="$FX1/state/step" HOST=k8s-control03 SELF_IP=10.1.93.104 POLL_SEC=1 DOWN_WAIT_SEC=3 READY_WAIT_SEC=4 APISERVER_POD_WAIT_SEC=6 CALL_TIMEOUT_SEC=2 PEER_SHAS="$ORIG_ENC_SHA $ORIG_ENC_SHA" FX="$FX1" PATH="$FX1/bin:$PATH" CONFIRM=YES bash "$SCRIPT" rollback-test > "$FX1/out2.log" 2>&1; RC2=$?
 check S12 "재실행도 PASS(재실행 안전)" $([ "$RC" -eq 0 ] && [ "$RC2" -eq 0 ] && [ "$ENC_AFTER1" = "$ORIG_ENC_SHA" ]; echo $?)
 rm -rf "$FX1"
 
@@ -502,6 +528,53 @@ for fault in none rv_encrypted; do
   fi
   rm -rf "$CASE_FX"
 done
+
+# ---- v4.4: post 점검의 apiserver mirror Pod 제한 시간 반복 확인 ----
+run_case P1_transient rollback-test FAULT=pods_transient
+check P1_transient "방금 재기동한 Pod 의 일시적 NotReady 는 deadline 안에서 회복되면 PASS(rc=0)" $([ "$RC" -eq 0 ] && has "RESULT: PASS"; echo $?)
+check P1_transient "시도 기록에 NotReady 시도와 마지막 OK 가 함께 남음" $(grep -q 'NotReady' "$RUNDIR/post-apiserver-pods-attempts.txt" && tail -1 "$RUNDIR/post-apiserver-pods-attempts.txt" | grep -q ' OK$'; echo $?)
+check P1_transient "회복 전 일시 실패는 FAIL 로 집계되지 않음(로그에 apiserver Pod 확인 실패 없음)" $(! has "apiserver Pod 확인 실패"; echo $?)
+check P1_transient "시험 Secret 정리·원설정 복원은 그대로" $(enc_same && no_leftover; echo $?)
+rm -rf "$CASE_FX"
+run_case P2_never rollback-test FAULT=pods_never
+check P2_never "끝까지 NotReady 면 FAIL(기존 검사 약화 없음, rc≠0, RESULT: PASS 아님)" $([ "$RC" -ne 0 ] && not_pass; echo $?)
+check P2_never "실패 사유에 시도 횟수·deadline·마지막 rc 가 남음" $(has "apiserver Pod 확인 실패(post)" && has "시도 " && has "deadline 6초" && has "마지막 rc=0"; echo $?)
+check P2_never "마지막 관측 원본(NotReady 행)과 rc 보존" $(grep -q 'kube-apiserver-k8s-control03 false' "$RUNDIR/post-apiserver-pods.txt" && [ "$(cat "$RUNDIR/post-apiserver-pods.rc")" = 0 ]; echo $?)
+check P2_never "시도가 deadline 안에서 여러 번 반복됨(2회 이상)" $([ "$(wc -l < "$RUNDIR/post-apiserver-pods-attempts.txt")" -ge 2 ]; echo $?)
+check P2_never "점검 실패여도 복원·정리는 완료" $(enc_same && no_leftover; echo $?)
+rm -rf "$CASE_FX"
+run_case P3_missing rollback-test FAULT=pods_missing_row
+check P3_missing "CP Pod 행이 2개뿐이면 FAIL(정확한 행 수)" $([ "$RC" -ne 0 ] && not_pass && has "행 수 2!=3"; echo $?)
+rm -rf "$CASE_FX"
+run_case P4_rcfail rollback-test FAULT=pods_rc_fail
+check P4_rcfail "조회 실패(rc=1)는 FAIL 이고 rc 와 stderr 가 보존됨" $([ "$RC" -ne 0 ] && not_pass && [ "$(cat "$RUNDIR/post-apiserver-pods.rc")" = 1 ] && grep -q 'request timed out' "$RUNDIR/post-apiserver-pods.stderr"; echo $?)
+rm -rf "$CASE_FX"
+run_case P5_timeout rollback-test FAULT=pods_timeout
+check P5_timeout "개별 호출 timeout 은 rc=124 로 기록되고 FAIL" $([ "$RC" -ne 0 ] && not_pass && [ "$(cat "$RUNDIR/post-apiserver-pods.rc")" = 124 ]; echo $?)
+rm -rf "$CASE_FX"
+run_case P6_pre precheck FAULT=pods_pre_notready
+check P6_pre "pre 점검은 단회(대기 없음): NotReady 면 NO-GO, 시도 1회" $([ "$RC" -ne 0 ] && [ "$(wc -l < "$RUNDIR/pre-apiserver-pods-attempts.txt")" = 1 ]; echo $?)
+rm -rf "$CASE_FX"
+run_case P7_names rollback-test APISERVER_POD_NAMES="kube-apiserver-k8s-control01 kube-apiserver-k8s-control02 kube-apiserver-k8s-control03"
+check P7_names "APISERVER_POD_NAMES 가 정확히 일치하면 PASS" $([ "$RC" -eq 0 ] && has "RESULT: PASS"; echo $?)
+rm -rf "$CASE_FX"
+run_case P8_badnames rollback-test APISERVER_POD_NAMES="kube-apiserver-k8s-control01 kube-apiserver-k8s-control02 kube-apiserver-k8s-control09"
+check P8_badnames "기대 이름 집합과 다르면 FAIL" $([ "$RC" -ne 0 ] && not_pass && has "기대 Pod 없음:kube-apiserver-k8s-control09"; echo $?)
+rm -rf "$CASE_FX"
+
+# ---- B2: 판정 파서 자체의 실패를 OK 로 처리하지 않는다 (PR #66 독립 리뷰 B2) ----
+run_case P9_parser_pre rollback-test FAULT=parser_pre
+check P9_parser_pre "pre 파서 오류(rc42·빈 stdout)는 NO-GO(rc≠0, 변경 0)" $([ "$RC" -ne 0 ] && not_pass && enc_same && manifest_ok && [ ! -e "$CASE_FX/state/was_down" ] && no_leftover; echo $?)
+check P9_parser_pre "파서 rc(42)와 stderr 보존" $([ "$(cat "$RUNDIR/pre-apiserver-pods-parser.rc")" = 42 ] && grep -q 'injected parser failure' "$RUNDIR/pre-apiserver-pods-parser.stderr"; echo $?)
+check P9_parser_pre "시도 기록에 parser_rc=42 와 사유, OK 로 기록되지 않음" $(grep -q 'parser_rc=42 파서 실행 실패(rc=42)' "$RUNDIR/pre-apiserver-pods-attempts.txt" && ! grep -q ' OK$' "$RUNDIR/pre-apiserver-pods-attempts.txt"; echo $?)
+check P9_parser_pre "단회 즉시 실패(재시도로 덮지 않음, 시도 1회)" $([ "$(wc -l < "$RUNDIR/pre-apiserver-pods-attempts.txt")" = 1 ]; echo $?)
+rm -rf "$CASE_FX"
+run_case P10_parser_post rollback-test FAULT=parser_post
+check P10_parser_post "post 파서 오류는 FAIL(rc≠0, RESULT: PASS 아님)" $([ "$RC" -ne 0 ] && not_pass && has "파서 실행 실패(rc=42)"; echo $?)
+check P10_parser_post "원 설정 복원·시험 Secret 정리·봉인 유지" $(enc_same && manifest_ok && no_leftover && [ -s "$RUNDIR.evidence.tar.gz" ]; echo $?)
+check P10_parser_post "파서 rc(42)와 stderr 보존, 시도 기록에 parser_rc=42" $([ "$(cat "$RUNDIR/post-apiserver-pods-parser.rc")" = 42 ] && grep -q 'injected parser failure' "$RUNDIR/post-apiserver-pods-parser.stderr" && grep -q 'parser_rc=42' "$RUNDIR/post-apiserver-pods-attempts.txt"; echo $?)
+check P10_parser_post "조회 자체는 정상(kubectl rc 0)이라 조회 실패와 구분됨" $([ "$(cat "$RUNDIR/post-apiserver-pods.rc")" = 0 ]; echo $?)
+rm -rf "$CASE_FX"
 
 echo "=== fixture 시험 결과"
 printf '%s\n' "${RESULTS[@]}"

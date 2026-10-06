@@ -4,3 +4,4 @@
 *.json text eol=lf
 *.txt text eol=lf
 *_SHA256SUMS text eol=lf
+*.sh text eol=lf
