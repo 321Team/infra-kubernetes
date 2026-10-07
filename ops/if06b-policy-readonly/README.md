@@ -62,3 +62,10 @@ SSH/sudo 암호는 TTY에만 입력하고 저장하지 않는다. strict host-ke
 동일 수집을 재실행할 필요는 없다. 수정 wrapper의 전체 현장 수집은 NOT_RUN이며,
 shell 문법/실제 ssh -G 옵션 회귀 검사만 수행했다. 이 스크립트를 쓰는 새 수집은
 별도 필요성이 있는 경우에만 실행한다.
+
+후속 실패 처리 보완: 파일 회수 성공이 collector 실패를 덮지 않도록
+`remote_command.rc` 및 `collector.rc`를 최종 종료 코드에 반영한다.
+collector rc2/12 원본을 먼저 회수한 뒤 해당 코드로 종료하며, 잘못된 rc 기록은12다.
+전체 wrapper MOCK은 실제 네트워크·sudo 없이 정상, master 재사용 실패, collector STOP,
+회수 실패, hash 불일치, 잘못된 rc, 원격 명령 실패를 검증한다.
+collector4 + wrapper6 = unittest10개 통과(하위사례 별도 포함).

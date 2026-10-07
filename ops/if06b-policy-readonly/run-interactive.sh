@@ -56,4 +56,10 @@ for name in collector.stdout collector.stderr collector.rc capture.tar.gz captur
 done
 (cd "$RESULT" && sha256sum -c capture.tar.gz.sha256)
 printf '회수 완료: %s\n' "$RESULT"
+COLLECTOR_RC=$(cat "$RESULT/collector.rc")
+case "$COLLECTOR_RC" in 0|2|12) ;; *) echo 'STOP: invalid collector exit record' >&2; exit 12;; esac
+printf 'TRANSFER_COMPLETE collector_rc=%s remote_command_rc=%s\n' "$COLLECTOR_RC" "$remote_rc"
 printf 'collector.rc가 0이어도 정책 PASS/과거 8443 차단 귀속을 의미하지 않습니다.\n'
+# Preserve the failed capture first; transfer success must not erase its status.
+[ "$remote_rc" -eq 0 ] || exit "$remote_rc"
+exit "$COLLECTOR_RC"
