@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # P1-SEC-01 AC-05 backup: etcd snapshot 격리 복원 관측 (운영 etcd는 health 조회만)
-# REV=v2.0-20261007 — GWONUK lifecycle fixes; see README for provenance/approval.
+# REV=v2.1-20261008 — GWONUK lifecycle fixes; see README for provenance/approval.
 #
 #   k8s-control01 콘솔(root)에서:
 #     KC='kubectl --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s' \
@@ -20,7 +20,8 @@ set -uo pipefail
 set +x
 LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 2
 source "$LIB_DIR/common.sh" || exit 2
-REV="v2.0-20261007"
+source "$LIB_DIR/backup-tools.sh" || exit 2
+REV="v2.1-20261008"
 MODE="${1:-}"
 KC="${KC:-kubectl --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s}"
 
@@ -29,7 +30,8 @@ HOST_EXP="k8s-control01"
 BK="/root/p1-sec01-secretbox-backup-20261002T054208Z"
 SNAP="$BK/etcd-snapshot-sec01.db"
 EXPECT_SNAP_SHA="8ace820ca29488fc5ef8eb46d424a58ef6e0dbbba03f6d0f851f929e6e771e2f"   # evidence#99 22-snapshot-SHA256SUMS
-EXPECT_REV="3287996"; EXPECT_KEYS="620"; EXPECT_VER="3.6.0"                           # evidence#99 23-etcdutl-snapshot-status.txt
+EXPECT_REV="3287996"; EXPECT_KEYS="620"; EXPECT_STORAGE_VERSION="3.6.0"  # evidence#99 snapshot metadata
+EXPECT_BINARY_VERSION="3.6.8"  # 2026-10-08 read-only capture; exact SHA pins in backup-binaries.sha256
 WORKROOT="/root/sec01-restore-work"
 CPORT=23790; PPORT=23800
 INNER_LIMIT=300      # 임시 etcd 구간 상한(초)
@@ -61,7 +63,7 @@ tbl_val() {   # tbl_val <표 파일> <열 이름>  → 표의 첫 데이터 행�
 }
 
 w "$OUT/00-environment.txt" "rev=$REV mode=$MODE host=$HN started_utc=$TS run_id=$RUN_ID"
-(cd "$LIB_DIR" && sha256sum probe.sh backup.sh common.sh checks.py backup-inner.sh) > "$OUT/source-sha256.txt" || stop "소스 해시 기록 실패"
+(cd "$LIB_DIR" && sha256sum probe.sh backup.sh common.sh checks.py backup-inner.sh backup-tools.sh backup-binaries.sha256) > "$OUT/source-sha256.txt" || stop "소스 해시 기록 실패"
 w "$OUT/00-environment.txt" "script_sha256=$(sha256sum "$0" 2>/dev/null | cut -c1-64)"
 w "$OUT/00-environment.txt" "unshare=$(unshare --version 2>&1 | head -1) python3=$(python3 --version 2>&1)"
 
@@ -129,22 +131,11 @@ FREE_MB=$(df -Pm /root | awk 'NR==2{print $4}'); w "$OUT/11-disk.txt" "free_mb=$
 EPID="$(timeout 10 python3 "$LIB_DIR/checks.py" pids /var/lib/etcd)" || stop "운영 etcd PID 조회 실패"
 [[ "$EPID" =~ ^[0-9]+$ ]] || stop "운영 etcd exact data-dir PID 가 하나가 아님"
 w "$OUT/12-prod-etcd-process.txt" "pid=$EPID cmdline=$(tr '\0' ' ' < /proc/$EPID/cmdline | head -c 600)"
-for b in etcd etcdutl etcdctl; do [ -x "/proc/$EPID/root/usr/local/bin/$b" ] || stop "운영 etcd 컨테이너에 /usr/local/bin/$b 없음"; done
-PROD_EXE_SHA="$(timeout 30 sha256sum "/proc/$EPID/exe" 2>/dev/null | cut -c1-64)"; w "$OUT/12-prod-etcd-process.txt" "prod_exe_sha256=$PROD_EXE_SHA"
-# 세 바이너리의 경로·SHA-256·버전을 기록한다. run 은 봉인된 precheck 폴더의 이 파일과 현재 값이 같을 때만 진행한다.
-: > "$OUT/12-binaries-sha256.txt"
-[[ "$PROD_EXE_SHA" =~ ^[0-9a-f]{64}$ ]] || stop "운영 exe 해시 확인 실패"
-for b in etcd etcdutl etcdctl; do
-  p="/proc/$EPID/root/usr/local/bin/$b"
-  v="$(timeout 10 "$p" $([ "$b" = etcd ] && echo --version || echo version) 2>&1)" || stop "$b version 실패"
-  printf '%s\n' "$v" | grep -Eq "^(etcd Version:|etcdutl version:|etcdctl version:) ${EXPECT_VER//./\\.}$" || stop "$b 버전 불일치"
-  h="$(timeout 30 sha256sum "$p" | cut -c1-64)" || stop "$b SHA 조회 실패"
-  [[ "$h" =~ ^[0-9a-f]{64}$ ]] || stop "$b SHA 해석 실패"
-  w "$OUT/12-binaries-sha256.txt" "$h  $b"
-  w "$OUT/12-binaries-version.txt" "$b: $v"
-done
-[ "$(awk '$2=="etcd"{print $1}' "$OUT/12-binaries-sha256.txt")" = "$PROD_EXE_SHA" ] || stop "운영 exe 와 컨테이너 etcd 불일치"
-w "$S" "prod_exe_sha256=$PROD_EXE_SHA etcd_container_binary_matches_exe=yes"
+# Capture all three tools before any version/hash acceptance decision.
+capture_backup_tools "/proc/$EPID/root/usr/local/bin" "/proc/$EPID/exe"
+TOOLS_RC=$?
+[ "$TOOLS_RC" -eq 0 ] || stop "binary provenance rejected(rc=$TOOLS_RC); see 12-*.stdout/stderr/rc"
+w "$S" "prod_exe_sha256=$PROD_EXE_SHA etcd_container_binary_matches_exe=yes binary_version=$EXPECT_BINARY_VERSION snapshot_storage_version=$EXPECT_STORAGE_VERSION"
 timeout 10 ss -ltn 2> "$OUT/ss-pre.stderr" | awk '$4 ~ /:(2379|2380|2381)$/ {print $4}' | LC_ALL=C sort > "$OUT/13-prod-listeners-before.txt" || stop "운영 listener 조회 실패"
 etcdctl_prod endpoint health > "$OUT/14-prod-health-before.txt" 2>&1; HRC=$?; w "$OUT/14-prod-health-before.txt" "rc=$HRC"
 if [ "$HRC" -ne 0 ]; then PRE_FAIL=1; w "$S" "FAIL: 운영 etcd endpoint health rc=$HRC"; [ "$MODE" = run ] && stop "운영 etcd health 실패(rc=$HRC) - 시험하지 않음"; fi
@@ -166,6 +157,7 @@ fi
 timeout 20 python3 "$LIB_DIR/checks.py" verify "$PRECHECK_DIR" > "$OUT/precheck-verify.txt" 2>&1 || stop "precheck 폴더 봉인(SHA256SUMS) 불일치"
 grep -q "PRECHECK_RESULT=OK" "$PRECHECK_DIR/99-summary-provisional.txt" 2>/dev/null || stop "precheck 결과가 OK 가 아님"
 diff -q "$PRECHECK_DIR/12-binaries-sha256.txt" "$OUT/12-binaries-sha256.txt" >/dev/null 2>&1 || stop "세 바이너리 SHA-256/버전이 precheck 기록과 다름(12-binaries-sha256.txt)"
+diff -q "$PRECHECK_DIR/12-binaries-version.txt" "$OUT/12-binaries-version.txt" >/dev/null || stop "precheck 와 프로그램 버전 기록이 다름"
 w "$S" "precheck_dir=$PRECHECK_DIR binaries_match_precheck=yes"
 
 diff -q "$PRECHECK_DIR/source-sha256.txt" "$OUT/source-sha256.txt" >/dev/null || stop "precheck 와 실행 소스가 다름"
@@ -202,9 +194,11 @@ diff -q "$OUT/12-binaries-sha256.txt" "$OUT/20-binaries-sha256.txt" >/dev/null |
 timeout 10 "$BIN/etcdutl" version > "$OUT/21-etcdutl-version.txt" 2>&1 || abort "복사 etcdutl version 실패"
 timeout 10 "$BIN/etcd" --version > "$OUT/21-etcd-version.txt" 2>&1 || abort "복사 etcd version 실패"
 timeout 60 "$BIN/etcdutl" snapshot status "$WSNAP" -w table > "$OUT/22-orig-status.txt" 2> "$OUT/22-orig-status.stderr"; SRC=$?
+O_STORAGE="$(tbl_val "$OUT/22-orig-status.txt" VERSION)"
+w "$OUT/22-orig-status.rc" "$SRC"; w "$S" "snapshot_storage_version=${O_STORAGE:-UNPARSED} expected=$EXPECT_STORAGE_VERSION"
 O_REV="$(tbl_val "$OUT/22-orig-status.txt" REVISION)"; O_KEYS="$(tbl_val "$OUT/22-orig-status.txt" "TOTAL KEYS")"; O_HASH="$(tbl_val "$OUT/22-orig-status.txt" HASH)"
 w "$S" "orig_status rc=$SRC revision=${O_REV:-UNPARSED} total_keys=${O_KEYS:-UNPARSED} hash=${O_HASH:-UNPARSED} (evidence#99: revision=$EXPECT_REV total_keys=$EXPECT_KEYS) matches_evidence=$([ "$O_REV" = "$EXPECT_REV" ] && [ "$O_KEYS" = "$EXPECT_KEYS" ] && echo yes || echo NO)"
-{ [ "$SRC" -eq 0 ] && [ "$O_REV" = "$EXPECT_REV" ] && [ "$O_KEYS" = "$EXPECT_KEYS" ]; } || abort "원본 snapshot status 를 읽지 못함(rc=$SRC, 22-orig-status.*)"
+{ [ "$SRC" -eq 0 ] && [ "$O_REV" = "$EXPECT_REV" ] && [ "$O_KEYS" = "$EXPECT_KEYS" ] && [ "$O_STORAGE" = "$EXPECT_STORAGE_VERSION" ]; } || abort "원본 snapshot status 를 읽지 못함(rc=$SRC, 22-orig-status.*)"
 
 # ---------------- R1: 복원(새 cluster identity, 운영과 다른 경로) ----------------
 NAME="sec01-restore"; TOKEN="sec01-restore-$RUN_ID"; PURL="http://127.0.0.1:$PPORT"; CURL="http://127.0.0.1:$CPORT"
@@ -234,8 +228,10 @@ case "$SEC" in *"total="*) ;; *) abort "Secret 접두어 집계를 읽지 못함
 w "$S" "R3_$SEC"
 # 복원된 db 의 status(etcd 종료 후, 같은 측정 방식으로 원본과 비교)
 timeout 60 "$BIN/etcdutl" snapshot status "$DD/member/snap/db" -w table > "$OUT/46-restored-status.txt" 2> "$OUT/46-restored-status.stderr"; RSRC=$?
+R_STORAGE="$(tbl_val "$OUT/46-restored-status.txt" VERSION)"
+w "$OUT/46-restored-status.rc" "$RSRC"; w "$S" "restored_storage_version=${R_STORAGE:-UNPARSED}"
 R_REV="$(tbl_val "$OUT/46-restored-status.txt" REVISION)"; R_KEYS="$(tbl_val "$OUT/46-restored-status.txt" "TOTAL KEYS")"; R_HASH="$(tbl_val "$OUT/46-restored-status.txt" HASH)"
-{ [ "$RSRC" -eq 0 ] && [ "$R_REV" = "$O_REV" ] && [ "$R_KEYS" = "$O_KEYS" ]; } || abort "복원 db status 를 읽지 못함(rc=$RSRC, 46-restored-status.*)"
+{ [ "$RSRC" -eq 0 ] && [ "$R_REV" = "$O_REV" ] && [ "$R_KEYS" = "$O_KEYS" ] && [ "$R_STORAGE" = "$O_STORAGE" ]; } || abort "복원 db status 를 읽지 못함(rc=$RSRC, 46-restored-status.*)"
 w "$S" "R3_restored_db_status revision=$R_REV total_keys=$R_KEYS hash=${R_HASH:-UNPARSED} revision_equals_orig=$([ "$R_REV" = "$O_REV" ] && echo yes || echo NO) total_keys_equals_orig=$([ "$R_KEYS" = "$O_KEYS" ] && echo yes || echo NO) (hash 는 복원 과정에서 달라질 수 있어 비교하지 않고 기록만 함)"
 budget_ok || abort "관측 상한 도달"
 w "$S" "ALL_STAGES_OBSERVED=yes (관측 완료이며 AC·backup 판정이 아님)"
