@@ -1,0 +1,52 @@
+{
+  "schema": "OID02-readonly-source-validation-2",
+  "repository": "321Team/infra-kubernetes",
+  "base_commit": "c3057906a6a8427a4b315b7e544e063efe0fecf2",
+  "previous_approved_commit": "c2f543a16754926c3dd2ecc35773ba09fe1df3a1",
+  "recorded_at_utc": "2026-10-07T07:04:36.482733+00:00",
+  "source_files": {
+    "tools/oid02-cache-metadata-readonly.py": {
+      "sha256": "ccdaaee72b0ce76027a9f2fd16ac37a9fe3dc5b76bd611d6cf0f74cae27abf37",
+      "size_bytes": 17349,
+      "ast": true
+    },
+    "tests/test_oid02_cache_metadata_readonly.py": {
+      "sha256": "56a78f4d02f24bdad1a4b80676a6a2137b5d3e42faba50ddb314421def7cb081",
+      "size_bytes": 17930,
+      "ast": true
+    }
+  },
+  "verification": {
+    "static_ast_files": 2,
+    "mock_unit_tests": 39,
+    "mock_conclusion": "OK",
+    "mock_exit_code": 0,
+    "command": "python tests/test_oid02_cache_metadata_readonly.py",
+    "environment": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "log_origin": "EXEC_TOOL_RESPONSE_DIRECTLY_OBSERVED_NOT_SERVER_LOG",
+    "local_synthetic_subprocess_tests": 4,
+    "linux_containerd_root_runtime": "NOT_RUN",
+    "ci": "NO_WORKFLOW_IN_CURRENT_MAIN_CHECK_FINAL_HEAD",
+    "independent_review": "PENDING_NEW_HEAD",
+    "export_import": false,
+    "oid02_acceptance": false
+  },
+  "limits": {
+    "stdout_bytes_per_command": 4194304,
+    "stderr_bytes_per_command": 65536,
+    "collection_budget_seconds": 45,
+    "ip_timeout_seconds": 5,
+    "command_timeout_seconds": 10,
+    "child_cleanup_seconds": 2
+  },
+  "limitations": [
+    "METADATA_ONLY_LAYER_BYTES_NOT_READ",
+    "CURRENT_CACHE_NOT_HISTORICAL_SUPPLY_PROVENANCE",
+    "DECLARED_COMMIT_NEEDS_EXTERNAL_TRANSFER_AND_REVIEW_BINDING",
+    "DESCRIPTOR_SIZE_SUM_NOT_ARCHIVE_SIZE",
+    "BINARY_IDENTITY_RECORDED_NOT_TRUSTED_PACKAGE_ATTESTATION",
+    "SUPPORTED_SUBSET_REQUIRES_MEDIA_TYPE_AND_NONEMPTY_SERVICE_LAYERS",
+    "PARTIAL_STREAM_HASH_NOT_FULL_STREAM_HASH_ON_ERROR"
+  ]
+}
