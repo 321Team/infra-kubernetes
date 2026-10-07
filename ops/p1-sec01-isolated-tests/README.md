@@ -1,9 +1,44 @@
-# P1-SEC-01 격리 시험 수정본 v2.0 — GWONUK 구현 / 이하영 현장 시험
+# P1-SEC-01 격리 시험 수정본 — Probe v2.0 / Backup v2.1 — GWONUK 구현 / 이하영 현장 시험
 
 책임 티켓: [baseline #19](https://github.com/321Team/fds-project-baseline/issues/19).
 정본: `docs-v3.1.21 @ 979facb98de8ca1f1e2ce22f38b27ac3366f3fc3`.
 이 디렉터리는 격리 Probe 관측과 기존 etcd snapshot의 격리 복원 도구다.
 실제 APP HTTP Probe 인수, 운영 etcd 복원, Secret 복호화, 예방적 rotation, AC 인수·Issue Close·Phase1 Close는 포함하지 않는다.
+
+
+## Backup v2.1 변경과 현장 근거 (2026-10-08)
+
+10/8 00:01 첫 읽기 전용 수집은 `/proc/<pid>/exe`의 링크를 호스트 경로로
+`resolve(strict=True)`해 중단됐다(rc2). 원본은 보존했다. 컨테이너의 링크 대상은
+호스트에 없어도 정상이므로 `os.readlink`로 링크 문자열만 읽도록 수집기를 수정했다.
+후속 수집은 `sec19-backup-version.VRbii4QQ`에 봉인됐다. 내부 92개 SHA 일치,
+운영 PID 2713/starttime 1000 및 Pod UID/imageID 전후 동일, 컨테이너 내부와
+호스트 `/proc/PID/root` 경유 버전 6개 명령 모두 rc0/3.6.8이다.
+운영 exe SHA는 `backup-binaries.sha256`의 etcd SHA와 같다. 실제 수집 증적은
+`fds-project-evidence:evidence/P1-SEC-01/backup-version-20261008/`로 편입한다.
+
+- 프로그램 버전은 **정확히 3.6.8**, 세 바이너리는 수집된 해시로 고정한다.
+  snapshot storage VERSION **3.6.0**, SHA/revision/key 수는 evidence#99 값이다.
+  서로 다른 개념이며 3.x 전체 허용이나 운영 etcd downgrade는 하지 않는다.
+- `backup-tools.sh`는 세 도구 각각의 SHA(전/후), version stdout/stderr/rc와
+  운영 exe SHA(전/후)를 **판정 전에** 기록한다. 첫 도구가 실패해도 남은 도구를
+  시간 예산 안에서 수집한다. 정상화한 version/hash와 실행 소스는 precheck→run에도 비교한다.
+- mismatch, rc127, rc124, 해시 수집 실패, 실행 중 파일 변경, 운영 exe 불일치는 STOP이다.
+  버전 stdout을 잃거나 실패한 명령을 rc0으로 덮지 않는다. 쓰기 실패는 rc12다.
+- snapshot의 원본/복원본 status에서 storage VERSION을 별도로 검사한다.
+  상태 읽기·격리 복원은 **run 승인 뒤** 수행하며 이번 읽기 전용 수집으로 복원 성공을 주장하지 않는다.
+- `probe.sh`, `common.sh`, `checks.py`, `backup-inner.sh`는 이전 승인 코드와 동일하다.
+  기존 Probe GO를 이 Backup 후보의 GO로 확대하지 않는다.
+- standalone `backup-version-capture.sh`는 원인 확인 5항목의 수집 도구다.
+  control01 root, 기존 admin.conf 및 도구로 실행하며 운영 상태는 읽기 전용이다.
+  각 명령 15초, 전체는 `timeout --signal=TERM --kill-after=5s 180s bash backup-version-capture.sh`.
+  새 root 전용 폴더에만 기록하며 tool rc는 개별 파일로 보존한다. capture rc0은 수집 완료이지
+  Backup precheck PASS가 아니다. PID/Pod 교체·상한 초과 때 중단하고 자동 재실행하지 않는다.
+  `file`/`readelf`가 없으면 설치하지 않으며 누락 rc를 제출한다. Secret·키는 읽지 않는다.
+  종료 후 출력된 디렉터리·manifest·외부 종료코드를 보존한다. 서비스 변경이 없어 서비스 원복은 없다.
+
+이번 PR은 코드/실제 읽기 전용 수집을 분리한다. 새 backup precheck와 run은 미실행이며,
+정확한 새 HEAD의 독립 리뷰 및 기존 #19 조건 충족 후 판단한다.
 
 ## 입력·소유와 변경
 
@@ -49,7 +84,7 @@ requests20m/32Mi, limits200m/128Mi는 v1.2 범위 그대로다.
 Service는 EndpointSlice 관측용이며 HTTP 서버 연결 시험이 아니다.
 
 두 도구 모두 Linux Bash, GNU timeout/coreutils, **호스트 Python 3(표준 라이브러리만)**가 필요하다.
-backup은 추가로 `unshare --net --pid --fork --kill-child`, `ip`, `ss`, 컨테이너의 etcd/etcdctl/etcdutl3.6.0이 필요하다.
+backup은 추가로 `unshare --net --pid --fork --kill-child`, `ip`, `ss`, 컨테이너의 etcd/etcdctl/etcdutl **3.6.8 및 `backup-binaries.sha256`의 정확한 3개 해시**이 필요하다.
 없거나 실행 불가하면 STOP; 설치·권한 확대·이미지 pull·SELinux/방화벽/TLS 완화로 우회하지 않는다.
 기존 운영 계정·접근 경로만 사용한다. 6노드 Ready, 앞 시험 종료/원복, APP·#13 등 다른 Runtime과 비중첩을 실행 전 확인한다.
 
@@ -79,11 +114,11 @@ backup은 추가로 `unshare --net --pid --fork --kill-child`, `ip`, `ss`, 컨�
 
 PR/이슈에 적힌 **전체 commit SHA**의 ZIP 또는 로컬 전달 묶음으로 이 디렉터리 전체를 승인된 파일 전달 경로로 옮긴다.
 VM 콘솔에 긴 코드를 복사해 재작성하지 않는다. GitHub 로그인/토큰, snapshot·개인키·Secret 원문을 묶음에 추가하지 않는다.
-`SHA256SUMS`와 아래 다섯 코드 파일은 같은 commit이어야 한다. checks.py 한 파일만 교체하는 방식은 금지한다.
+`SHA256SUMS`와 backup.sh가 source-sha256.txt에 기록하는 코드·도구 해시 목록은 같은 commit이어야 한다. checks.py 한 파일만 교체하는 방식은 금지한다.
 
 1. 실행자의 root/본인 전용 새 작업 폴더에서 `umask 077`을 설정한다. 전달된 코드 폴더의 절대 경로를 `CODE_DIR`에 지정하고 `(cd "$CODE_DIR" && sha256sum -c SHA256SUMS)`로 대조한다. 실패 시 중단한다.
 2. `bash "$CODE_DIR/probe.sh" render`는 서버 접근 없이 생성 manifest를 보여준다.
-3. **해당 v2 사전 점검 승인이 기록된 뒤** 아래 precheck를 각각 실행하고 rc·출력 경로를 남긴다.
+3. **해당 버전 사전 점검 승인이 기록된 뒤** 아래 precheck를 각각 실행하고 rc·출력 경로를 남긴다.
 
 ```bash
 # 기존 승인 계정/콘솔; CODE_DIR은 전달 묶음의 실제 절대 경로
@@ -97,7 +132,7 @@ KC='kubectl --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s' \
 rc=$?; printf 'backup_precheck_rc=%s\n' "$rc"
 ```
 
-4. 해당 SHA·현장 precheck 원본·시작/종료 시각·비중첩을 #19에 연결해 **범위를 한정한 RUN GO**가 기록된 뒤 아래를 실행한다. `PRECHECK_DIR`에는 v2 backup precheck의 실제 출력 폴더를 넣는다. run도 fresh precheck를 반복한다.
+4. 해당 SHA·현장 precheck 원본·시작/종료 시각·비중첩을 #19에 연결해 **범위를 한정한 RUN GO**가 기록된 뒤 아래를 실행한다. `PRECHECK_DIR`에는 v2.1 backup precheck의 실제 출력 폴더를 넣는다. run도 fresh precheck를 반복한다.
 
 ```bash
 KC='kubectl --kubeconfig=/etc/kubernetes/admin.conf --request-timeout=10s' CONFIRM=YES \
