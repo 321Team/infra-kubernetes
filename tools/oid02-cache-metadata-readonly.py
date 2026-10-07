@@ -12,6 +12,7 @@ import shutil
 import socket
 import stat
 import subprocess
+import threading
 import time
 
 INDEX_TYPES = {
@@ -35,6 +36,7 @@ LAYER_TYPES = {
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 MAX_DOCUMENT = 4 * 1024 * 1024
+MAX_STDERR = 64 * 1024
 CONTAINERD_SOCKET = "/run/containerd/containerd.sock"
 TARGETS = (
     ("kube-controllers", "quay.io/calico/kube-controllers",
@@ -143,7 +145,7 @@ def inspect_image(reader, name, ref, top_digest):
         raise CollectionError("CONFIG_PLATFORM_MISMATCH")
     # Only os/architecture are emitted. Env, labels and history stay in memory.
     layers_raw = manifest.get("layers")
-    if not isinstance(layers_raw, list) or len(layers_raw) > 512:
+    if not isinstance(layers_raw, list) or not 1 <= len(layers_raw) <= 512:
         raise CollectionError("INVALID_LAYERS")
     layers = [descriptor(item, LAYER_TYPES) for item in layers_raw]
     for layer in layers:
@@ -170,39 +172,156 @@ def inspect_image(reader, name, ref, top_digest):
     }
 
 
+def stderr_category(raw, returncode, error):
+    if error:
+        return error
+    if not raw:
+        return "EMPTY"
+    if returncode == 0:
+        return "STDERR_PRESENT_ON_SUCCESS"
+    lower = raw.lower()
+    if b"permission denied" in lower or b"operation not permitted" in lower:
+        return "PERMISSION"
+    if b"not found" in lower or b"no such file" in lower:
+        return "NOT_FOUND"
+    if b"connection refused" in lower or b"dial unix" in lower:
+        return "SOCKET_CONNECTION"
+    return "COMMAND_FAILED_UNCLASSIFIED"
+
+
+def capture_command(argv, timeout_seconds):
+    """Bound both in-memory streams; never write subprocess output to disk."""
+    process = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    wake = threading.Event()
+    streams = {
+        "stdout": {"raw": bytearray(), "complete": False, "error": None},
+        "stderr": {"raw": bytearray(), "complete": False, "error": None},
+    }
+
+    def drain(name, pipe, limit):
+        state = streams[name]
+        try:
+            while True:
+                chunk = pipe.read(4096)
+                if not chunk:
+                    state["complete"] = True
+                    break
+                room = limit - len(state["raw"])
+                state["raw"].extend(chunk[:room])
+                if len(chunk) > room:
+                    state["error"] = name.upper() + "_SIZE_LIMIT"
+                    wake.set()
+                    break
+        except OSError:
+            state["error"] = "STREAM_READ_FAILED"
+            wake.set()
+        finally:
+            pipe.close()
+
+    threads = []
+    for name, pipe, limit in (("stdout", process.stdout, MAX_DOCUMENT),
+                               ("stderr", process.stderr, MAX_STDERR)):
+        thread = threading.Thread(target=drain, args=(name, pipe, limit), daemon=True)
+        thread.start()
+        threads.append(thread)
+    deadline = time.monotonic() + timeout_seconds
+    error = None
+    while True:
+        error = next((s["error"] for s in streams.values() if s["error"]), None)
+        if error or process.poll() is not None:
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            error = "READ_TIMEOUT"
+            break
+        wake.wait(min(0.02, remaining))
+    if error:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+    cleanup_deadline = time.monotonic() + 2
+    try:
+        process.wait(timeout=max(0.01, cleanup_deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        error = error or "PROCESS_REAP_TIMEOUT"
+    for thread in threads:
+        thread.join(timeout=max(0, cleanup_deadline - time.monotonic()))
+    error = error or next((s["error"] for s in streams.values() if s["error"]), None)
+    if not all(s["complete"] for s in streams.values()):
+        error = error or "STREAM_CAPTURE_INCOMPLETE"
+    return {"stdout": bytes(streams["stdout"]["raw"]),
+            "stderr": bytes(streams["stderr"]["raw"]),
+            "stdout_complete": streams["stdout"]["complete"],
+            "stderr_complete": streams["stderr"]["complete"],
+            "returncode": process.returncode, "error": error}
+
+
 class CacheReader:
     def __init__(self, ctr_path):
         self.ctr = ctr_path
         self.deadline = time.monotonic() + 45
         self.commands = []
+        self.executables = {}
 
-    def run(self, argv):
+    def resolve_binary(self, name):
+        found = shutil.which(name)
+        if not found:
+            raise CollectionError("EXISTING_" + name.upper() + "_REQUIRED")
+        try:
+            path = Path(found).resolve(strict=True)
+            if not stat.S_ISREG(path.stat().st_mode):
+                raise CollectionError("EXECUTABLE_REGULAR_FILE_REQUIRED")
+            digest = hashlib.sha256()
+            size = 0
+            with path.open("rb") as stream:
+                while True:
+                    if time.monotonic() >= self.deadline:
+                        raise CollectionError("COLLECTION_TIME_BUDGET_EXCEEDED")
+                    chunk = stream.read(64 * 1024)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    size += len(chunk)
+            self.executables[name] = {"resolved_path": str(path),
+                                      "sha256": digest.hexdigest(), "size_bytes": size}
+            return str(path)
+        except OSError:
+            raise CollectionError("EXECUTABLE_IDENTITY_QUERY_FAILED") from None
+
+    def run(self, argv, timeout_seconds=10):
         remaining = self.deadline - time.monotonic()
         if remaining <= 0:
             raise CollectionError("COLLECTION_TIME_BUDGET_EXCEEDED")
-        record = {"argv": argv, "returncode": None}
+        record = {"argv": argv, "returncode": None,
+                  "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat()}
         self.commands.append(record)
         start = time.monotonic()
         try:
-            result = subprocess.run(argv, stdin=subprocess.DEVNULL,
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                    timeout=min(10, remaining), check=False)
-        except subprocess.TimeoutExpired:
-            record["error"] = "TIMEOUT"
-            raise CollectionError("CONTENT_READ_TIMEOUT") from None
+            result = capture_command(argv, min(timeout_seconds, remaining))
         except OSError:
             record["error"] = "EXEC_ERROR"
             raise CollectionError("CONTENT_EXEC_ERROR") from None
         finally:
             record["elapsed_ms"] = round((time.monotonic() - start) * 1000)
-        record["returncode"] = result.returncode
-        if result.returncode != 0:
+            record["finished_at_utc"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        record["returncode"] = result["returncode"]
+        for name in ("stdout", "stderr"):
+            raw = result[name]
+            record[name + "_size_bytes"] = len(raw)
+            record[name + "_sha256"] = hashlib.sha256(raw).hexdigest()
+            record[name + "_capture_complete"] = result[name + "_complete"] and not result["error"]
+        record["stderr_error_category"] = stderr_category(
+            result["stderr"], result["returncode"], result["error"])
+        if result["error"]:
+            record["error"] = result["error"]
+            raise CollectionError("CONTENT_" + result["error"])
+        if result["returncode"] != 0:
             raise CollectionError("CONTENT_READ_FAILED")
-        record["stdout_size_bytes"] = len(result.stdout)
-        if not 0 < len(result.stdout) <= MAX_DOCUMENT:
+        if not 0 < len(result["stdout"]) <= MAX_DOCUMENT:
             raise CollectionError("DOCUMENT_SIZE_LIMIT")
-        record["stdout_sha256"] = hashlib.sha256(result.stdout).hexdigest()
-        return result.stdout
+        return result["stdout"]
 
     def __call__(self, digest):
         if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
@@ -220,31 +339,31 @@ class CacheReader:
         return match.group(1).decode("ascii")
 
 
-def host_gate():
+def host_gate(reader=None):
     if platform.system() != "Linux" or not hasattr(os, "geteuid") or os.geteuid() != 0:
         raise CollectionError("LINUX_EXISTING_ROOT_CONTEXT_REQUIRED")
     hostname = socket.gethostname()
     if hostname.split(".", 1)[0] not in {"control01", "k8s-control01"}:
         raise CollectionError("CONTROL01_SOURCE_ONLY")
+    reader = reader if reader is not None else CacheReader(None)
     try:
         if not stat.S_ISSOCK(os.stat(CONTAINERD_SOCKET).st_mode):
             raise CollectionError("EXISTING_CONTAINERD_SOCKET_REQUIRED")
-        result = subprocess.run(["ip", "-j", "-4", "address", "show"],
-                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.DEVNULL, timeout=5, check=False)
-        if result.returncode != 0 or len(result.stdout) > MAX_DOCUMENT:
-            raise CollectionError("ADDRESS_QUERY_FAILED")
-        addresses = json.loads(result.stdout)
+    except FileNotFoundError:
+        raise CollectionError("EXISTING_CONTAINERD_SOCKET_MISSING") from None
+    except OSError:
+        raise CollectionError("CONTAINERD_SOCKET_QUERY_FAILED") from None
+    try:
+        ip_path = reader.resolve_binary("ip")
+        raw = reader.run([ip_path, "-j", "-4", "address", "show"], timeout_seconds=5)
+        addresses = json.loads(raw)
         found = {a.get("local") for item in addresses for a in item.get("addr_info", [])
                  if a.get("family") == "inet"}
         if "10.1.93.102" not in found:
             raise CollectionError("CONTROL01_ADDRESS_MISMATCH")
-    except (OSError, ValueError, TypeError, AttributeError, subprocess.TimeoutExpired):
+    except (ValueError, TypeError, AttributeError):
         raise CollectionError("HOST_IDENTITY_QUERY_FAILED") from None
-    ctr = shutil.which("ctr")
-    if not ctr:
-        raise CollectionError("EXISTING_CTR_REQUIRED")
-    return hostname, str(Path(ctr).resolve())
+    return hostname, reader.resolve_binary("ctr")
 
 
 def main(argv=None):
@@ -256,7 +375,7 @@ def main(argv=None):
         parser.error("source-commit must be a full lowercase 40-character SHA")
     now = lambda: dt.datetime.now(dt.timezone.utc).isoformat()
     result = {
-        "schema": "OID02-cache-metadata-readonly-1", "started_at_utc": now(),
+        "schema": "OID02-cache-metadata-readonly-2", "started_at_utc": now(),
         "source_commit_declared": args.source_commit,
         "collector_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "host": None, "address": None, "expected_source_address": "10.1.93.102",
@@ -265,13 +384,13 @@ def main(argv=None):
         "namespace": "k8s.io", "status": "INCOMPLETE", "images": [], "commands": [],
         "runtime_changed": False, "plan_ready": False, "oid02_ac_accepted": False,
     }
-    reader = None
+    reader = CacheReader(None)
     try:
-        hostname, ctr = host_gate()
+        hostname, ctr = host_gate(reader)
         result["host"] = hostname
         result["address"] = "10.1.93.102"
         result["effective_uid"] = os.geteuid()
-        reader = CacheReader(ctr)
+        reader.ctr = ctr
         result["ctr_version"] = reader.version()
         for name, ref, digest in TARGETS:
             result["images"].append(inspect_image(reader, name, ref, digest))
@@ -283,6 +402,7 @@ def main(argv=None):
     finally:
         if reader:
             result["commands"] = reader.commands
+            result["executables"] = reader.executables
         result["finished_at_utc"] = now()
         print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["status"] == "MANIFEST_METADATA_VERIFIED_REVIEW_REQUIRED" else 2
