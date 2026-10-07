@@ -1,0 +1,25 @@
+name: SEC19 isolated test scripts
+on:
+  pull_request:
+    paths:
+      - 'ops/p1-sec01-isolated-tests/**'
+      - '.github/workflows/sec19-isolated-tests.yml'
+  push:
+    branches: ['p1-k8s-01/sec19-isolated-test-fixes']
+    paths:
+      - 'ops/p1-sec01-isolated-tests/**'
+      - '.github/workflows/sec19-isolated-tests.yml'
+permissions:
+  contents: read
+jobs:
+  mock-and-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Bash syntax
+        run: for f in ops/p1-sec01-isolated-tests/*.sh; do bash -n "$f" || exit; done
+      - name: Python and Bash regression tests (MOCK only)
+        run: python3 -m unittest discover -s ops/p1-sec01-isolated-tests/tests -v
