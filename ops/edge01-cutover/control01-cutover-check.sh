@@ -50,12 +50,17 @@ echo "-- MON (Prometheus port-forward 127.0.0.1:$PFPORT)"
 "${K[@]}" -n monitoring-api port-forward svc/prometheus "$PFPORT":9090 >/dev/null 2>&1 &
 PF=$!
 sleep 3
+kill -0 "$PF" 2>/dev/null || { echo "   port-forward 실패 → MON 판정 불가"; RC_BAD=$((RC_BAD + 1)); }
+# ERR=조회 실패(판정 불가), EMPTY=조회 성공·결과 없음. count(up == 0)의 EMPTY만 '0개'로 읽는다.
 q() { curl -s --max-time 5 "http://127.0.0.1:$PFPORT/api/v1/query" --data-urlencode "query=$1" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
-r = d.get("data", {}).get("result", [])
-print(r[0]["value"][1] if r else "0")' 2>/dev/null || echo ERR; }
-echo "   count(up)=$(q 'count(up)') count(up==1)=$(q 'count(up == 1)') count(up==0)=$(q 'count(up == 0)') (기대 23/23/0)"
+if d.get("status") == "success":
+    r = d["data"]["result"]
+    print(r[0]["value"][1] if r else "EMPTY")
+else:
+    print("ERR")' 2>/dev/null || echo ERR; }
+echo "   count(up)=$(q 'count(up)') count(up==1)=$(q 'count(up == 1)') count(up==0)=$(q 'count(up == 0)') (기대 23/23/EMPTY 또는 0)"
 kill "$PF" 2>/dev/null; wait "$PF" 2>/dev/null
-echo "-- 조회 실패 수=$RC_BAD"
-echo "RESULT control01-$PHASE=DONE $(date '+%T') (판정은 위 기대값과 대조)"
+echo "-- 조회 실패 수=$RC_BAD (0이 아니면 해당 항목은 판정 불가)"
+echo "RESULT control01-$PHASE=COLLECTED $(date '+%T') — 수집 완료이며 C0/C2 판정이 아니다. README 판정표에 사람이 기록한다"
