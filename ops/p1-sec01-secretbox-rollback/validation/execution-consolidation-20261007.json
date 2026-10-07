@@ -1,0 +1,68 @@
+[
+  {
+    "name": "syntax-sec01-secretbox-rollback-v4.sh",
+    "host": "SERVER01",
+    "environment": "Windows Git Bash + Python3.14.6 shim; STATIC/MOCK only",
+    "start": "2026-10-07T00:21:29.016380+09:00",
+    "end": "2026-10-07T00:21:29.064666+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-n",
+      "candidate/ops/p1-sec01-secretbox-rollback/sec01-secretbox-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "totals": [],
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "syntax-test-rollback-v4.sh",
+    "host": "SERVER01",
+    "environment": "Windows Git Bash + Python3.14.6 shim; STATIC/MOCK only",
+    "start": "2026-10-07T00:21:29.065178+09:00",
+    "end": "2026-10-07T00:21:29.116939+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-n",
+      "candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "totals": [],
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "syntax-focused-fixture",
+    "host": "SERVER01",
+    "environment": "Windows Git Bash + Python3.14.6 shim; STATIC/MOCK only",
+    "start": "2026-10-07T00:21:29.117425+09:00",
+    "end": "2026-10-07T00:21:29.177759+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-n",
+      "focused-parser-fixture.sh"
+    ],
+    "exit_code": 0,
+    "totals": [],
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "canonical-parser-regression",
+    "host": "SERVER01",
+    "environment": "Windows Git Bash + Python3.14.6 shim; STATIC/MOCK only",
+    "start": "2026-10-07T00:21:29.178182+09:00",
+    "end": "2026-10-07T00:22:32.182264+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-c",
+      "export PATH=\"$PWD/shim:$PATH\"; chmod +x shim/python3; bash focused-parser-fixture.sh candidate/ops/p1-sec01-secretbox-rollback/sec01-secretbox-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "totals": [
+      "=== PASS=27 FAIL=0"
+    ],
+    "stdout_sha256": "674e53b59e286f2e018eed4074d324b514f0fa43fc012c91c8d2b8c448c2ecc6",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

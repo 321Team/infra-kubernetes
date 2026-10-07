@@ -1,0 +1,31 @@
+AC-05 B2 consolidation verification — CODEX_ASSISTED
+Canonical source parent: dfb9a3c9d10baf22c2efe7143f1d5538eb4bff29 (PR66 author branch).
+Canonical script is byte-identical; REV stays v4.4-20261006.
+Canonical script SHA256: e80d8936cd6e846ebc04d999e9df68052497fbccfc7786d3f5bf8bd3584bb61e
+Canonical runbook SHA256: 78eec52df17694acf22229018ad88ce2a87420dcdb03ee7532b162c6f5e2f963
+Consolidated fixture SHA256: 0db64460ceac89f3a3ec3a361749fd42aa1017db6d70691637f983e3f97b4d33
+Original PR66 pinned blobs 13/13 and SHA256 manifest 12/12 independently verified.
+Actual STATIC: bash -n source/complete fixture/focused extraction, 3 checks, exit0.
+Actual MOCK: canonical source and 6 selected scenarios/27 assertions, PASS27/FAIL0, exit0, stderr empty.
+Start: 2026-10-07T00:21:29.178182+09:00
+End: 2026-10-07T00:22:32.182264+09:00
+Host/environment/command/rc/raw log SHA256: execution-consolidation-20261007.json.
+The full fixture has 273 assertions (original254 preserved exactly + added19). Full273 was NOT RUN.
+The source in old PR67 3270aac2194452cf76a21f7c4733273a23bbdc7f had full265 PASS/FAIL0.
+After excluding only complete comment lines and the REV assignment, all executable lines of old3270 and canonicaldfb9 are exactly equal. See logic-equivalence-consolidation-20261007.json.
+This supports reusing previous unaffected regression evidence, not claiming full273 was executed on a new HEAD.
+Existing canonical254 author output and previous3270 output are historical results with separate provenance.
+Focused extraction is the unchanged common helper prefix plus the parser section of complete fixture; it avoids ONLY skipped-case diagnostics. Extraction SHA is tracked with the final manifest.
+Original author's two parser scenarios/8 assertions are preserved. Added four/19 verify precheck, rollback Gate, post failure/recovery/UID-conditioned a-b-c cleanup/archive checksum, and read-only postcheck.
+Fixture awk phase now follows the parser's pre/post filename as well as the operation step; non-parser awk calls still delegate to the real binary.
+All canonical historical validation files and old3270 logs are preserved byte-for-byte.
+CI: NOT RUN / no PASS claim.
+Native Linux / Runtime: NOT RUN.
+Human independent judgment / final approval / merge / Runtime GO / AC acceptance / close: PENDING or NOT PERFORMED.
+Reproduce on a development host with bash/python3/awk/timeout from the ops folder:
+  bash -n sec01-secretbox-rollback-v4.sh
+  bash -n test-rollback-v4.sh
+  bash validation/focused-parser-consolidation-20261007.sh ./sec01-secretbox-rollback-v4.sh
+  sha256sum -c SHA256SUMS
+Full suite, if independently chosen: bash test-rollback-v4.sh ./sec01-secretbox-rollback-v4.sh
+These are synthetic kubectl/ss/awk fixtures and are not target-server Runtime evidence.

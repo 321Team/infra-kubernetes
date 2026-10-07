@@ -1,0 +1,93 @@
+[
+  {
+    "name": "syntax-sec01-secretbox-rollback-v4.sh",
+    "host": "SERVER01",
+    "platform": "Windows Git Bash + Python 3.14.6 shim; MOCK only",
+    "start": "2026-10-06T23:44:01.026742+09:00",
+    "end": "2026-10-06T23:44:01.064443+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-n",
+      "candidate/ops/p1-sec01-secretbox-rollback/sec01-secretbox-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "totals": [],
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "syntax-test-rollback-v4.sh",
+    "host": "SERVER01",
+    "platform": "Windows Git Bash + Python 3.14.6 shim; MOCK only",
+    "start": "2026-10-06T23:44:01.065078+09:00",
+    "end": "2026-10-06T23:44:01.108106+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-n",
+      "candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "totals": [],
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "original-parser-regression",
+    "host": "SERVER01",
+    "platform": "Windows Git Bash + Python 3.14.6 shim; MOCK only",
+    "start": "2026-10-06T23:44:01.108614+09:00",
+    "end": "2026-10-06T23:44:56.142204+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-c",
+      "export PATH=\"$PWD/shim:$PATH\"; chmod +x shim/python3; ONLY=P9_parser_precheck,P10_parser_gate,P11_parser_post,P12_parser_postcheck bash candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh base/ops/p1-sec01-secretbox-rollback/sec01-secretbox-rollback-v4.sh"
+    ],
+    "exit_code": 1,
+    "expected_exit_code": 1,
+    "totals": [
+      "=== PASS=4 FAIL=15"
+    ],
+    "stdout_sha256": "3527da58b612947707299a8ce1e968d1c249522c0400c730115f2cea439fde61",
+    "stderr_sha256": "0e5f069dcd30af0d38de207667e02b3b97854588530329be700c0cf191c0e1e9"
+  },
+  {
+    "name": "fixed-parser-regression",
+    "host": "SERVER01",
+    "platform": "Windows Git Bash + Python 3.14.6 shim; MOCK only",
+    "start": "2026-10-06T23:44:56.147673+09:00",
+    "end": "2026-10-06T23:45:39.764638+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-c",
+      "export PATH=\"$PWD/shim:$PATH\"; chmod +x shim/python3; ONLY=P9_parser_precheck,P10_parser_gate,P11_parser_post,P12_parser_postcheck bash candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh candidate/ops/p1-sec01-secretbox-rollback/sec01-secretbox-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "totals": [
+      "=== PASS=19 FAIL=0"
+    ],
+    "stdout_sha256": "bc2435a897697a516fe2af7f74aabc78f4c4ffcd4b11eb5121f32d2e55602f53",
+    "stderr_sha256": "bc51c3ff023189075d5edcb4b5d505f92c7921dd7bbe03bf9ff82aca5063d84a"
+  },
+  {
+    "name": "fixed-full-regression",
+    "host": "SERVER01",
+    "platform": "Windows Git Bash + Python 3.14.6 shim; MOCK only",
+    "start": "2026-10-06T23:45:39.769696+09:00",
+    "end": "2026-10-07T00:03:27.009074+09:00",
+    "command": [
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "-c",
+      "export PATH=\"$PWD/shim:$PATH\"; chmod +x shim/python3; bash candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh candidate/ops/p1-sec01-secretbox-rollback/sec01-secretbox-rollback-v4.sh"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "totals": [
+      "=== PASS=265 FAIL=0"
+    ],
+    "stdout_sha256": "d8a33b5575974250e7cdf0ea250b653641daab9da5ef8d05063498051af038f2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

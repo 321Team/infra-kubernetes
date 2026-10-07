@@ -1,0 +1,29 @@
+=== fixture 시험 결과
+  PASS  P9_parser_pre: pre 파서 오류(rc42·빈 stdout)는 NO-GO(rc≠0, 변경 0)
+  PASS  P9_parser_pre: 파서 rc(42)와 stderr 보존
+  PASS  P9_parser_pre: 시도 기록에 parser_rc=42 와 사유, OK 로 기록되지 않음
+  PASS  P9_parser_pre: 단회 즉시 실패(재시도로 덮지 않음, 시도 1회)
+  PASS  P10_parser_post: post 파서 오류는 FAIL(rc≠0, RESULT: PASS 아님)
+  PASS  P10_parser_post: 원 설정 복원·시험 Secret 정리·봉인 유지
+  PASS  P10_parser_post: 파서 rc(42)와 stderr 보존, 시도 기록에 parser_rc=42
+  PASS  P10_parser_post: 조회 자체는 정상(kubectl rc 0)이라 조회 실패와 구분됨
+  PASS  P9_parser_precheck: 파서 rc42/빈 stdout: nonzero, GO/PASS 금지
+  PASS  P9_parser_precheck: 파서 실패 원인 보존
+  PASS  P9_parser_precheck: 조회 rc0와 파서 rc42·stderr·단회 시도 구분
+  PASS  P9_parser_precheck: Gate 실패: 설정/manifest 보존, 재기동·Secret 생성 0
+  PASS  P9_parser_precheck: 실패 증적 봉인·SHA256 검증과 파서 기록 포함
+  PASS  P10_parser_gate: 파서 rc42/빈 stdout: nonzero, GO/PASS 금지
+  PASS  P10_parser_gate: 파서 실패 원인 보존
+  PASS  P10_parser_gate: 조회 rc0와 파서 rc42·stderr·단회 시도 구분
+  PASS  P10_parser_gate: Gate 실패: 설정/manifest 보존, 재기동·Secret 생성 0
+  PASS  P10_parser_gate: 실패 증적 봉인·SHA256 검증과 파서 기록 포함
+  PASS  P11_parser_post: 사후 파서 rc42: nonzero/RESULT FAIL, PASS 금지
+  PASS  P11_parser_post: 조회 rc0와 파서 rc42·stderr·단회 시도 구분
+  PASS  P11_parser_post: 변경 후 ENC 원복/manifest 복구와 restore 재기동 증거
+  PASS  P11_parser_post: 소유 Secret a/b/c 모두 UID precondition 정리, 이름 삭제 금지
+  PASS  P11_parser_post: 복구·정리 후 실패 증적 봉인/SHA256 검증
+  PASS  P12_parser_post: 읽기 전용 사후 점검도 nonzero/FAIL, PASS 금지
+  PASS  P12_parser_post: 사후 파서 rc42·stderr·단회 시도 보존
+  PASS  P12_parser_post: 읽기 전용 상태 유지, 변경/재기동/Secret 생성 0
+  PASS  P12_parser_post: 실패 증적 봉인/SHA256 검증
+=== PASS=27 FAIL=0

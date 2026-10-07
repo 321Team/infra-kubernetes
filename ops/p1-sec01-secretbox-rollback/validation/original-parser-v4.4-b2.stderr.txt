@@ -1,0 +1,232 @@
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 287: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 293: cd: null directory
+cat: /restart-rollback-cid-before.txt: No such file or directory
+cat: /restart-restore-cid-before.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 295: /10-owned-secrets.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 295: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 280: /10-owned-secrets.txt: No such file or directory
+grep: /50-cleanup.txt: No such file or directory
+grep: /10-owned-secrets.txt: No such file or directory
+grep: /13-prefix-before.txt: No such file or directory
+grep: /33-prefix-new-secret-rolled.txt: No such file or directory
+grep: /40-prefix-after-restore.txt: No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+find: ‘/nonexistent/x’: No such file or directory
+grep: /nonexistent/x: No such file or directory
+find: ‘/nonexistent/x’: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 311: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 318: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 326: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 326: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 338: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 338: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 338: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 338: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 338: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 350: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 350: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 350: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 350: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 350: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 362: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 362: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 362: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 362: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 372: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 377: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 380: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 385: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 394: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 402: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 410: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 419: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 429: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 438: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 442: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 447: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 450: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 453: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 458: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 461: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 464: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 468: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 473: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 479: /nonexistent/out2.log: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 480: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 487: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 496: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 496: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 496: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 496: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 506: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 506: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+grep: /62-secret-audit.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+grep: /62-secret-audit.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+grep: /62-secret-audit.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+grep: /62-secret-audit.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 514: [: : integer expected
+sha256sum: '': No such file or directory
+mkdir: cannot create directory ‘/nonexistent’: Permission denied
+tar (child): .evidence.tar.gz: Cannot open: No such file or directory
+tar (child): Error is not recoverable: exiting now
+tar: Child returned status 2
+tar: Error is not recoverable: exiting now
+grep: : No such file or directory
+grep: /nonexistent/audit-extract: No such file or directory
+grep: /62-secret-audit.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 523: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 528: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 528: [: : integer expected
+grep: /62-secret-audit.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 539: [: : integer expected
+grep: /post-apiserver-pods-attempts.txt: No such file or directory
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 545: [: : integer expected
+grep: /post-apiserver-pods.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 548: /post-apiserver-pods-attempts.txt: No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 548: [: : integer expected
+sha256sum: '': No such file or directory
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 552: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 555: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 558: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 561: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 564: [: : integer expected
+candidate/ops/p1-sec01-secretbox-rollback/test-rollback-v4.sh: line 567: [: : integer expected
+cat: /tmp/tmp.sVFKJFXR8O/root/p1-sec01-secretbox-precheck-20261006T144414Z.0rd1Cd/pre-apiserver-pods-parser.rc: No such file or directory
+cat: /tmp/tmp.WYc7C5u0S4/root/p1-sec01-secretbox-rollback-test-20261006T144419Z.w49Feq/pre-apiserver-pods-parser.rc: No such file or directory
+cat: /tmp/tmp.TSXLpGxaRX/root/p1-sec01-secretbox-rollback-test-20261006T144435Z.788jVX/post-apiserver-pods-parser.rc: No such file or directory
+cat: /tmp/tmp.F9Vd8G6Ss6/root/p1-sec01-secretbox-postcheck-20261006T144452Z.wovgm2/post-apiserver-pods-parser.rc: No such file or directory
