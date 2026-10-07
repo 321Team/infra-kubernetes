@@ -40,3 +40,25 @@ physical→management/target DROP, 다른 정책·zone·nft NAT/forward 영향�
 변할 수 있어 byte 비교로 PASS/FAIL하지 않는다. 8443 실제 drop 귀속은 별도 증적이다.
 
 Backup #71 및 기존 Probe 승인 번들을 변경하지 않는 별도 수집기다.
+
+## 10/8 실제 수집 및 인증 반복 수정
+
+사용자가 비밀번호/콘솔 경로로 00:54:41~43 KST 수집을 완료했다.
+collector SHA `d8c6fdeffbf2bf9585306b7f20118277bc99f757d31e139e7e8b9e9bb7440f4b`,
+22조회 rc0, 내부67개 hash 일치, `/root/if06b-policy-1x2k0nr2` 원본을 회수했다.
+따라서 위 접근 차단 기록은 당시 비대화형 키 인증의 한계이며 원본 미수집 상태는 해소됐다.
+
+초기 임시 wrapper는 `-o ControlMaster=yes -MNf`를 함께 써서 master를 ask 모드로
+전환했다. ansible01의 실제 `ssh -G`에서 기존 `controlmaster ask`, 수정 `true`를
+확인했다. [OpenSSH option parser](https://github.com/openssh/openssh-portable/blob/master/ssh.c)의
+case M과 일치한다. 서버 SSH 제한 때문이라고 단정하지 않는다.
+인증 반복과 master 종료 거부가 발생했지만 각 별도 연결로 조회/전송은 완료됐다.
+원본 collector·기존 실패/실행 이력은 바꾸지 않는다.
+
+새 `run-interactive.sh`는 ansible01에서 전체 디렉터리/SHA256SUMS 확인 후 실행한다.
+중복 -M을 제거하고 최초 인증 뒤 master 재사용 조회를 먼저 확인한다.
+후속 호출은 BatchMode=yes여서 재사용 실패 시 비밀번호 반복 대신 STOP한다.
+SSH/sudo 암호는 TTY에만 입력하고 저장하지 않는다. strict host-key를 유지한다.
+동일 수집을 재실행할 필요는 없다. 수정 wrapper의 전체 현장 수집은 NOT_RUN이며,
+shell 문법/실제 ssh -G 옵션 회귀 검사만 수행했다. 이 스크립트를 쓰는 새 수집은
+별도 필요성이 있는 경우에만 실행한다.
