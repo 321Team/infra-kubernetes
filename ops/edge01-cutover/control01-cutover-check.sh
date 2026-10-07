@@ -55,7 +55,7 @@ if test "$PHASE" = trace; then
     echo "$rc" > "$T/$pod.rc"
     test "$rc" = 0 || ERRS=$((ERRS + 1))
   done < "$T/pods.txt"
-  python3 -I - "$T" "cutover-$RUN-$TAG-" "$TAG" "$ERRS" <<'PY'
+  python3 -I - "$T" "cutover-$RUN-$TAG-" "$TAG" "$ERRS" > "$T/trace-analysis.stdout" 2> "$T/trace-analysis.stderr" <<'PY'
 import glob, os, re, sys
 d, prefix, tag, errs = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 pat = re.compile(r'(\d+\.\d+\.\d+\.\d+):\d+ - "(?:GET|POST) [^ "?]*\?(?:[^ "]*&)?cutover=' + re.escape(prefix) + r'([A-Za-z0-9]+)[& "]')
@@ -88,8 +88,13 @@ else:
 print('TRACE k8s tag=%s err=%d verdict=%s source_50=%s' % (
     tag, errs, verdict, 'yes' if clients == {'10.1.93.50'} else ('none' if not clients else 'no')))
 PY
-  echo "RESULT control01-trace=$(sed -n 's/^.*verdict=\([A-Z_]*\).*/\1/p' "$LOG" | tail -1) $(date '+%T') 원본 $T"
-  exit 0
+  TRACE_RC=$?
+  cat "$T/trace-analysis.stdout"
+  cat "$T/trace-analysis.stderr" >&2
+  VERDICT=$(sed -n 's/^.*verdict=\([A-Z_]*\).*/\1/p' "$T/trace-analysis.stdout" | tail -1)
+  echo "RESULT control01-trace=$VERDICT $(date '+%T') 원본 $T"
+  test "$TRACE_RC" = 0 || exit 4
+  case "$VERDICT" in TRACED|TRACE_READY|NONE_OK) exit 0 ;; *) exit 4 ;; esac
 fi
 
 echo "== $(date '+%F %T %Z') control01 cutover check phase=$PHASE run=$RUN"

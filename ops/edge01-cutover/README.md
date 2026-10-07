@@ -6,6 +6,13 @@
 
 ## 1. 범위
 
+### 2026-10-08 현장 사전검증 보완
+
+- `ps lstart`의 한국어 요일/월을 `date -d`가 해석하지 못한 사례를 확인했다. 프로세스 시각의 생성과 해석 양쪽에 `LC_ALL=C`를 고정한다. 시각을 못 읽으면 PASS로 우회하지 않는다.
+- edge `check`는 nginx 구문·reload 반영 실패 또는 E-K3S `TRACE_NOT_READY`에 rc3을 반환한다. control01 `trace`는 `TRACED`/`TRACE_READY`/`NONE_OK`에만 rc0, 조회/해석 실패·누락·중복·미확정에는 rc4를 반환한다. pre/post의 `COLLECTED`는 여전히 사람의 판정이 필요하다.
+- 표식 로그 자체가 비어 있으면 HTTP 200과 별개로 관측 조건 미충족이다. 10/8 회차의 Kubernetes transaction-api 3개 로그가 실제 0바이트였고, Worker01 이미지의 `/app/run.py`가 metrics Uvicorn Config의 `log_level="warning"`으로 공용 접근 로그를 억제하는 구조를 확인했다. 앱 관측 경로 복구와 양쪽 fresh TRACE_READY 전까지 전환하지 않는다. 이 PR은 앱 배포나 관측 기준 완화를 포함하지 않는다.
+- trace 분석 stdout/stderr는 별도 원본 파일로 기록한 뒤 판정한다. 아직 기록 중인 tee 로그를 다시 읽어 판정하는 경합을 제거한다.
+
 - **바꾸는 것:** edge01 nginx `upstream transaction_api` 블록의 4줄뿐이다. `server 10.1.93.50:30080;`(옛 E-K3S)을 주석 처리하고, 이미 주석으로 들어 있는 `# server 10.1.93.105/.107/.108:30080;` 3줄의 주석을 푼다. `nginx -t` 성공 뒤 `systemctl reload nginx`.
 - **바꾸지 않는 것:** E-K3S(k3s)는 유지한다(rollback 경로, 중지는 #47 창). listen·location·`/metrics` 404·proxy 설정, Service·EndpointSlice·Calico 정책, TLS/443(edge01에 443 없음, #17 별도), DB 허용(#47).
 - 다른 형태의 upstream(유효 server 줄이 `.50:30080` 하나가 아님, Worker 주석 줄이 각 1개가 아님, 예상 밖 server 줄)이면 `apply`는 파일을 바꾸지 않고 멈춘다.
