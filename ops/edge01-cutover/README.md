@@ -25,7 +25,7 @@
 2. 이권욱의 창 GO(T0·실행자·상한·중단/복구). 단톡 사전 공지. 다른 Runtime(#10·#13·#17·#19 시험, APP·Runner)과 비중첩.
 3. C0 판정표(아래)가 모두 기대값. 특히 Worker별 Ready local endpoint 1·1·1과 edge01 → Worker 3대 `/readyz` 200(권욱 6012871977 §2). Pod Running이나 endpoint 합계로 대체하지 않는다.
 4. E-K3S active, 현재 edge 경로 200(rollback 경로 확보).
-5. edge01에 `tcpdump`·`python3`가 있음(`check` 출력). 없으면 C1의 실제 upstream 경유를 증명할 수 없으므로 시작하지 않고 대체 관측을 GO 전에 따로 정한다(설치하지 않는다).
+5. 표식 관측이 양쪽에서 실제로 되는지 C0에서 확인됨: edge01 `check`가 `TRACE_READY`(edge 경유 표식이 E-K3S 로그에 1번), control01 `trace <RUN> check<HHMMSS>`가 `TRACE_READY`(Worker 직접 표식 3건이 각 Worker Pod 로그에 1번). 둘 중 하나라도 아니면 C1을 시작하지 않는다.
 
 ## 4. 창 계획 (제안: 10/10(토) 오전, 이어서 오후 #47 창)
 
@@ -34,19 +34,22 @@
 | 단계 | 상한 | 호스트 | 명령 | 기대 / 성공 기준 | 실패 시 |
 |---|---|---|---|---|---|
 | C0 사전 | 15분 | control01 | `sudo bash control01-cutover-check.sh pre <RUN>` | 수집 완료(`RESULT …=COLLECTED`). **판정은 아래 C0 판정표에 사람이 기록** | 시작 안 함 |
-| | | edge01 | `bash edge01-cutover.sh check <RUN>` | C0 판정표 edge01 행 | 시작 안 함 |
-| C1 전환 | 10분 | edge01 | `bash edge01-cutover.sh apply <RUN>` | 종료 코드 0, `RESULT cutover-apply=OK` = ① 설정 반영 ② HTTP 9/9 200 ③ Worker `:30080` 새 연결 ≥ 9 ④ E-K3S Pod 로그 smoke POST 0 + `/metrics` 404 + 업무 smoke 201 | 종료 3: `rollback` / 종료 4(UNCONFIRMED): 완료로 기록하지 않고 실행자·Review Owner가 즉시 `rollback` 또는 보완 관측을 판단 |
+| | | edge01 | `bash edge01-cutover.sh check <RUN>` | C0 판정표 edge01 행, `RESULT cutover-check=TRACE_READY`(출력의 tag `check<HHMMSS>` 기록) | 시작 안 함 |
+| | | control01 | `sudo bash control01-cutover-check.sh trace <RUN> check<HHMMSS>` | `RESULT control01-trace=TRACE_READY` | 시작 안 함 |
+| C1 전환 | 15분 | edge01 → control01 | `bash edge01-cutover.sh apply <RUN>` → `sudo bash control01-cutover-check.sh trace <RUN> apply` | edge01 종료 0·`RESULT cutover-apply=EDGE_OK`(① 설정 반영 ② 표식 요청 9/9 200·smoke 201·`/metrics` 404 ③ E-K3S 로그에 apply 표식 0건) **그리고** control01 `RESULT control01-trace=TRACED`(④ 표식 1~9·smoke 10개가 K8s Pod 로그에 각 1번). 둘 다여야 C1 완료 | edge01 종료 3: `rollback` / 종료 4 또는 control01 `UNCONFIRMED`·`ERR`: 완료로 기록하지 않고 실행자·Review Owner가 즉시 `rollback` 또는 보완 관측을 판단 |
 | C2 사후 | 20분 | PC·db01·control01·ansible01 | 아래 확인 시험 | 전부 기대값 | `rollback` |
 | C3 관찰 | 30분 | — | 5분 간격 PC `/readyz`, MON | 200 유지, MON 이상 없음 | `rollback` |
 
 - 전체 상한 T0+75분, 복구 완료 목표 T0+90분. 상한을 넘기면 되돌리고 멈춘다(연장 없음).
 - `apply`는 파일을 바꾸기 전에 모든 게이트를 본다. 새 설정이 `nginx -t`를 통과하지 못하면 사본으로 즉시 되돌리고 reload하지 않는다.
 - **"9/9 HTTP 성공", "설정 반영", "실제 새 upstream 경유"를 따로 증명한다.**
-  - 설정 반영: reload 뒤 정리 중인 옛 worker(`shutting down`)를 빼고, 현재 worker가 모두 설정 파일 최종 수정 이후에 시작됐는지 본다. 최대 30초(5초 간격) 다시 본다. 끝내 확인하지 못하면 종료 4.
-  - 실제 경유: 9회 요청 구간에만 edge01에서 나가는 TCP SYN 헤더를 `tcpdump`로 받는다(payload 없음, 로그 폴더 600). nginx 기본(upstream keepalive 없음)은 요청마다 새 upstream 연결을 열고, reload 뒤 새 worker는 Worker 3대만 안다. 그래서 Worker `:30080` 새 SYN이 9건 이상이면 9회 요청이 모두 새 경로로 갔다고 본다. 캡처 실패나 9건 미만(keepalive 재사용 등)은 종료 4.
-  - 보조: 업무 smoke(POST)가 E-K3S Pod 로그에 0건이어야 한다. E-K3S Pod 대역 SYN은 kubelet probe와 섞이므로 기록만 하고 판정에 쓰지 않는다.
-  - 순간 소켓 목록(`ss`)이나 사전 직접 curl은 판정에 쓰지 않는다.
-- `check`의 `upstream/server/proxy 관련 줄`에 `keepalive`·`proxy_http_version 1.1`이 있으면 ③ 기준이 맞지 않으므로 GO 전에 다시 정한다.
+  - 설정 반영: reload 뒤 정리 중인 옛 worker(`shutting down`)를 빼고, 현재 worker가 모두 설정 파일 최종 수정 이후에 시작됐는지 본다. 5초 간격으로 최대 7번(약 35초) 다시 본다. 끝내 확인하지 못하면 종료 4.
+  - 실제 경유: 요청마다 고유 표식 `?cutover=cutover-<RUN>-<tag>-<번호>`를 붙인다(transaction-api는 모르는 쿼리를 무시). uvicorn 접근 로그에 경로·쿼리·client 주소가 남으므로, **표식이 어느 backend Pod 로그에 몇 번 찍혔는지**로 요청과 backend를 결속한다. 새 경로는 control01 `trace`가 K8s Pod 로그를, 옛 경로는 edge01이 E-K3S Pod 로그를 본다.
+  - 로그 조회는 Pod마다 rc·stderr를 따로 남기고(회차별 새 폴더), **하나라도 실패하면 판정 불가(ERR·종료 4)**다. 0건 정상과 조회 실패를 합치지 않는다.
+  - 표식은 RUN·tag·번호로 정해지고 check·rollback tag에는 실행 시각(`HHMMSS`)이 붙어, 이전 요청이나 다른 회차가 섞이지 않는다. 기대값은 "각 번호가 정확히 1번"이다(누락·중복 모두 실패).
+  - 사전 검증: C0에서 같은 방법으로 양쪽 로그에 표식이 찍히는지 먼저 확인한다(로그 형식·수록 여부를 가정하지 않음).
+  - control01 `trace apply`의 `source_50=yes`(모든 표식 줄의 client가 `10.1.93.50`)는 출발지 보존의 보조 관측으로 기록한다. P4를 대체하지 않는다.
+  - 순간 소켓 목록(`ss`), 패킷 수, 사전 직접 curl은 판정에 쓰지 않는다.
 
 ### C0 판정표 (실행자가 채워 증적에 넣는다)
 
@@ -60,7 +63,9 @@
 | control01 조회 실패 수 | 0 (ERR·port-forward 실패는 판정 불가, 0개 정상으로 읽지 않음) | | |
 | edge01 nginx | `nginx -t` OK, reload 반영 rc=0, 유효 upstream `10.1.93.50:30080` 하나, 정의 파일 1개 | | |
 | edge01 경로 | edge `/readyz` 200, `/metrics` 404, Worker 3대 `:30080/readyz` 200, k3s active | | |
-| edge01 도구 | `tcpdump`·`python3` 있음, upstream keepalive 없음 | | |
+| edge01 도구 | `python3` 있음 | | |
+| 표식 관측(E-K3S) | edge01 `check` → `TRACE_READY` | | |
+| 표식 관측(K8s) | control01 `trace <RUN> check<HHMMSS>` → `TRACE_READY`(w105→worker01, w107→worker02, w108→worker03 각 1번) | | |
 
 하나라도 기대와 다르거나 판정 불가면 C1을 시작하지 않는다.
 
@@ -100,7 +105,7 @@ $o = "$HOME\edge-cutover-<RUN>-n1.txt"
 ## 5. 중단·복구
 
 - 중단 기준: edge `/readyz` 실패, 업무 smoke 실패·5xx, N1 FAIL, MON 이상, 상한 초과, C1 종료 4를 실행자·Review Owner가 수용하지 않음.
-- 복구: `bash edge01-cutover.sh rollback <RUN>`. apply 직전 사본으로 복원(`cat >`로 inode·권한·문맥 유지) → `nginx -t` → reload → 디스크 유효 upstream `.50:30080` → 설정 반영(최대 30초) → 새 요청 3회 200, 그 구간 Worker `:30080` 새 SYN 0 → smoke 1건 201이 **E-K3S Pod 로그에 POST로 찍힘**. 이 모두가 맞아야 `RESULT cutover-rollback=OK`(종료 0)다. 반영·경유를 확인하지 못하면 종료 4(UNCONFIRMED)이며 복구 완료로 기록하지 않는다.
+- 복구: `bash edge01-cutover.sh rollback <RUN>`. apply 직전 사본으로 복원(`cat >`로 inode·권한·문맥 유지) → `nginx -t` → reload → 디스크 유효 upstream `.50:30080` → 설정 반영(약 35초) → 표식 요청 3회 200·표식 smoke 201 → **E-K3S Pod 로그에서 이번 rollback 표식 1~3·smoke가 각 정확히 1번**(조회 실패는 종료 4). 이 모두가 맞아야 `RESULT cutover-rollback=OK`(종료 0)다. 보조로 control01 `trace <RUN> rollback<HHMMSS>`가 `NONE_OK`(K8s 쪽 0건)인지 본다. 반영·경유를 확인하지 못하면 종료 4(UNCONFIRMED)이며 복구 완료로 기록하지 않는다.
 - 쓰지 않은 파일 SHA나 HTTP 200만으로 복구를 선언하지 않는다(새 Worker 경로도 200을 낸다).
 - E-K3S·옛 DB 허용(pg_hba `.50`)은 Cutover 창에서 바꾸지 않으므로 rollback 경로는 #47 창 W1 전까지 유지된다. `rollback`은 k3s가 active가 아니면 시작하지 않는다.
 
@@ -118,6 +123,6 @@ $o = "$HOME\edge-cutover-<RUN>-n1.txt"
 
 ## 8. 원본 수집·파일 전달
 
-- edge01 `~/edge-cutover-<RUN>/`(로그, `upstream-file.before/after`, `syn-*.txt` SYN 헤더 캡처, `smoke-*.json`), control01 `/root/edge-cutover-<RUN>/*.log`, C0 판정표, PC의 P1·P2·N1 출력(`edge-cutover-<RUN>-n1.txt`), db01 P3 출력, P4 수집기 archive. 비밀 값 없음.
+- edge01 `~/edge-cutover-<RUN>/`(로그, `upstream-file.before/after`, `nonces-*.txt`, `ek3s-<tag>-*/` E-K3S Pod 로그 원본·rc, `smoke-*.json`), control01 `/root/edge-cutover-<RUN>/`(`*.log`, `k8s-<tag>-*/` K8s Pod 로그 원본·rc), C0 판정표, PC의 P1·P2·N1 출력(`edge-cutover-<RUN>-n1.txt`), db01 P3 출력, P4 수집기 archive. 비밀 값 없음.
 - 증적 PR: fds-project-evidence `evidence/P1-SEC-01/edge-cutover-<RUN>/`, 독립 리뷰어 지정. #19 결과 코멘트는 증적 PR 링크와 함께.
 - 전달: 작업 폴더 사본이 아니라 `git show <MERGE_SHA>:<경로> > 파일`로 만든 파일을 보낸다(이 PC는 `core.autocrlf=true`). edge01은 PC에서 `scp`, control01은 `gzip -9cn | base64 -w 76` 붙여넣기 후 `sha256sum` 대조.

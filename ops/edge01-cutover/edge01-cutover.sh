@@ -2,19 +2,21 @@
 # Edge Cutover(#19) — edge01 nginx upstream `transaction_api`를 옛 E-K3S(10.1.93.50:30080)에서
 # 정본 Worker NodePort(10.1.93.105/.107/.108:30080)로 바꾼다. upstream 줄 외에는 바꾸지 않는다.
 # 사용: sudo -v 후 `bash edge01-cutover.sh <mode> <RUN>`   (RUN 예: 20261010T1000)
-#   check    : 변경 없음. upstream 블록·설정 파일 SHA, reload 반영 여부, 경로 응답, /metrics, E-K3S 상태, 도구 유무
+#   check    : 설정 변경 없음. upstream 블록·설정 파일 SHA, reload 반영, 경로 응답, /metrics, E-K3S 상태.
+#              관측 방법 사전 검증용 표식 요청을 보낸다(edge 경유 1건 → E-K3S 로그에서 확인,
+#              Worker 3대 직접 각 1건 → control01 `trace <RUN> check`로 확인). GET /readyz만 보낸다.
 #   apply    : 사전 게이트 → 설정 사본 → upstream 줄 전환(.50 주석, Worker 3줄 주석 해제) → nginx -t → reload
-#              → 반영 확인 → 새 요청 9회의 실제 upstream 목적지 관측 → /metrics 404 → 업무 smoke 1건
-#   rollback : apply 직전 사본 복원 → nginx -t → reload → 반영 확인 → 새 요청이 옛 경로로 가는지 관측 → smoke 1건
+#              → 반영 확인 → 표식 요청 9회 + 표식 smoke 1건 → E-K3S 로그에 표식 0건 확인.
+#              실제 새 upstream 경유는 control01 `trace <RUN> apply`로 표식 10개가 K8s Pod 로그에 각각 1번씩
+#              찍혔는지 확인해야 C1 완료다(이 스크립트의 OK는 edge 단계 완료).
+#   rollback : apply 직전 사본 복원 → nginx -t → reload → 반영 확인 → 표식 요청 3회 + 표식 smoke 1건이
+#              E-K3S Pod 로그에 각각 1번씩 찍혔는지 확인(옛 경로 경유의 직접 근거).
+# 표식: 요청 쿼리 `cutover=<RUN>-<mode>-<번호>`. transaction-api는 모르는 쿼리를 무시하고, uvicorn 접근 로그에
+#   경로·쿼리·client 주소가 남는다. 표식은 RUN·mode·번호로 정해져 다른 요청과 섞이지 않는다.
 # 종료 코드: 0=완료(RESULT …=OK), 3=STOP(실패·조건 불충족), 4=UNCONFIRMED(변경은 됐으나 증명 불완전 —
 #   완료로 기록하지 않고 Review Owner·실행자가 복구/수용을 판단). 미확정을 OK로 내보내지 않는다.
-# 경로 관측(두 가지를 함께 본다):
-#   - 요청 구간에만 edge01에서 나가는 TCP SYN 헤더를 tcpdump로 짧게 받아 Worker :30080으로 간 새 연결 수를 센다
-#     (payload 없음, 파일은 로그 폴더 600). nginx 기본(upstream keepalive 없음)은 요청마다 새 upstream 연결을 연다.
-#     E-K3S Pod 대역 SYN은 kubelet probe와 섞이므로 판정에 쓰지 않고 기록만 한다.
-#   - 업무 smoke(POST)가 E-K3S transaction-api Pod 로그에 찍혔는지 본다(kubelet probe는 POST를 하지 않는다).
-# E-K3S(k3s)는 이 스크립트에서 건드리지 않는다(중지는 #47 창 edge01-k3s.sh 범위, rollback 경로로 유지).
-# 출력은 ~/edge-cutover-<RUN>/에 남는다. set -e는 쓰지 않는다.
+# E-K3S(k3s)는 이 스크립트에서 바꾸지 않는다(get·logs 조회만. 중지는 #47 창 edge01-k3s.sh 범위).
+# 출력은 ~/edge-cutover-<RUN>/에 남는다(원본 로그는 회차별 새 파일). set -e는 쓰지 않는다.
 set -uo pipefail
 
 MODE=${1:-}
@@ -33,17 +35,17 @@ BEFORE=$LOGDIR/upstream-file.before
 AFTER=$LOGDIR/upstream-file.after
 META=$LOGDIR/upstream-file.path
 SIM_RUN=${RUN/T/}
+STAMP=$(date +%H%M%S)
 
 test "$(hostname -s)" = edge01 || { echo "STOP: edge01이 아님" >&2; exit 2; }
 mkdir -p "$LOGDIR" && chmod 700 "$LOGDIR" || { echo "STOP: $LOGDIR 생성 실패" >&2; exit 2; }
-LOG=$LOGDIR/edge01-cutover-$MODE-$(date +%H%M%S).log
+LOG=$LOGDIR/edge01-cutover-$MODE-$STAMP.log
 exec > >(tee -a "$LOG") 2>&1
 
 die() { echo "STOP: $*"; exit 3; }
 unconfirmed() { echo "UNCONFIRMED: $*"; echo "RESULT cutover-$MODE=UNCONFIRMED $(date '+%T') — 완료로 기록하지 않는다"; exit 4; }
 code() { curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1"; }
 nginx_ok() { test "$(sudo nginx -t 2>&1 | grep -c 'test is successful')" = 1; }
-have_tcpdump() { sudo sh -c 'command -v tcpdump' >/dev/null 2>&1; }
 # `upstream transaction_api {`를 정의한 설정 파일. nginx -T의 "# configuration file X:" 머리줄 기준.
 upstream_files() {
   sudo nginx -T 2>/dev/null | awk -v u="$UPSTREAM" '
@@ -78,7 +80,7 @@ reloaded_after_conf() {
   test "$wstart" -ge "$newest" || return 1
   return 0
 }
-# reload 직후 판정은 최대 30초(5초 간격) 다시 본다. 끝까지 0이 아니면 그 rc를 돌려준다.
+# reload 직후 판정을 5초 간격으로 최대 7번 본다(마지막 대기 포함 약 35초). 끝까지 0이 아니면 그 rc.
 wait_reloaded() {
   local i=0 rc=2
   while test "$i" -lt 7; do
@@ -88,82 +90,74 @@ wait_reloaded() {
   done
   return "$rc"
 }
-# E-K3S podCIDR(옛 경로 판정용). k3s가 꺼져 있거나 못 읽으면 k3s 기본값.
-k3s_podcidr() {
-  local c
-  c=$(sudo "$K3S" kubectl get nodes -o jsonpath='{.items[0].spec.podCIDR}' 2>/dev/null)
-  echo "${c:-10.42.0.0/16}"
-}
 
-# 요청 n회를 보내는 동안 나가는 SYN 헤더를 받아 목적지를 분류한다.
-# 출력 마지막 줄: OBS new=<Worker:30080 SYN 수> ek3s=<E-K3S 대역 SYN 수(기록만)> other=<n> http_ok=<n>/<N> capture=<ok|fail>
-observe() {
-  local n=$1 cap=$LOGDIR/syn-$MODE-$(date +%H%M%S).txt err pid i c ok=0 cidr
-  err=$cap.err
-  cidr=$(k3s_podcidr)
-  ( umask 077; sudo timeout 60 tcpdump -nn -l -i any 'tcp[tcpflags] & (tcp-syn|tcp-ack) == tcp-syn' > "$cap" 2> "$err" ) &
-  pid=$!
-  sleep 2
+# 표식 요청. 결과 줄 "<표식> <HTTP 코드>"를 nonce 파일에 남긴다.
+nonce() { echo "cutover-$RUN-$1-$2"; }
+send_nonces() {   # $1=tag $2=개수 $3=기준 URL
+  local tag=$1 n=$2 base=$3 i id c file=$LOGDIR/nonces-$1-$STAMP.txt
+  : > "$file"
   for i in $(seq 1 "$n"); do
-    c=$(code "$EDGE/readyz"); echo "   readyz[$i]=$c"
-    test "$c" = 200 && ok=$((ok + 1))
+    id=$(nonce "$tag" "$i")
+    c=$(code "$base/readyz?cutover=$id")
+    echo "$id $c" >> "$file"; echo "   $id http=$c"
     sleep 0.3
   done
-  sleep 1
-  sudo pkill -INT -f "^timeout 60 tcpdump -nn -l -i any" 2>/dev/null
-  wait "$pid" 2>/dev/null
-  echo "-- 캡처 파일 $cap ($(wc -l < "$cap")줄), tcpdump stderr: $(tr '\n' ' ' < "$err")"
-  python3 -I - "$cap" "$err" "$cidr" "$ok" "$n" "${NEW_WORKERS[@]}" <<'PY'
-import ipaddress, re, sys
-cap, err, cidr, ok, n = sys.argv[1:6]
-workers = set(sys.argv[6:])
-net = ipaddress.ip_network(cidr, strict=False)
-captured = 'listening on' in open(err, errors='replace').read()
-pat = re.compile(r' IP (\d+\.\d+\.\d+\.\d+)\.(\d+) > (\d+\.\d+\.\d+\.\d+)\.(\d+): Flags \[S\]')
-new = old = other = 0
-dst = {}
-for line in open(cap, errors='replace'):
-    m = pat.search(line)
-    if not m:
-        continue
-    ip, port = m.group(3), m.group(4)
-    key = ip + ':' + port
-    dst[key] = dst.get(key, 0) + 1
-    if ip in workers and port == '30080':
-        new += 1
-    elif (ip == '10.1.93.50' and port == '30080') or ipaddress.ip_address(ip) in net:
-        old += 1   # E-K3S 대역: kubelet probe 포함, 판정에 쓰지 않음
-    else:
-        other += 1
-for k in sorted(dst):
-    print('   SYN dst %s x%d' % (k, dst[k]))
-print('   E-K3S podCIDR(기록만, kubelet probe 포함) %s' % cidr)
-print('OBS new=%d ek3s=%d other=%d http_ok=%s/%s capture=%s' % (new, old, other, ok, n, 'ok' if captured else 'fail'))
-PY
+  NONCE_FILE=$file
 }
-obs_get() { printf '%s\n' "$1" | sed -n "s/^OBS .*$2=\([^ ]*\).*/\1/p"; }
-
-# 업무 smoke 1건(#20 최소): 201과 응답 본문을 기록한다. DB 행은 README대로 db01에서 확인한다.
+# 업무 smoke 1건(#20 최소): 표식 쿼리를 붙여 Pod 로그와 결속한다. 201과 응답 본문을 기록한다.
 smoke() {
-  local acct="SIM_cut_${SIM_RUN}_$1" out c
-  out=$LOGDIR/smoke-$1.json
-  c=$(curl -s -o "$out" -w '%{http_code}' --max-time 10 -X POST "$EDGE/api/v1/transactions" \
+  local tag=$1 acct="SIM_cut_${SIM_RUN}_$1" id out c
+  id=$(nonce "$tag" smoke)
+  out=$LOGDIR/smoke-$tag-$STAMP.json
+  c=$(curl -s -o "$out" -w '%{http_code}' --max-time 10 -X POST "$EDGE/api/v1/transactions?cutover=$id" \
       -H 'Content-Type: application/json' \
       -d "{\"account_id\":\"$acct\",\"amount\":10000,\"transaction_type\":\"deposit\",\"source_ip\":\"198.51.100.10\"}")
-  echo "   smoke $acct http=$c body=$(head -c 400 "$out")"
+  echo "   smoke $id $acct http=$c body=$(head -c 400 "$out")"
   test "$c" = 201
 }
 
-# E-K3S transaction-api Pod 로그에서 최근 N초 안의 smoke POST 줄 수. 조회 실패는 ERR.
-ek3s_posts() {
-  local since=$1 pods p n=0 c
-  pods=$(sudo "$K3S" kubectl get pods -A --no-headers 2>/dev/null | awk '$2 ~ /transaction-api/ { print $1 "/" $2 }') || { echo ERR; return; }
-  test -n "$pods" || { echo ERR; return; }
-  for p in $pods; do
-    c=$(sudo "$K3S" kubectl logs -n "${p%%/*}" "${p#*/}" --since="${since}s" 2>/dev/null | grep -c 'POST /api/v1/transactions') || true
-    n=$((n + ${c:-0}))
+# E-K3S transaction-api Pod 로그를 Pod별로 받아(조회마다 rc·stderr 분리, 회차별 새 파일) 표식 줄을 센다.
+# 출력 마지막 줄: TRACE ek3s tag=<tag> pods=<n> err=<조회 실패 수> found=<표식 줄 수> ids=<id:횟수,...>
+ek3s_trace() {
+  local tag=$1 since=$2 dir=$LOGDIR/ek3s-$1-$(date +%H%M%S) pods p rc errs=0 np=0
+  mkdir -p "$dir" && chmod 700 "$dir"
+  pods=$(sudo "$K3S" kubectl get pods -A --no-headers 2> "$dir/get-pods.err")
+  rc=$?
+  echo "$rc" > "$dir/get-pods.rc"
+  if test "$rc" -ne 0; then echo "TRACE ek3s tag=$tag pods=0 err=1 found=0 ids="; return 1; fi
+  printf '%s\n' "$pods" > "$dir/get-pods.out"
+  for p in $(printf '%s\n' "$pods" | awk '$2 ~ /transaction-api/ { print $1 "/" $2 }'); do
+    np=$((np + 1))
+    sudo "$K3S" kubectl logs -n "${p%%/*}" "${p#*/}" --since="${since}s" > "$dir/${p#*/}.log" 2> "$dir/${p#*/}.err"
+    rc=$?
+    echo "$rc" > "$dir/${p#*/}.rc"
+    test "$rc" -eq 0 || errs=$((errs + 1))
   done
-  echo "$n"
+  test "$np" -gt 0 || errs=$((errs + 1))
+  python3 -I - "$dir" "cutover-$RUN-$tag-" "$tag" "$np" "$errs" <<'PY'
+import glob, os, re, sys
+d, prefix, tag, np, errs = sys.argv[1:6]
+pat = re.compile(r'(\d+\.\d+\.\d+\.\d+):\d+ - "(?:GET|POST) [^ "?]*\?(?:[^ "]*&)?cutover=' + re.escape(prefix) + r'([A-Za-z0-9]+)[& "]')
+ids = {}
+found = 0
+for f in sorted(glob.glob(os.path.join(d, '*.log'))):
+    for line in open(f, errors='replace'):
+        m = pat.search(line)
+        if m:
+            found += 1
+            ids[m.group(2)] = ids.get(m.group(2), 0) + 1
+            print('   %s %s client=%s' % (os.path.basename(f)[:-4], m.group(2), m.group(1)))
+print('TRACE ek3s tag=%s pods=%s err=%s found=%d ids=%s' % (
+    tag, np, errs, found, ','.join('%s:%d' % (k, ids[k]) for k in sorted(ids))))
+PY
+  test "$errs" -eq 0
+}
+tr_get() { printf '%s\n' "$1" | sed -n "s/^TRACE .* $2=\([^ ]*\).*/\1/p"; }
+# ids 문자열이 기대 목록(각 1회)과 정확히 같은지
+ids_exact() {   # $1=ids 문자열 $2..=기대 id
+  local got=$1 want; shift
+  want=$(for i in "$@"; do echo "$i:1"; done | sort | tr '\n' ',' | sed 's/,$//')
+  test "$got" = "$want"
 }
 
 show() {
@@ -178,8 +172,7 @@ show() {
   echo "-- 유효 upstream server(디스크): $(active_servers | tr '\n' ' ')"
   echo "-- 응답: edge .50:80/readyz=$(code $EDGE/readyz) /metrics=$(code $EDGE/metrics) E-K3S .50:30080/readyz=$(code http://10.1.93.50:30080/readyz)"
   for w in "${NEW_WORKERS[@]}"; do echo "   Worker $w:30080/readyz=$(code "http://$w:30080/readyz")"; done
-  echo "-- k3s(E-K3S, rollback 경로) active=$(systemctl is-active k3s) podCIDR=$(k3s_podcidr)"
-  if have_tcpdump; then echo "-- tcpdump: $(sudo tcpdump --version 2>&1 | head -1)"; else echo "-- tcpdump: 없음(새 경로 관측 불가 → apply는 UNCONFIRMED)"; fi
+  echo "-- k3s(E-K3S, rollback 경로) active=$(systemctl is-active k3s)"
   echo "-- python3: $(python3 --version 2>&1)"
 }
 
@@ -187,6 +180,21 @@ case "$MODE" in
   check)
     sudo -v || die "sudo 인증 실패"
     show
+    TAG=check$STAMP
+    echo "-- 관측 방법 사전 검증(표식 GET /readyz, tag=$TAG)"
+    send_nonces "$TAG" 1 "$EDGE"
+    for w in "${NEW_WORKERS[@]}"; do
+      id=$(nonce "$TAG" "w${w##*.}")
+      echo "   $id direct $w:30080 http=$(code "http://$w:30080/readyz?cutover=$id")"
+    done
+    sleep 2
+    T=$(ek3s_trace "$TAG" 300 | tee /dev/stderr | tail -1)
+    echo "-- 기대: edge 경유 $TAG-1이 E-K3S 로그에 1번(현재 upstream이 E-K3S), Worker 직접 3건은 control01 \`trace $RUN $TAG\`에서 w105/w107/w108 각 1번"
+    if test "$(tr_get "$T" err)" = 0 && ids_exact "$(tr_get "$T" ids)" 1; then
+      echo "RESULT cutover-check=TRACE_READY $(date '+%T') (E-K3S 쪽 표식 관측 가능)"
+    else
+      echo "RESULT cutover-check=TRACE_NOT_READY $(date '+%T') — E-K3S 로그로 표식을 확인하지 못함. C1 시작 전 원인 확인"
+    fi
     ;;
 
   apply)
@@ -194,7 +202,6 @@ case "$MODE" in
     show
     test -e "$BEFORE" && die "이미 apply한 RUN($BEFORE 있음). 같은 RUN으로 재적용하지 않는다"
     command -v python3 >/dev/null || die "python3 없음"
-    have_tcpdump || die "tcpdump 없음 — 새 경로 관측을 못 하므로 바꾸지 않는다(대체 관측은 GO 때 별도 결정)"
     nginx_ok || die "nginx -t 실패(적용 전)"
     reloaded_after_conf || die "실행 중 nginx가 디스크 설정과 다를 수 있음(reload 반영 판정 실패). 원인 확인 전 바꾸지 않는다"
     test "$(upstream_files | wc -l)" = 1 || die "upstream $UPSTREAM 정의 파일이 1개가 아님"
@@ -263,23 +270,22 @@ PY
     sleep 2
     test "$(active_servers | tr '\n' ' ')" = "10.1.93.105:30080 10.1.93.107:30080 10.1.93.108:30080 " || die "디스크 유효 upstream이 Worker 3대가 아님 → rollback"
     # ① 설정 반영
-    wait_reloaded || unconfirmed "reload 반영을 30초 안에 확인하지 못함(정리 중 옛 worker 또는 판단 불가) → rollback 판단"
+    wait_reloaded || unconfirmed "reload 반영을 약 35초 안에 확인하지 못함(정리 중 옛 worker 또는 판단 불가) → rollback 판단"
     echo "-- ① 설정 반영: 확인"
-    # ② 새 요청 9회와 실제 upstream 목적지
-    OBS=$(observe 9 | tee /dev/stderr | tail -1)
-    test "$(obs_get "$OBS" http_ok)" = 9/9 || die "edge 경유 /readyz 실패($(obs_get "$OBS" http_ok)) → rollback 판단"
-    echo "-- ② HTTP: 9/9 200"
-    test "$(obs_get "$OBS" capture)" = ok || unconfirmed "SYN 캡처 실패 — 실제 upstream 경유 미확인 → rollback 판단"
-    test "$(obs_get "$OBS" new)" -ge 9 || unconfirmed "요청 9회에 대한 Worker :30080 새 연결이 $(obs_get "$OBS" new)건뿐(keepalive 재사용 등) → rollback 판단"
-    echo "-- ③ 실제 upstream 경유: Worker :30080 새 연결 $(obs_get "$OBS" new)건(요청 9회 이상)"
-    test "$(code $EDGE/metrics)" = 404 || die "/metrics가 404가 아님 → rollback"
+    # ② 표식 요청 9회 + 표식 smoke
+    send_nonces apply 9 "$EDGE"
+    test "$(grep -c ' 200$' "$NONCE_FILE")" = 9 || die "edge 경유 표식 요청 중 200이 아닌 것이 있음 → rollback 판단"
+    echo "-- ② HTTP: 9/9 200 ($NONCE_FILE)"
     smoke apply || die "업무 smoke가 201이 아님 → rollback"
+    test "$(code $EDGE/metrics)" = 404 || die "/metrics가 404가 아님 → rollback"
     sleep 2
-    P=$(ek3s_posts 60)
-    echo "-- ④ E-K3S Pod 로그의 최근 60초 smoke POST=$P (기대 0, ERR은 판정 불가로 기록만)"
-    test "$P" = ERR || test "$P" = 0 || die "smoke가 E-K3S로 감(POST $P건) → rollback"
+    # ③ 옛 경로 미경유: E-K3S Pod 로그에 이번 apply 표식이 하나도 없어야 한다(조회 실패는 판정 불가)
+    T=$(ek3s_trace apply 600 | tee /dev/stderr | tail -1)
+    test "$(tr_get "$T" err)" = 0 || unconfirmed "E-K3S 로그 조회 실패 — 옛 경로 미경유 미확인"
+    test "$(tr_get "$T" found)" = 0 || die "apply 표식이 E-K3S 로그에 있음(옛 경로 경유) → rollback"
+    echo "-- ③ E-K3S 로그의 apply 표식 0건"
     show
-    echo "RESULT cutover-apply=OK $(date '+%T') file=$F (DB 행·P2~P4·N1은 README C2)"
+    echo "RESULT cutover-apply=EDGE_OK $(date '+%T') file=$F — ④ control01 \`trace $RUN apply\`가 표식 10개(1~9, smoke) 각 1번을 K8s Pod 로그에서 찾아야 C1 완료"
     ;;
 
   rollback)
@@ -294,25 +300,20 @@ PY
     sudo systemctl reload nginx || die "nginx reload 실패"
     sleep 2
     test "$(active_servers | tr '\n' ' ')" = "10.1.93.50:30080 " || die "복원 후 디스크 유효 upstream이 .50:30080이 아님"
-    wait_reloaded || unconfirmed "복원 설정의 reload 반영을 30초 안에 확인하지 못함"
+    wait_reloaded || unconfirmed "복원 설정의 reload 반영을 약 35초 안에 확인하지 못함"
     echo "-- ① 설정 반영: 확인"
-    if have_tcpdump; then
-      OBS=$(observe 3 | tee /dev/stderr | tail -1)
-      test "$(obs_get "$OBS" http_ok)" = 3/3 || die "복원 후 edge /readyz 실패($(obs_get "$OBS" http_ok)) — E-K3S 상태 확인"
-      test "$(obs_get "$OBS" capture)" = ok || unconfirmed "SYN 캡처 실패 — 옛 경로 경유 미확인"
-      test "$(obs_get "$OBS" new)" = 0 || unconfirmed "복원 뒤에도 Worker :30080으로 새 연결(new=$(obs_get "$OBS" new))"
-      echo "-- ② Worker :30080 새 연결 0건"
-    else
-      unconfirmed "tcpdump 없음 — Worker 경로 미사용 미확인"
-    fi
-    smoke rollback || die "복원 후 업무 smoke가 201이 아님"
+    TAG=rollback$STAMP
+    send_nonces "$TAG" 3 "$EDGE"
+    test "$(grep -c ' 200$' "$NONCE_FILE")" = 3 || die "복원 후 edge /readyz 실패 — E-K3S 상태 확인"
+    smoke "$TAG" || die "복원 후 업무 smoke가 201이 아님"
     sleep 2
-    P=$(ek3s_posts 60)
-    echo "-- ③ E-K3S Pod 로그의 최근 60초 smoke POST=$P (기대 1 이상)"
-    test "$P" = ERR && unconfirmed "E-K3S Pod 로그 조회 실패 — 옛 경로 경유 미확인"
-    test "$P" -ge 1 || unconfirmed "smoke가 E-K3S Pod 로그에 보이지 않음 — 옛 경로 경유 미확인"
+    # ② 옛 경로 경유: 이번 rollback 표식 4개(1~3, smoke)가 E-K3S Pod 로그에 각각 정확히 1번
+    T=$(ek3s_trace "$TAG" 600 | tee /dev/stderr | tail -1)
+    test "$(tr_get "$T" err)" = 0 || unconfirmed "E-K3S 로그 조회 실패 — 옛 경로 경유 미확인"
+    ids_exact "$(tr_get "$T" ids)" 1 2 3 smoke || unconfirmed "rollback 표식이 E-K3S 로그에 각 1번씩 있지 않음(ids=$(tr_get "$T" ids)) — 옛 경로 경유 미확인"
+    echo "-- ② E-K3S 로그에서 rollback 표식 1~3·smoke 각 1번 확인"
     show
-    echo "RESULT cutover-rollback=OK $(date '+%T')"
+    echo "RESULT cutover-rollback=OK $(date '+%T') tag=$TAG (control01 \`trace $RUN $TAG\`는 0건이어야 한다 — 보조)"
     ;;
 
   *)
