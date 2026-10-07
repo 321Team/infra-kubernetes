@@ -1,0 +1,80 @@
+# Edge Cutover — edge01 nginx upstream 전환 (변경안·창 계획)
+
+책임 티켓: [baseline#19](https://github.com/321Team/fds-project-baseline/issues/19) P1-SEC-01 edge01 upstream 이관(edge01 서버 담당 이재환). 근거: Review Owner 조건 [6012871977](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6012871977) §2~§4, 9/29 Gate [5883374181](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-5883374181), 일정 제안 [6034620578](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6034620578). 후속: [#47 DB 변경 창](https://github.com/321Team/infra-db/pull/7)(Cutover 완료가 선행조건), #20 edge 전체 경로 회귀.
+
+이 PR은 코드·계획 검토용이다. 병합·리뷰 승인은 실행 승인이 아니다. 실행은 이권욱의 창 GO 뒤에만 한다.
+
+## 1. 범위
+
+- **바꾸는 것:** edge01 nginx `upstream transaction_api` 블록의 4줄뿐이다. `server 10.1.93.50:30080;`(옛 E-K3S)을 주석 처리하고, 이미 주석으로 들어 있는 `# server 10.1.93.105/.107/.108:30080;` 3줄의 주석을 푼다. `nginx -t` 성공 뒤 `systemctl reload nginx`.
+- **바꾸지 않는 것:** E-K3S(k3s)는 유지한다(rollback 경로, 중지는 #47 창). listen·location·`/metrics` 404·proxy 설정, Service·EndpointSlice·Calico 정책, TLS/443(edge01에 443 없음, #17 별도), DB 허용(#47).
+- 다른 형태의 upstream(유효 server 줄이 `.50:30080` 하나가 아님, Worker 주석 줄이 각 1개가 아님, 예상 밖 server 줄)이면 `apply`는 파일을 바꾸지 않고 멈춘다.
+
+## 2. 현재 사실(근거)
+
+| 항목 | 값 | 출처 |
+|---|---|---|
+| nginx upstream | `server 10.1.93.50:30080;` 유효, `# server 10.1.93.105/107/108:30080;` 주석, `listen 80 default_server`, `location = /metrics { return 404; }` | evidence `P1-MON-01/received-20260929T0656Z/edge01/edge-metrics.txt`(9/29 `nginx -T` 발췌). 현재 값은 C0 `check`로 다시 확인 |
+| `.50/32 → Worker:30080` 허용 | GNP `nodeport-30080-allow`(order 50, preDNAT·applyOnForward, `.50/32`만 허용) **live 적용 중**(9/22 생성). infra-kubernetes `ops/nodeport-30080-allow/`에 live spec과 같은 후보로 편입. PR21(CLOSED)은 이 정책의 옛 경로이며 별도 적용이 필요 없다 | infra-kubernetes main `ops/nodeport-30080-allow/README.md`·`FIELD_20260924-144753.md` |
+| Worker local endpoint | 10/7 14:50 #65 분산 적용 뒤 `transaction-api-nodeport` ready endpoint worker01·02·03 각 1, edge01 → `.105/.107/.108:30080/readyz` 200 | #15 [6032106480](https://github.com/321Team/fds-project-baseline/issues/15#issuecomment-6032106480), evidence#136·#138 |
+| 22시 SEC 시험 | AC-04 방식 B 12/12행 `BLOCKED_VALID`(edge → worker01·03 대조 CONNECTED 포함) | evidence#144 |
+
+## 3. 전제조건 (하나라도 아니면 시작하지 않음)
+
+1. 이 PR HEAD의 독립 리뷰와 병합, 실행 파일 SHA-256 = 병합 commit blob(§8).
+2. 이권욱의 창 GO(T0·실행자·상한·중단/복구). 단톡 사전 공지. 다른 Runtime(#10·#13·#17·#19 시험, APP·Runner)과 비중첩.
+3. C0 사전 확인이 아래 기대값과 같음. 특히 Worker별 Ready local endpoint 1·1·1과 edge01 → Worker 3대 `/readyz` 200(권욱 6012871977 §2의 새 선행조건). Pod Running이나 endpoint 합계로 대체하지 않는다.
+4. E-K3S active, 현재 edge 경로 200(rollback 경로 확보).
+
+## 4. 창 계획 (제안: 10/10(토) 오전, 이어서 오후 #47 창)
+
+`RUN`은 같은 값(예: `20261010T1000`). 실행자: 이재환(edge01 담당) — GO 때 확정.
+
+| 단계 | 상한 | 호스트 | 명령 | 기대 / 성공 기준 | 실패 시 |
+|---|---|---|---|---|---|
+| C0 사전 | 15분 | control01 | `sudo bash control01-cutover-check.sh pre <RUN>` | NodePort 30080·ETP Local, endpoint `k8s-worker01/02/03` 각 ready=true terminating=false, GNP `.50/32` preDNAT, nodePort 32085 사용 0, MON 23/23/0, 조회 실패 0 | 시작 안 함 |
+| | | edge01 | `bash edge01-cutover.sh check <RUN>` | `nginx -t` OK, reload 반영 rc=0, 유효 upstream `.50:30080` 하나, Worker 3대 `:30080/readyz` 200, `/metrics` 404, k3s active | 시작 안 함 |
+| C1 전환 | 10분 | edge01 | `bash edge01-cutover.sh apply <RUN>` | `RESULT cutover-apply=OK`(diff 4줄, `nginx -t`·reload, 반영 rc=0, 유효 upstream Worker 3대, 새 연결 `/readyz` 9/9 200, `/metrics` 404) | `rollback` |
+| C2 사후 | 20분 | PC·db01·control01 | 아래 확인 시험 | 전부 기대값 | `rollback` |
+| C3 관찰 | 30분 | — | 5분 간격 PC `/readyz`, MON | 200 유지, MON 이상 없음 | `rollback` |
+
+- 전체 상한 T0+75분, 복구 완료 목표 T0+90분. 상한을 넘기면 되돌리고 멈춘다(연장 없음).
+- `apply`는 파일을 바꾸기 전에 모든 게이트를 본다. 새 설정이 `nginx -t`를 통과하지 못하면 사본으로 즉시 되돌리고 reload하지 않는다.
+- reload 뒤 옛 worker 프로세스가 기존 연결을 잠시 처리할 수 있다. 그래서 `apply`는 디스크 설정이 아니라 **새 연결**(9회 `/readyz`, `:30080` 소켓 목적지)과 worker 시작 시각으로 적용을 확인한다.
+
+### 확인 시험 (C2)
+
+| 구분 | 시험 | 명령(예) | 기대 |
+|---|---|---|---|
+| P1 | edge 경로 | PC `curl -s -o /dev/null -w '%{http_code}' http://10.1.93.50/readyz` | 200 |
+| P2 | `/metrics` 비노출 | PC 같은 명령으로 `/metrics` | 404 |
+| P3 | 업무 smoke(#20 최소) | PC `curl -s -X POST http://10.1.93.50/api/v1/transactions -H 'Content-Type: application/json' -d '{"account_id":"SIM_cut_<yyyymmddHHMM>_1","amount":10000,"transaction_type":"deposit","source_ip":"198.51.100.10"}'` + db01 `SELECT fds_detected, fds_evaluation_skipped FROM transactions WHERE account_id = 'SIM_cut_<yyyymmddHHMM>_1'` | 201, 행 1, `false`/`false` |
+| P4 | source `.50` 보존 | evidence#86과 같은 수집기(infra-ansible `c0d784fa`, collector `42fc3ed4…`) 1회, 새 Pod 기준 | Worker 3대 Pod에서 source `10.1.93.50` |
+| N1 | 비승인 출발지 30080 | PC `timeout 5 bash -c '</dev/tcp/10.1.93.105/30080' ; echo rc=$?`(3대) | rc≠0 |
+| — | K8s·MON 사후 | control01 `sudo bash control01-cutover-check.sh post <RUN>` | C0와 같음 |
+
+- P4 수집기는 ansible01 `svc_ansible` 경로로 실행한다. 실행자는 GO 때 정한다(그 경로를 쓸 수 있는 사람).
+- 시험 거래(`SIM_cut_*`)는 기능 시험 거래로 보존한다.
+
+## 5. 중단·복구
+
+- 중단 기준: edge `/readyz` 실패, 업무 smoke 실패·5xx, 예상 밖 접근(N1 성공), MON 이상, 상한 초과.
+- 복구: `bash edge01-cutover.sh rollback <RUN>` → apply 직전 사본으로 복원(`cat >`로 inode·권한·문맥 유지) → `nginx -t` → reload → 유효 upstream `.50:30080` 확인 → edge `/readyz` 200(E-K3S 경유). 이어 P3 smoke 1건으로 옛 앱·DB 경로 회복을 확인한다. 쓰지 않은 파일 SHA만으로 복구를 선언하지 않는다.
+- E-K3S·옛 DB 허용(pg_hba `.50`)은 Cutover 창에서 바꾸지 않으므로 rollback 경로는 #47 창 W1 전까지 유지된다.
+
+## 6. #47 창과의 관계
+
+- #47 창(infra-db#7)은 Cutover `RESULT cutover-apply=OK`, C2 통과, C3 관찰 종료 뒤에만 시작한다. #47 W1 `edge01-k3s.sh stop`도 같은 조건(유효 upstream에 `.50:30080` 0, Worker 3/3, reload 반영, 옛 NodePort ESTABLISHED 0)을 다시 확인한다.
+- Cutover 뒤 #47 W1 전까지는 E-K3S가 켜져 있지만 edge 트래픽은 받지 않는다.
+
+## 7. 알려진 차이·잔여 (이번 창에서 바꾸지 않음)
+
+- **정본 D18은 edge01 HAProxy**를 고정하지만 실제 edge01은 nginx(9/29 `nginx/1.26.3`)다. 기존 차이이며 upstream-only 창에서 프록시 소프트웨어를 바꾸지 않는다. 처분은 #19·#30에서 판단한다.
+- **`X-Forwarded-For`**: 정본은 실제 Client 주소를 XFF로 전달하도록 요구한다. 현재 `proxy_set_header` 유무는 C0 `check` 출력으로 기록만 한다(transaction-api는 요청 본문의 `source_ip`를 쓴다).
+- **backend 장애 동작**: nginx 기본값(`max_fails=1`, `fail_timeout=10s`, `proxy_next_upstream error timeout`, `proxy_connect_timeout 60s`)을 쓴다. local endpoint가 없는 Worker는 즉시 거부(RST)라 다음 backend로 넘어가지만, Worker 호스트가 응답 없이 멈추면 첫 요청이 최대 60초 지연될 수 있다. 타임아웃 조정은 별도 변경으로 다룬다.
+
+## 8. 원본 수집·파일 전달
+
+- edge01 `~/edge-cutover-<RUN>/`(로그, `upstream-file.before/after`), control01 `/root/edge-cutover-<RUN>/*.log`, PC의 P1~P3·N1 출력, P4 수집기 archive. 비밀 값 없음.
+- 증적 PR: fds-project-evidence `evidence/P1-SEC-01/edge-cutover-<RUN>/`, 독립 리뷰어 지정. #19 결과 코멘트는 증적 PR 링크와 함께.
+- 전달: 작업 폴더 사본이 아니라 `git show <MERGE_SHA>:<경로> > 파일`로 만든 파일을 보낸다(이 PC는 `core.autocrlf=true`). edge01은 PC에서 `scp`, control01은 `gzip -9cn | base64 -w 76` 붙여넣기 후 `sha256sum` 대조.
