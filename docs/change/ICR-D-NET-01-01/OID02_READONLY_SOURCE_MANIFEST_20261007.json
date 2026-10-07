@@ -1,0 +1,39 @@
+{
+  "schema": "OID02-readonly-source-validation-1",
+  "repository": "321Team/infra-kubernetes",
+  "base_commit": "c3057906a6a8427a4b315b7e544e063efe0fecf2",
+  "recorded_at_utc": "2026-10-07T05:33:38.959Z",
+  "source_files": {
+    "tools/oid02-cache-metadata-readonly.py": {
+      "sha256": "5f3110ccd9fd3d3f0e7bacb0452baf4d96ff22c3f63369b0737ee47d93b9f8b6",
+      "size_bytes": 12592,
+      "ast": true
+    },
+    "tests/test_oid02_cache_metadata_readonly.py": {
+      "sha256": "660737bd86fe06536719988800b63cfaa9dc65d90204098cbedadd86477bbd57",
+      "size_bytes": 10803,
+      "ast": true
+    }
+  },
+  "verification": {
+    "static_ast_files": 2,
+    "mock_unit_tests": 26,
+    "mock_conclusion": "OK",
+    "mock_exit_code": 0,
+    "command": "python tests/test_oid02_cache_metadata_readonly.py",
+    "environment": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.14",
+    "log_origin": "EXEC_TOOL_RESPONSE_DIRECTLY_OBSERVED_NOT_SERVER_LOG",
+    "linux_containerd_root_runtime": "NOT_RUN",
+    "ci": "NO_WORKFLOW_IN_CURRENT_MAIN_CHECK_FINAL_HEAD",
+    "independent_review": "PENDING",
+    "export_import": false,
+    "oid02_acceptance": false
+  },
+  "limitations": [
+    "METADATA_ONLY_LAYER_BYTES_NOT_READ",
+    "CURRENT_CACHE_NOT_HISTORICAL_SUPPLY_PROVENANCE",
+    "DECLARED_COMMIT_NEEDS_EXTERNAL_TRANSFER_AND_REVIEW_BINDING",
+    "DESCRIPTOR_SIZE_SUM_NOT_ARCHIVE_SIZE"
+  ]
+}
