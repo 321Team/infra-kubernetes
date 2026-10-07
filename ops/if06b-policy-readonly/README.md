@@ -10,7 +10,10 @@
 ## 실행 조건과 범위
 
 - mgmt-gw01의 기존 승인 계정/root 권한, Python3와 기존 firewalld/nft/ip/sysctl.
-- ansible01의 전용 inventory는 `server01_mgmt-gw@10.250.10.1` 및
+- 사용자 지정 경로는 `server01_mgmt-gw@10.1.93.58`이다. ansible01에서 TCP/SSH는
+  도달하지만 현재 관리 키·기본 SSH 인증 모두 거부된다. PC 직접 경로는 TCP22 timeout이다.
+  기존 승인 키/별칭 또는 사용자 콘솔 접근을 확인하기 전 수집하지 않는다.
+- ansible01의 과거 전용 inventory는 `server01_mgmt-gw@10.250.10.1` 및
   `/home/server01_ansible/if06b-ssh-trust/known_hosts`를 지정한다.
   현 관리 키 인증은 거부됐다. 접속 복구를 위해 키·계정·권한·host-key 검증을 변경하지 않는다.
 - 새 root 전용 `/root/if06b-policy-*`에만 결과를 쓴다. 설치·reload·규칙 변경·접속 probe 없음.
