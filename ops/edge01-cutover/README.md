@@ -84,7 +84,7 @@
 - **"9/9 HTTP 성공", "설정 반영", "실제 새 upstream 경유"를 따로 증명한다.**
   - 설정 반영: reload 뒤 정리 중인 옛 worker(`shutting down`)를 빼고, 현재 worker가 모두 설정 파일 최종 수정 이후에 시작됐는지 본다. 5초 간격으로 최대 7번(약 35초) 다시 본다. 끝내 확인하지 못하면 종료 4. nginx는 reload 뒤에도 옛 worker가 기존 연결을 처리할 수 있으므로, 반영 판정과 별개로 **새 요청 각각이 어느 backend로 갔는지**를 아래 캡처로 본다.
   - 실제 경유: 요청마다 고유 표식 `?cutover=cutover-<RUN>-<tag>-<번호>`를 붙이고(transaction-api는 모르는 쿼리를 무시), edge01은 보내기 직전 시각과 HTTP 코드를 `SENT` 줄로 남긴다. backend 쪽 캡처에서 표식이 든 요청줄을 찾아 **표식 → 캡처 호스트 → dst Pod IP → Pod 이름·UID·노드**(control01 `POD` 줄, E-K3S는 edge01 `POD cluster=ek3s` 줄)로 결속한다.
-  - nginx 경유와 직접 요청의 구분: nginx는 `X-Real-IP`를 붙인다(9/29 `nginx -T`의 `proxy_set_header X-Real-IP $remote_addr`). apply·rollback 표식은 nginx 서명이 있어야 하고, C0의 Worker 직접 표식(w105 등)은 서명이 없어야 한다. 같은 WIN에 다른 tag 표식이 섞이면 판정 불가다.
+  - nginx 경유와 직접 요청의 구분: nginx는 `X-Real-IP`를 붙인다(D18 Option A 원본 설정 fds-msa `kubernetes/edge-proxy/fds.conf`(9/7)의 `proxy_set_header X-Real-IP $remote_addr`. 9/29 `nginx -T` 수집본은 upstream·listen·`/metrics` 줄만 담아 이 줄이 없다. 운영 설정에 실제로 있는지는 C0 `check`의 `proxy_set_header` 출력과 판정기의 `xri` 값으로 확인하고, 없으면 `METHOD_READY`가 나오지 않아 시작하지 않는다). apply·rollback 표식은 nginx 서명이 있어야 하고, C0의 Worker 직접 표식(w105 등)은 서명이 없어야 한다. 같은 WIN에 다른 tag 표식이 섞이면 판정 불가다.
   - 캡처 오류·누락: tcpdump 종료 코드(0/124 정상), 종료 통계의 커널 drop 0, pcap 해석 rc 0, 캡처 준비 < 첫 요청, 캡처 종료 > 마지막 요청. 하나라도 아니면 판정 불가(종료 4)다. 0건 정상과 캡처 실패를 합치지 않는다.
   - 같은 패킷이 두 인터페이스(브리지·veth)에서 잡히거나 재전송된 경우는 (src, dst, seq, 표식)으로 1번만 센다. 서로 다른 연결로 같은 표식이 두 번 들어오면 중복(판정 불가)이다.
   - 표식은 RUN·tag·번호로 정해지고 check·rollback tag에는 실행 시각(`HHMMSS`)이 붙어, 이전 요청이나 다른 회차가 섞이지 않는다. 기대값은 "각 번호가 정확히 1번"이다(누락·중복 모두 실패).
