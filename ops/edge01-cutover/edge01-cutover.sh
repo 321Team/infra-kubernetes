@@ -71,7 +71,9 @@ reloaded_after_conf() {
     args=$(ps -o args= -p "$pid") || return 2
     case "$args" in *"shutting down"*) n_old=$((n_old + 1)); continue ;; esac
     case "$args" in *"worker process"*) ;; *) continue ;; esac
-    t=$(date -d "$(ps -o lstart= -p "$pid")" +%s) || return 2
+    # ps emits localized weekday/month names. GNU date cannot reliably parse
+    # those (e.g. ko_KR), so pin both producer and parser, not just date.
+    t=$(LC_ALL=C date -d "$(LC_ALL=C ps -o lstart= -p "$pid")" +%s) || return 2
     n_cur=$((n_cur + 1))
     if test -z "$wstart" || test "$t" -lt "$wstart"; then wstart=$t; fi
   done
@@ -180,6 +182,8 @@ case "$MODE" in
   check)
     sudo -v || die "sudo 인증 실패"
     show
+    nginx_ok || die "nginx -t 실패(사전검증)"
+    reloaded_after_conf || die "reload 반영 판정 실패/미확정 — 표식 시험과 apply 중단"
     TAG=check$STAMP
     echo "-- 관측 방법 사전 검증(표식 GET /readyz, tag=$TAG)"
     send_nonces "$TAG" 1 "$EDGE"
@@ -194,6 +198,7 @@ case "$MODE" in
       echo "RESULT cutover-check=TRACE_READY $(date '+%T') (E-K3S 쪽 표식 관측 가능)"
     else
       echo "RESULT cutover-check=TRACE_NOT_READY $(date '+%T') — E-K3S 로그로 표식을 확인하지 못함. C1 시작 전 원인 확인"
+      exit 3
     fi
     ;;
 

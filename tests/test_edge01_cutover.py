@@ -341,3 +341,69 @@ def test_control01_check_is_read_only():
     for required in ("transaction-api-nodeport", "nodeport-30080-allow", "32085",
                      "count(up == 0)", 'kill "$PF"', "EMPTY", "COLLECTED", "logs \"$pod\"", ".rc\""):
         assert required in text
+
+
+@needs_bash
+@pytest.mark.parametrize('newest,expected', [(1791200000, 0), (1991200000, 1)])
+def test_reload_check_parses_c_locale_under_korean_host(tmp_path, newest, expected):
+    text = cutover_text()
+    body = text[text.index('reloaded_after_conf() {'):text.index('wait_reloaded() {')]
+    harness = '''
+sudo() { "$@"; }
+nginx() { echo '# configuration file /mock/nginx.conf:'; }
+stat() { echo NEWEST; }
+pgrep() { if test "$1" = -o; then echo 100; else echo 101; fi; }
+ps() {
+  if test "$2" = args=; then echo 'nginx: worker process'; return; fi
+  if test "${LC_ALL:-}" = C; then echo 'Tue Oct  6 10:04:38 2026';
+  else echo '화 10월  6 10:04:38 2026'; fi
+}
+'''.replace('NEWEST', str(newest)) + body + '\nreloaded_after_conf\n'
+    hp = tmp_path / 'locale.sh'; hp.write_text(harness, encoding='utf-8')
+    result = subprocess.run([BASH, hp.as_posix()], capture_output=True)
+    assert result.returncode == expected, result.stderr
+
+
+@needs_bash
+@pytest.mark.parametrize('ready,query_rc,expected', [(True, 0, 0), (False, 0, 4), (True, 1, 4)])
+def test_control_trace_shell_propagates_verdict(tmp_path, ready, query_rc, expected):
+    tag = 'check032801'
+    for n, worker in enumerate(('k8s-worker01', 'k8s-worker02', 'k8s-worker03')):
+        (tmp_path / ('p%d.log' % n)).write_text(
+            uv('10.1.93.50', nonce_path(tag, ('w105', 'w107', 'w108')[n])) if ready else '', encoding='utf-8')
+    fake = tmp_path / 'kubectl'
+    fake.write_text('''#!/usr/bin/env bash
+if test "$3" = get; then
+  printf 'p0 k8s-worker01\\np1 k8s-worker02\\np2 k8s-worker03\\n'
+  exit QUERY_RC
+fi
+cat "FAKE_DIR/$4.log"
+'''.replace('QUERY_RC', str(query_rc)).replace('FAKE_DIR', tmp_path.as_posix()), encoding='utf-8')
+    fake.chmod(0o755)
+    text = CHECK.read_text(encoding='utf-8')
+    block = text.split('if test "$PHASE" = trace; then', 1)[1].split('\necho "== $(date', 1)[0]
+    harness = ('python3 -c 1 >/dev/null 2>&1 || python3() { python -X utf8 "$@"; }\n'
+               + 'K=("%s"); DIR="%s"; STAMP=mock; RUN=%s; TAG=%s; PHASE=trace\n' % (fake.as_posix(), tmp_path.as_posix(), RUN, tag)
+               + 'if test "$PHASE" = trace; then' + block)
+    hp = tmp_path / 'trace.sh'; hp.write_text(harness, encoding='utf-8')
+    result = subprocess.run([BASH, hp.as_posix()], capture_output=True)
+    assert result.returncode == expected, result.stdout + result.stderr
+
+
+@needs_bash
+def test_edge_check_empty_logs_exits_nonzero(tmp_path):
+    body = mode_block('check')
+    # All read-only prerequisites succeed; no nonce is present in the log.
+    harness = '''
+sudo() { return 0; }; show() { :; }; nginx_ok() { return 0; }
+reloaded_after_conf() { return 0; }; send_nonces() { :; }; sleep() { :; }
+nonce() { echo marker; }; code() { echo 200; }
+ek3s_trace() { echo 'TRACE ek3s tag=check1 pods=1 err=0 found=0 ids='; }
+tr_get() { if test "$2" = err; then echo 0; fi; }
+ids_exact() { return 1; }; die() { exit 3; }
+STAMP=1; RUN=20261008T0327; EDGE=http://unused; NEW_WORKERS=()
+'''+body+'\n'
+    hp=tmp_path/'empty.sh'; hp.write_text(harness,encoding='utf-8')
+    result=subprocess.run([BASH,hp.as_posix()],capture_output=True)
+    assert result.returncode==3
+    assert b'TRACE_NOT_READY' in result.stdout
