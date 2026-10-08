@@ -354,25 +354,40 @@ def test_control01_check_is_read_only():
         assert required in text
 
 
+# 2026-10-08 RUN 20261008T1730: 설정 수정 16:31:32.446, reload 16:31:32, ps lstart 16:31:31(btime 초 버림)
+# → 반영됐는데 rc1(거짓 UNCONFIRMED). 시작 시각을 /proc tick으로 소수 초까지 계산해 같은 초 안에서도 판정한다.
+# now=1791444700.000, uptime=196000.00, CLK_TCK=100 → 시작 = now − (uptime − starttime/100)
 @needs_bash
-@pytest.mark.parametrize('newest,expected', [(1791200000, 0), (1991200000, 1)])
-def test_reload_check_parses_c_locale_under_korean_host(tmp_path, newest, expected):
+@pytest.mark.parametrize('args,starttime,newest,expected', [
+    ('nginx: worker process', 19599250, '1791444692.445991231', 0),   # 같은 초, 수정 0.054초 뒤 시작(오늘 사례)
+    ('nginx: worker process', 19599234, '1791444692.445991231', 1),   # 수정 0.106초 전에 시작한 worker
+    ('nginx: worker process', 100, '1791444692.445991231', 1),        # reload 안 된 옛 worker
+    ('nginx: worker process is shutting down', 19599250, '1791444692.445991231', 2),  # 현재 worker 없음
+    ('nginx: worker process', 'x', '1791444692.445991231', 2),        # starttime 못 읽음 → 판단 불가
+])
+def test_reload_check_uses_subsecond_start_time(tmp_path, args, starttime, newest, expected):
     text = cutover_text()
+    assert 'lstart=' not in text  # ps lstart(초 버림)로 판정하지 않음
     body = text[text.index('reloaded_after_conf() {'):text.index('wait_reloaded() {')]
     harness = '''
 sudo() { "$@"; }
 nginx() { echo '# configuration file /mock/nginx.conf:'; }
-stat() { echo NEWEST; }
-pgrep() { if test "$1" = -o; then echo 100; else echo 101; fi; }
-ps() {
-  if test "$2" = args=; then echo 'nginx: worker process'; return; fi
-  if test "${LC_ALL:-}" = C; then echo 'Tue Oct  6 10:04:38 2026';
-  else echo '화 10월  6 10:04:38 2026'; fi
+date() {
+  case "$1" in
+    -r) echo NEWEST ;;
+    +%s.%N) echo 1791444700.000000000 ;;
+    *) command date "$@" ;;
+  esac
 }
-'''.replace('NEWEST', str(newest)) + body + '\nreloaded_after_conf\n'
-    hp = tmp_path / 'locale.sh'; hp.write_text(harness, encoding='utf-8')
+getconf() { echo 100; }
+pgrep() { if test "$1" = -o; then echo 100; else echo 101; fi; }
+ps() { echo 'ARGS'; }
+proc_uptime() { echo '196000.00 380000.00'; }
+proc_stat() { echo "$1 (nginx) S 100 100 100 0 -1 4194624 1 0 0 0 0 0 0 0 20 0 1 0 START 1000 1"; }
+'''.replace('NEWEST', newest).replace('ARGS', args).replace('START', str(starttime)) + body + '\nreloaded_after_conf\n'
+    hp = tmp_path / 'reload.sh'; hp.write_text(harness, encoding='utf-8')
     result = subprocess.run([BASH, hp.as_posix()], capture_output=True)
-    assert result.returncode == expected, result.stderr
+    assert result.returncode == expected, result.stdout + result.stderr
 
 
 @needs_bash

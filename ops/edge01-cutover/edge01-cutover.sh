@@ -76,27 +76,45 @@ active_servers() {
     inb && /^[[:space:]]*}/ { inb = 0 }
     inb && $1 == "server" { print $2 }' | tr -d ';' | sort
 }
+# worker 시작 시각 원천. 시험에서 바꿔 끼울 수 있게 /proc 읽기만 따로 둔다.
+proc_stat() { cat "/proc/$1/stat"; }
+proc_uptime() { cat /proc/uptime; }
 # 디스크 설정이 실행 중 nginx에 반영됐는지. reload 뒤 정리 중인 옛 worker("shutting down")는 빼고,
 # 현재 worker가 모두 설정 파일들의 최종 수정 시각 이후에 시작됐으면 0. 1=아직 옛 worker, 2=판단 불가.
+# 시작 시각은 ps lstart를 쓰지 않는다. lstart는 부팅 시각(btime, 초 단위 버림)+경과로 계산돼 실제보다
+# 최대 1초 이르게 나와, 설정 쓰기와 reload가 같은 초에 있으면 반영됐는데도 1이 된다(RUN 20261008T1730:
+# 설정 수정 16:31:32.446, reload 16:31:32, lstart 16:31:31 → apply·rollback 모두 거짓 UNCONFIRMED).
+# 그래서 설정은 나노초 mtime, worker는 "지금 − (uptime − starttime tick)"으로 소수 초까지 비교한다.
+# tick 버림·읽는 순서(지금을 uptime보다 먼저) 모두 시작 시각을 이르게 만드는 쪽이라, 오차가 반영 쪽으로 기울지 않는다.
 reloaded_after_conf() {
   local master newest wstart pid t args n_old=0 n_cur=0
   master=$(pgrep -o -x nginx) || return 2
-  newest=$(sudo nginx -T 2>/dev/null | sed -n 's/^# configuration file \(.*\):$/\1/p' | while IFS= read -r f; do sudo stat -c %Y "$f"; done | sort -n | tail -1)
+  newest=$(sudo nginx -T 2>/dev/null | sed -n 's/^# configuration file \(.*\):$/\1/p' | while IFS= read -r f; do sudo date -r "$f" +%s.%N; done | sort -n | tail -1)
   wstart=
   for pid in $(pgrep -P "$master" -x nginx); do
     args=$(ps -o args= -p "$pid") || return 2
     case "$args" in *"shutting down"*) n_old=$((n_old + 1)); continue ;; esac
     case "$args" in *"worker process"*) ;; *) continue ;; esac
-    # ps emits localized weekday/month names. GNU date cannot reliably parse
-    # those (e.g. ko_KR), so pin both producer and parser, not just date.
-    t=$(LC_ALL=C date -d "$(LC_ALL=C ps -o lstart= -p "$pid")" +%s) || return 2
+    t=$(worker_start "$pid") || return 2
     n_cur=$((n_cur + 1))
-    if test -z "$wstart" || test "$t" -lt "$wstart"; then wstart=$t; fi
+    if test -z "$wstart" || earlier "$t" "$wstart"; then wstart=$t; fi
   done
   test -n "$newest" && test -n "$wstart" || return 2
-  echo "   설정 최종 수정=$(date -d "@$newest" '+%F %T') 현재 worker ${n_cur}개 최초 시작=$(date -d "@$wstart" '+%F %T') 정리 중 옛 worker=${n_old}"
-  test "$wstart" -ge "$newest" || return 1
+  echo "   설정 최종 수정=$(date -d "@${newest%.*}" '+%F %T').${newest#*.} 현재 worker ${n_cur}개 최초 시작=$(date -d "@${wstart%.*}" '+%F %T').${wstart#*.} 정리 중 옛 worker=${n_old}"
+  earlier "$wstart" "$newest" && return 1
   return 0
+}
+# $1 < $2 (소수 초)면 0
+earlier() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 < b + 0) }'; }
+# worker 시작 시각(epoch, 소수 3자리). /proc/<pid>/stat의 22번째 필드(starttime, 부팅 후 tick)와 /proc/uptime으로 계산
+worker_start() {
+  local now up st hz
+  hz=$(getconf CLK_TCK) || return 1
+  now=$(date +%s.%N) || return 1
+  up=$(proc_uptime | awk '{ print $1 }') || return 1
+  st=$(proc_stat "$1" | sed 's/^.*) //' | awk '{ print $20 }') || return 1
+  awk -v n="$now" -v u="$up" -v s="$st" -v h="$hz" \
+    'BEGIN { if (s !~ /^[0-9]+$/ || u !~ /^[0-9.]+$/ || h !~ /^[0-9]+$/ || h == 0) exit 1; printf "%.3f\n", n - (u - s / h) }'
 }
 # reload 직후 판정을 5초 간격으로 최대 7번 본다(마지막 대기 포함 약 35초). 끝까지 0이 아니면 그 rc.
 wait_reloaded() {

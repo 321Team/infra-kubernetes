@@ -16,9 +16,16 @@
 - **B2:** 아래 §5의 "원본 결과 → 실패 지점 → 대체 증거 → 판단" 표로 종료 코드를 원인별로 다룬다. 로그 때문에 생기던 rc3/rc4는 없어지고, 앱 로그는 참고 기록이 된다. 단 E-K3S 로그에서 apply 표식이 **발견되면** 옛 경로의 직접 증거이므로 그대로 STOP이다. rollback의 smoke 201·DB 행, C2 P3 DB 1행 `false/false`는 그대로 유지한다.
 - **B3:** C0 15 + C1 15 + C2 20 + C3 30 = **80분**(기존 "75분" 표기는 오류)으로 바로잡고, 창 종료 시각에서 거꾸로 **apply 시작 상한 = 창 종료 − 15분(복구 여유) − 65분(C1~C3)**을 GO에 고정한다(§4).
 
+### 2026-10-08 RUN 20261008T1730 결과 반영 — reload 반영 판정을 소수 초로
+
+- C0는 `METHOD_READY`(scope=all, rc0)였으나 C1 `apply`가 rc4 `UNCONFIRMED`(16:32:10)로 끝났고, 같은 이유로 `rollback`도 rc4(16:35:10)였다. 설정 전환·복원과 reload는 실제로 됐다(journal `Reloaded` 16:31:32, worker 교체, 정리 중 옛 worker 0). 판정만 거짓 실패했다.
+- 원인: worker 시작 시각을 `ps lstart`로 읽었다. lstart는 부팅 시각(`btime`, 초 단위 버림)+경과로 계산돼 실제보다 최대 1초 이르다. 설정 쓰기(16:31:32.446)와 reload가 같은 초에 있으면 lstart(16:31:31)가 수정 시각보다 앞서 1(옛 worker)이 된다. 현장 `etimes`·`btime`으로 계산한 실제 시작은 16:31:32였다.
+- 수정: 설정은 나노초 mtime(`date -r … +%s.%N`), worker는 `지금 − (uptime − /proc/<pid>/stat starttime ÷ CLK_TCK)`로 소수 초까지 비교한다. tick 버림과 읽는 순서는 모두 시작 시각을 이르게 만드는 쪽이라 오차가 "반영"으로 기울지 않는다. apply·rollback에서는 설정 쓰기와 reload 사이에 `nginx -t`가 있어 실제 간격이 tick(10ms)보다 길다. 시각을 못 읽으면 지금처럼 2(판단 불가)이며 PASS로 우회하지 않는다.
+- 같은 RUN은 `upstream-file.before`가 있어 다시 apply하지 않는다. 새 RUN·새 승인으로 C0부터 다시 한다.
+
 ### 2026-10-08 현장 사전검증 보완
 
-- `ps lstart`의 한국어 요일/월을 `date -d`가 해석하지 못한 사례를 확인했다. 프로세스 시각의 생성과 해석 양쪽에 `LC_ALL=C`를 고정한다. 시각을 못 읽으면 PASS로 우회하지 않는다.
+- `ps lstart`의 한국어 요일/월을 `date -d`가 해석하지 못한 사례를 확인했다. 프로세스 시각의 생성과 해석 양쪽에 `LC_ALL=C`를 고정한다. 시각을 못 읽으면 PASS로 우회하지 않는다. (RUN 20261008T1730 뒤 lstart 자체를 쓰지 않도록 바꿨다 — 위 절.)
 - edge `check`는 nginx 구문·reload 반영 실패 또는 E-K3S `TRACE_NOT_READY`에 rc3을 반환한다. control01 `trace`는 `TRACED`/`TRACE_READY`/`NONE_OK`에만 rc0, 조회/해석 실패·누락·중복·미확정에는 rc4를 반환한다. pre/post의 `COLLECTED`는 여전히 사람의 판정이 필요하다.
 - 표식 로그 자체가 비어 있으면 HTTP 200과 별개로 관측 조건 미충족이다. 10/8 회차의 Kubernetes transaction-api 3개 로그가 실제 0바이트였고, Worker01 이미지의 `/app/run.py`가 metrics Uvicorn Config의 `log_level="warning"`으로 공용 접근 로그를 억제하는 구조를 확인했다. (오후 보완: 이 때문에 경로 판정을 위의 요청줄 캡처로 대체한다. 앱 배포는 포함하지 않는다.)
 - trace 분석 stdout/stderr는 별도 원본 파일로 기록한 뒤 판정한다. 아직 기록 중인 tee 로그를 다시 읽어 판정하는 경합을 제거한다.
