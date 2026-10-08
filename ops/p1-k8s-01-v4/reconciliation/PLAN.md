@@ -19,7 +19,7 @@
 | k8s-worker02 | 위4개 | 나머지5개 |
 | k8s-worker03 | 위4개 | 나머지5개 |
 
-`manifest-20261009.json`에 17개 각각의 source/deployed 절대 경로, 관측/목표 SHA256, 관측 시각·uid/gid/mode/size/mtime, 보존할28개 해시를 적었다. SELinux/ACL·백업·GO는 확인되지 않은 값으로 명시했다. **이 JSON은 실행 가능한 승인 목록이 아니다.**
+`manifest-20261009.json`에 17개 각각의 source/deployed 절대 경로, 관측/목표 SHA256, 관측 시각·uid/gid/mode/size/mtime, 보존할28개 해시를 적었다. JSON은 00:00 관측을 보존하며 당시 미수집한 SELinux/ACL·백업·GO를 미확인으로 둔다. 08:20 추가 메타데이터 수집은 §7의 별도 증적으로 연결한다. **이 JSON은 실행 가능한 승인 목록이 아니다.**
 
 control02는 이번5대 수집에서 제외된 별도 검증 대상이다. 이번 계획으로 현재 control02의 일치를 재확인했다고 하지 않는다. Lead 확인 없이 이번 배포에 추가하지 않는다.
 
@@ -70,3 +70,13 @@ control02는 이번5대 수집에서 제외된 별도 검증 대상이다. 이�
 - STATIC 문서·입력 대조 완료. RUNTIME 배포/복귀·새 AVC 관측·AC 인수·독립 리뷰는 미완료다. 저장소 CI 적용 여부/결과는 PR에서 별도로 표시한다.
 
 미확인 입력을 임의 값으로 채우거나 새로 생성한 계획을 실서버 증적으로 표시하지 않는다. 준비 문서의 리뷰를 요청하고 작업창 종료 후 회수한다.
+
+## 7. 08:20 읽기 전용 수집 보완
+
+[증적 PR182](https://github.com/321Team/fds-project-evidence/pull/182), 수신 원본 고정 HEAD `6d7728fcbb3c250646ce0822cf4f74fce7ea4a9f`의 [분석](https://github.com/321Team/fds-project-evidence/blob/6d7728fcbb3c250646ce0822cf4f74fce7ea4a9f/evidence/P1-K8S-01/v4-tool-metadata-20261009T082015/analysis.json). 수신 PC 2026-10-09 08:20:15~08:21:27 KST / 호스트 08:20:17~08:21:28 KST. 독립 리뷰는 대기 중이며 PC/호스트 시계 오차를 이번에 검증하지 않았다.
+
+- 5대45파일 해시는 00:00 회차와 모두 동일하여 교체 후보17/보존28이 유지된다. 관측 소유0:0/권한0750, 기본 숫자 ACL, 일반 파일·nlink1, 읽기 중 안정이 확인됐다. 선택한 SELinux/ACL/capability xattr 외 전체 xattr·부모 ACL은 미수집이다.
+- 실제 SELinux type: worker01의9파일은 `user_home_t`, 나머지36파일은 `usr_t`. 모든 호스트 `matchpathcon -n` 기본 type은 `usr_t`다. 전체 실제 context user `unconfined_u`와 기본 user `system_u` 차이도 있으므로 36파일을 전체 context 일치라고 표시하지 않는다. 5대 모두 enforcing 관측이다.
+- **worker01의 비교대상5개도 type 차이가 있다.** 기존17개 교체 후보에 나머지5개를 자동 추가하거나 라벨을 일괄 변경하지 않는다. Lead는 관측값 보존과 별도 정정 중 적절한 처리, 정확한 기대 context/metadata와 복귀값을 결정한다. 경로 기본값 조회만으로 장애·AVC·원인 또는 승인 기대값을 확정하지 않는다.
+- 정책 기본값 조회는 메타데이터 수집보다 약1분 뒤의 별도 회차이며, 동시 정책 변경 배제는 입증하지 않았다. 따라서 실행 직전 새 해시/link/metadata 확인은 여전히 필요하다.
+- 백업·교체·relabel·도구 실행·정책 적용0. **검증된 백업, 실제 호출 주체·동시 사용 배제, 대상/실행자/복구 인수 및 GO는 여전히 미확정**이다. 읽기 증적 추가로 배포 준비 완료를 선언하지 않는다.
