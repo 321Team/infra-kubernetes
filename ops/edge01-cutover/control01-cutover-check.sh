@@ -4,6 +4,7 @@
 #   sudo bash control01-cutover-check.sh pre|post <RUN>
 #     - transaction-api / transaction-api-nodeport Service(nodePort 30080, externalTrafficPolicy Local)
 #     - Worker별 transaction-api-nodeport Ready·non-terminating local endpoint(기대 1·1·1)
+#     - transaction-api Pod 이름·UID·IP·노드(`POD cluster=k8s …` 줄, 요청줄 캡처 판정의 Pod 결속 입력)
 #     - GNP nodeport-30080-allow(.50/32 → 30080 허용, preDNAT/applyOnForward)
 #     - 전체 Service의 NodePort 목록(32085 등 metrics NodePort가 없어야 함)
 #     - MON: Prometheus count(up)·up==0 (port-forward 19093, 끝나면 자기 프로세스만 종료)
@@ -106,6 +107,9 @@ run "${K[@]}" -n fds-app get endpointslice -l kubernetes.io/service-name=transac
   -o go-template='{{range .items}}{{range .endpoints}}{{.nodeName}} {{index .addresses 0}} ready={{.conditions.ready}} terminating={{.conditions.terminating}}{{"\n"}}{{end}}{{end}}'
 echo "-- transaction-api Pod 배치"
 run "${K[@]}" -n fds-app get pods -l app=transaction-api -o wide
+echo "-- transaction-api Pod 이름·UID·IP·노드(요청줄 캡처 dst와 결속용, cutover-capture-judge.py 입력)"
+run "${K[@]}" -n fds-app get pods -l app=transaction-api \
+  -o jsonpath='{range .items[*]}POD cluster=k8s name=fds-app/{.metadata.name} uid={.metadata.uid} ip={.status.podIP} node={.spec.nodeName}{"\n"}{end}'
 echo "-- GNP nodeport-30080-allow"
 run "${K[@]}" get globalnetworkpolicy.crd.projectcalico.org nodeport-30080-allow \
   -o jsonpath='order={.spec.order} selector={.spec.selector} preDNAT={.spec.preDNAT} applyOnForward={.spec.applyOnForward}{"\n"}ingress={.spec.ingress}{"\n"}'
