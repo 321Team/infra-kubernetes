@@ -50,6 +50,7 @@ jsonpath = next((a for a in args if a.startswith('jsonpath=')), '')
 if kind == 'nodes':
     done({'items': [{'metadata': {'name': f'k8s-{role}{i:02}'}, 'status': {'conditions': [
         {'type': 'Ready', 'status': 'True'}]}} for role in ('control', 'worker') for i in (1, 2, 3)]})
+if kind == 'events' and scenario == 't0_diagnostics_error': done('diagnostic API failure', 1)
 if kind in ('ns', 'resourcequota', 'limitrange', 'events'):
     done('{}', 1 if scenario == 'quota_error' and kind == 'resourcequota' else 0)
 if kind == 'node': done('k8s-worker01|True\n')
@@ -75,6 +76,10 @@ if kind in ('pod', 'svc'):
         mgr = 'foreign' if scenario == 'foreign' else 'sec01-ac06-test'
         done('|'.join([obj['uid'], obj['runid'], mgr, image if kind == 'pod' else '', obj['runid'] if kind == 'svc' else '']))
     if jsonpath:
+        if scenario == 't0_pending' and not state.get('initial_pending_seen'):
+            state['initial_pending_seen'] = True
+            done(f"{obj['uid']}|Pending|False||")
+        if scenario in ('t0_restart', 't0_diagnostics_error'): done(f"{obj['uid']}|Running|False|1|cid-failed")
         restart = 1 if state['stage'] >= 3 or (scenario == 'unexpected_restart' and state['stage'] == 1) else 0
         done(f"{obj['uid']}|Running|{'False' if state['stage'] == 1 else 'True'}|{restart}|cid-{restart}")
     done({'metadata': {'uid': obj['uid']}, 'spec': {'automountServiceAccountToken': scenario == 'token', 'volumes': []}})

@@ -77,7 +77,7 @@ live count와 snapshot `TOTAL KEYS`는 서로 다른 측정이다. 복원 전후
 | `backup.sh` | `k8s-control01` root 콘솔. 기존 `/root/p1-sec01-secretbox-backup-20261002T054208Z/etcd-snapshot-sec01.db`, SHA `8ace820ca29488fc5ef8eb46d424a58ef6e0dbbba03f6d0f851f929e6e771e2f`, revision3287996/keys620. |
 
 Probe 이미지: `10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33`.
-컨테이너 Python `/venv/bin/python3`, user10001/group999, read-only rootfs, drop ALL,
+컨테이너 Python `/usr/local/bin/python3.12`, user10001/group999, read-only rootfs, drop ALL,
 RuntimeDefault, token automount=false, host network/PID/IPC=false, tmp emptyDir1Mi,
 requests20m/32Mi, limits200m/128Mi는 v1.2 범위 그대로다.
 고정 노드에서 같은 digest 실행 중인 Pod는 cache의 간접 근거다. 실제 Python·이미지 기동은 T0에서 확인하며 실패 시 중단한다.
@@ -96,8 +96,9 @@ backup은 추가로 `unshare --net --pid --fork --kill-child`, `ip`, `ss`, 컨�
 | run 관측 | 900초 | 600초(그 안에 namespace 구간300초) |
 | 정리 | 90초 | 60초 |
 | 사후 확인 | 90초 | 90초 |
+| 실패 진단(실패 경로만) | 30초 | 해당 없음 |
 | 봉인 | 30초 | 30초 |
-| run의 계획 예산 합계 | **21분30초** | **16분** |
+| run의 계획 예산 합계 | **22분** | **16분** |
 | 별도 precheck 호출 | **3분30초** | **3분30초** |
 
 위는 외부 명령의 단조 시간 예산이며 작은 로컬 기록/스케줄링 여유는 시험 창에 추가한다.
@@ -182,3 +183,23 @@ Probe는 실제 전체 entrypoint를 실행하며 정상 T0~T3, precheck 무변�
 backup은 실제 inner script의 정상·count 오류·Secret producer/parser 오류를 시험한다.
 공통 함수는 반복 신호·느린 명령·만료 시 성공 거부·정리 실패 우선순위·봉인 무결성을 검증한다.
 **backup의 실제 snapshot restore, namespace 격리, 운영 health, 실제 이미지 Probe는 현장 RUNTIME 미실행**이며 MOCK/CI로 대신하지 않는다.
+
+## 2026-10-08 Probe T0 실패 후 수정 후보 v2.2
+
+기존 승인 d6866187 전체 번들의 09:16:45~09:18:16 KST 1회 시험은 T0 rc3으로 종료했다.
+Pod 이벤트의 직접 원인은 `/venv/bin/python3` 파일 부재다. 같은 a7093136 digest로 실행 중인
+Worker01 APP 컨테이너의 실제 process args는 `python run.py`, exe는 `/usr/local/bin/python3.12`였다.
+현재 앱 저장소의 apko Dockerfile을 이 과거 실행 이미지와 같은 것으로 취급한 가정을 정정한다.
+운영 이미지·앱 코드·보안 통제는 바꾸지 않는다.
+
+후보는 실행/exec Probe/주입 interpreter를 해당 고정 digest의 실제 경로로 일치시킨다.
+T0의 restart>0은 주입 전 즉시 중단하며, 최초 Pending에서 아직 containerStatuses가 없는 경우는
+정해진 T0 예산 안에서 기다린다. abort 시 별도 최대30초 내 Pod와 해당 UID 이벤트를 보존한 뒤
+기존 UID 정리·기준선 대조·봉인을 수행한다. 진단 조회 실패도 rc/stderr로 남기며 정리를 생략하지 않는다.
+실패 경로 계획 예산은 기존21분30초에 진단30초를 더한22분이다.
+
+기존 실행 원본과 승인 SHA는 수정하지 않는다. 이번 후보는 독립 리뷰와 새 exact 번들·별도
+재시험 창 확정 전 RUNTIME NOT_RUN이다. Backup 소스·기존 결과/GO는 변경하지 않으며,
+이번 디렉터리를 과거 d6866187 승인본으로 표시하거나 14:00에 자동 재실행하지 않는다.
+근거: [조기 1회 실행 기록](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6049479655).
+CODEX_ASSISTED / 코드 수정 GWONUK / 독립 리뷰 별도.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # P1-SEC-01 AC-06 Probe 1단계: 격리 시험 Pod 로 readiness 실패→Endpoint 제외→복원, liveness 실패→재시작→회복 관측
-# REV=v2.0-20261007 — GWONUK lifecycle fixes; see README for provenance/approval.
+# REV=v2.2-20261008 — GWONUK lifecycle fixes; see README for provenance/approval.
 #
 # 운영 Pod·Deployment·Service 는 변경하지 않는다. 이 실행이 만든 시험 Pod 1개·Service 1개만 만들고 지운다.
 # 실제 APP(transaction-api/fds-engine)의 /readyz·/livez HTTP Probe 동작은 확인하지 않는다(2단계, 별도).
@@ -16,7 +16,7 @@ set -uo pipefail
 set +x
 LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 2
 source "$LIB_DIR/common.sh" || exit 2
-REV="v2.0-20261007"
+REV="v2.2-20261008"
 MODE="${1:-}"
 KC="${KC:-kubectl}"
 
@@ -26,9 +26,10 @@ NS=fds-app
 IMAGE='10.1.93.54/fds/transaction-api@sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33'
 IMAGE_DIGEST='sha256:a7093136d12640da00570c18ed278eacbb8e9ba3637c7d509571346eac45cc33'
 TARGET_NODE='k8s-worker01'
-# 앱 이미지는 최소(apko) 런타임이라 test/rm/touch 같은 외부 실행파일이 있다고 가정하지 않는다.
-# 시작 명령·Probe·장애 주입을 모두 이미지의 Python 실행파일 하나로 통일한다(소스: fds-msa transaction-api/Dockerfile ENTRYPOINT /venv/bin/python3, USER 10001:999).
-PY='/venv/bin/python3'
+# This digest predates the current apko Dockerfile. Worker01 runtime inspection
+# on 2026-10-08 found /usr/local/bin/python3.12; /venv/bin/python3 is absent.
+# Keep one exact interpreter for startup, probes and injection; no path fallback.
+PY='/usr/local/bin/python3.12'
 POLL=3
 READY_WAIT=90 T1_WAIT=60 T2_WAIT=60 T3_RESTART_WAIT=90 T3_RECOVER_WAIT=90
 TOTAL_LIMIT=900     # 관측 구간 전체 상한(초)
@@ -276,7 +277,17 @@ finish() {   # $1=exit code(생성 후 중단이면 3). 봉인 뒤에는 OUT 안
 }
 trap on_signal INT TERM
 trap 'rc=$?; if [ "$FINISHED" -ne 1 ]; then [ "$rc" -ne 0 ] || rc=3; printf "Unexpected exit rc=%s\n" "$rc" >&2; finish "$rc"; fi' EXIT
-abort() { say "ABORT: $*"; finish 3; }
+capture_failure() {
+  # Independent bounded diagnostics before UID cleanup. Errors are evidence,
+  # never a reason to skip cleanup or change the original failure to success.
+  [ -n "$POD_UID" ] || return 0
+  phase_begin diagnostics 30
+  kc -n "$NS" get pod "$POD" -o json > "$OUT/failure-pod.json" 2> "$OUT/failure-pod.stderr"
+  w "$OUT/failure-diagnostics.rc" "pod_rc=$?"
+  kc -n "$NS" get events --field-selector "involvedObject.uid=$POD_UID" -o json > "$OUT/failure-events.json" 2> "$OUT/failure-events.stderr"
+  w "$OUT/failure-diagnostics.rc" "events_rc=$?"
+}
+abort() { say "ABORT: $*"; capture_failure; finish 3; }
 stage_guard() {    # 각 단계 뒤(=다음 주입 전): 운영 Pod·EndpointSlice 기준선 일치와 노드 6/6 확인. 조회 불가·변화면 중단
   observation_ok || abort "$1: 관측 상한 도달/기록 실패"
   base_changed && abort "$1: 운영 Pod/EndpointSlice 가 기준선과 다르거나 조회할 수 없음"
@@ -341,7 +352,16 @@ wait_for() {
     budget_ok || break
     w "$OUT/poll-$label.txt" "$(date -u +%FT%TZ) t=$(( $(mono) - start )) pod=$PS ep_ready=$EP"
     [ "${P_UID:-}" = "$POD_UID" ] || abort "$label: Pod UID 교체됨"
+    # A newly scheduled Pending Pod may not have containerStatuses yet.
+    if [ "$label" = T0 ] && [ "$P_PHASE" = Pending ] && [ -z "${P_RESTART:-}" ]; then
+      check_nodes "$label" || abort "$label: 노드 조회 실패/NotReady"
+      pause_bounded "$POLL" || break
+      continue
+    fi
     [[ "${P_RESTART:-}" =~ ^[0-9]+$ ]] || abort "$label: restartCount 해석 불가"
+    if [ "$label" = T0 ] && [ "$P_RESTART" -ne 0 ]; then
+      abort "$label: 최초 기동 중 예상 밖 restart=$P_RESTART; 주입하지 않음"
+    fi
     case "$label" in T1|T2) [ "$P_RESTART" = "$R0" ] || abort "$label: 예상 밖 restart";; esac
     if eval "$cond"; then
       budget_ok || break
