@@ -1,0 +1,542 @@
+{
+  "schema": "fds.k8s-v4-reconciliation-plan.v1",
+  "status": "PROPOSED_NOT_EXECUTABLE",
+  "runtime_apply": "NOT_RUN",
+  "approved_source_commit": "b4303f2df512a8791d2421203cf159567d076b2a",
+  "reference_main_commit": "81ad791d5a6a611d3c7f0068bd638e60ec8e28f8",
+  "source_approval_reference": "https://github.com/321Team/fds-project-baseline/issues/10#issuecomment-6009176490",
+  "source_approval_is_not_deployment_go": true,
+  "evidence_head": "fa75b46067585e1899496f2abb69e6facc13d1d5",
+  "evidence_comparison_url": "https://github.com/321Team/fds-project-evidence/blob/fa75b46067585e1899496f2abb69e6facc13d1d5/evidence/P1-K8S-01/v4-readonly-comparison-20261009T000026/COMPARISON.json",
+  "observation_note": "2026-10-09 00:00 read-only collection; not a fresh execution preflight",
+  "reference_files": [
+    {
+      "source_path": "ops/p1-k8s-01-v4/RUNBOOK_FINAL.md",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+      "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3",
+      "size": 32483
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/audit-window.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+      "sha256": "38e6490a5f00834bfe6d4eb8308f27f693e504414925a15023a161dccb39fe38",
+      "size": 9376
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/cluster-change.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+      "sha256": "e955a6f981dbcdc3acac1e97dcecca498f4441e23e6c7ae64bbfb4788f2df162",
+      "size": 13910
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/cockpit.sh",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+      "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1",
+      "size": 1384
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/node-evidence.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+      "sha256": "8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f",
+      "size": 10205
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/prepare-calico.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+      "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9",
+      "size": 2847
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/probe.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+      "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c",
+      "size": 4159
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/regression.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+      "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d",
+      "size": 4610
+    },
+    {
+      "source_path": "ops/p1-k8s-01-v4/code/render.py",
+      "deployed_path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+      "sha256": "c640831e3655329934f080e1ec35d7661d036867fc4480674e51e7604d11cfba",
+      "size": 12125
+    }
+  ],
+  "changes": [
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+      "source_path": "ops/p1-k8s-01-v4/code/audit-window.py",
+      "observed_sha256": "75ea9962b84c064ad04a301a8086ecc7ab21c201ec86749a888715cf45a8a80b",
+      "target_sha256": "38e6490a5f00834bfe6d4eb8308f27f693e504414925a15023a161dccb39fe38",
+      "observed_at_kst": "2026-10-09T00:00:27.517126+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 7382,
+        "mtime_ns": 1788952999600811793
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+      "source_path": "ops/p1-k8s-01-v4/code/audit-window.py",
+      "observed_sha256": "75ea9962b84c064ad04a301a8086ecc7ab21c201ec86749a888715cf45a8a80b",
+      "target_sha256": "38e6490a5f00834bfe6d4eb8308f27f693e504414925a15023a161dccb39fe38",
+      "observed_at_kst": "2026-10-09T00:00:28.209036+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 7382,
+        "mtime_ns": 1788953002788764522
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+      "source_path": "ops/p1-k8s-01-v4/code/cluster-change.py",
+      "observed_sha256": "07696cee257fde462f193d95f17c26415b10628e4aa2b58f6f3920a46cc18ff6",
+      "target_sha256": "e955a6f981dbcdc3acac1e97dcecca498f4441e23e6c7ae64bbfb4788f2df162",
+      "observed_at_kst": "2026-10-09T00:00:28.209036+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 13085,
+        "mtime_ns": 1790217392679249204
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+      "source_path": "ops/p1-k8s-01-v4/code/node-evidence.py",
+      "observed_sha256": "318ac4b28c398de46dad6a7049400d75ac211f06fe5a2cfc88c4e64300039023",
+      "target_sha256": "8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f",
+      "observed_at_kst": "2026-10-09T00:00:28.209036+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 8754,
+        "mtime_ns": 1789980856263634649
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+      "source_path": "ops/p1-k8s-01-v4/code/render.py",
+      "observed_sha256": "fe0a99f364f7eaca6f726a4d280c8ff38c7a06652db809edaf3e8499adb5b71b",
+      "target_sha256": "c640831e3655329934f080e1ec35d7661d036867fc4480674e51e7604d11cfba",
+      "observed_at_kst": "2026-10-09T00:00:28.209036+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 11129,
+        "mtime_ns": 1788953002816764317
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+      "source_path": "ops/p1-k8s-01-v4/code/audit-window.py",
+      "observed_sha256": "75ea9962b84c064ad04a301a8086ecc7ab21c201ec86749a888715cf45a8a80b",
+      "target_sha256": "38e6490a5f00834bfe6d4eb8308f27f693e504414925a15023a161dccb39fe38",
+      "observed_at_kst": "2026-10-09T00:00:28.610233+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 7382,
+        "mtime_ns": 1788952150538583512
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+      "source_path": "ops/p1-k8s-01-v4/code/cluster-change.py",
+      "observed_sha256": "07696cee257fde462f193d95f17c26415b10628e4aa2b58f6f3920a46cc18ff6",
+      "target_sha256": "e955a6f981dbcdc3acac1e97dcecca498f4441e23e6c7ae64bbfb4788f2df162",
+      "observed_at_kst": "2026-10-09T00:00:28.610233+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 13085,
+        "mtime_ns": 1789984072501748608
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+      "source_path": "ops/p1-k8s-01-v4/code/node-evidence.py",
+      "observed_sha256": "318ac4b28c398de46dad6a7049400d75ac211f06fe5a2cfc88c4e64300039023",
+      "target_sha256": "8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f",
+      "observed_at_kst": "2026-10-09T00:00:28.610233+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 8754,
+        "mtime_ns": 1789980809057015238
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+      "source_path": "ops/p1-k8s-01-v4/code/render.py",
+      "observed_sha256": "fe0a99f364f7eaca6f726a4d280c8ff38c7a06652db809edaf3e8499adb5b71b",
+      "target_sha256": "c640831e3655329934f080e1ec35d7661d036867fc4480674e51e7604d11cfba",
+      "observed_at_kst": "2026-10-09T00:00:28.610233+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 11129,
+        "mtime_ns": 1788945243000000000
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+      "source_path": "ops/p1-k8s-01-v4/code/audit-window.py",
+      "observed_sha256": "75ea9962b84c064ad04a301a8086ecc7ab21c201ec86749a888715cf45a8a80b",
+      "target_sha256": "38e6490a5f00834bfe6d4eb8308f27f693e504414925a15023a161dccb39fe38",
+      "observed_at_kst": "2026-10-09T00:00:29.012111+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 7382,
+        "mtime_ns": 1788952995484304848
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+      "source_path": "ops/p1-k8s-01-v4/code/cluster-change.py",
+      "observed_sha256": "07696cee257fde462f193d95f17c26415b10628e4aa2b58f6f3920a46cc18ff6",
+      "target_sha256": "e955a6f981dbcdc3acac1e97dcecca498f4441e23e6c7ae64bbfb4788f2df162",
+      "observed_at_kst": "2026-10-09T00:00:29.012111+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 13085,
+        "mtime_ns": 1790217396942823438
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+      "source_path": "ops/p1-k8s-01-v4/code/node-evidence.py",
+      "observed_sha256": "318ac4b28c398de46dad6a7049400d75ac211f06fe5a2cfc88c4e64300039023",
+      "target_sha256": "8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f",
+      "observed_at_kst": "2026-10-09T00:00:29.012111+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 8754,
+        "mtime_ns": 1789980857233772454
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+      "source_path": "ops/p1-k8s-01-v4/code/render.py",
+      "observed_sha256": "fe0a99f364f7eaca6f726a4d280c8ff38c7a06652db809edaf3e8499adb5b71b",
+      "target_sha256": "c640831e3655329934f080e1ec35d7661d036867fc4480674e51e7604d11cfba",
+      "observed_at_kst": "2026-10-09T00:00:29.012111+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 11129,
+        "mtime_ns": 1788952995512304718
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/audit-window.py",
+      "source_path": "ops/p1-k8s-01-v4/code/audit-window.py",
+      "observed_sha256": "75ea9962b84c064ad04a301a8086ecc7ab21c201ec86749a888715cf45a8a80b",
+      "target_sha256": "38e6490a5f00834bfe6d4eb8308f27f693e504414925a15023a161dccb39fe38",
+      "observed_at_kst": "2026-10-09T00:00:29.419217+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 7382,
+        "mtime_ns": 1788952997951765798
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+      "source_path": "ops/p1-k8s-01-v4/code/cluster-change.py",
+      "observed_sha256": "07696cee257fde462f193d95f17c26415b10628e4aa2b58f6f3920a46cc18ff6",
+      "target_sha256": "e955a6f981dbcdc3acac1e97dcecca498f4441e23e6c7ae64bbfb4788f2df162",
+      "observed_at_kst": "2026-10-09T00:00:29.419217+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 13085,
+        "mtime_ns": 1790217400814576724
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+      "source_path": "ops/p1-k8s-01-v4/code/node-evidence.py",
+      "observed_sha256": "318ac4b28c398de46dad6a7049400d75ac211f06fe5a2cfc88c4e64300039023",
+      "target_sha256": "8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f",
+      "observed_at_kst": "2026-10-09T00:00:29.419217+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 8754,
+        "mtime_ns": 1789980858174913167
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+      "source_path": "ops/p1-k8s-01-v4/code/render.py",
+      "observed_sha256": "fe0a99f364f7eaca6f726a4d280c8ff38c7a06652db809edaf3e8499adb5b71b",
+      "target_sha256": "c640831e3655329934f080e1ec35d7661d036867fc4480674e51e7604d11cfba",
+      "observed_at_kst": "2026-10-09T00:00:29.419217+09:00",
+      "observed_metadata": {
+        "uid": 0,
+        "gid": 0,
+        "mode": "0o750",
+        "size": 11129,
+        "mtime_ns": 1788952997978765424
+      },
+      "selinux_context": "NOT_COLLECTED",
+      "acl": "NOT_COLLECTED",
+      "backup": "NOT_CREATED",
+      "runtime_go": "NOT_GRANTED_BY_THIS_PLAN"
+    }
+  ],
+  "preserve_matches": [
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+      "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cluster-change.py",
+      "sha256": "e955a6f981dbcdc3acac1e97dcecca498f4441e23e6c7ae64bbfb4788f2df162"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+      "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/node-evidence.py",
+      "sha256": "8ce5854476ea7f4e85dafd38ec979392762a3d92e3ed1ff44e58e50119f79e9f"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+      "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+      "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+      "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d"
+    },
+    {
+      "host": "k8s-control01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/render.py",
+      "sha256": "c640831e3655329934f080e1ec35d7661d036867fc4480674e51e7604d11cfba"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+      "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+      "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+      "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+      "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c"
+    },
+    {
+      "host": "k8s-control03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+      "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+      "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+      "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+      "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+      "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c"
+    },
+    {
+      "host": "k8s-worker01",
+      "path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+      "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+      "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+      "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+      "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+      "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c"
+    },
+    {
+      "host": "k8s-worker02",
+      "path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+      "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/RUNBOOK_FINAL.md",
+      "sha256": "b5388dc52071952608e6bcd642cda4d5a3d6d4c7d6ee8e820e8d4330b32c25c3"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/cockpit.sh",
+      "sha256": "bb8c951d25ff7176edfe7719e0a844f07816eec9cbf1a9cf1c0ab539995de7b1"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/prepare-calico.py",
+      "sha256": "205025f1b48c0103db945968e18184be519c56315ce3d3357d45439b7c80ddc9"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/probe.py",
+      "sha256": "d06ccc2a20770313475ae5e6f04dfba11ce433807b2c5139544f8cc2bd57c50c"
+    },
+    {
+      "host": "k8s-worker03",
+      "path": "/opt/fds/P1-K8S-01-v4/code/regression.py",
+      "sha256": "2955eafb6f39b1fd4dc574c784088a082582088ec60d1373b6186f887358810d"
+    }
+  ],
+  "missing_before_execution": [
+    "Lead target/path/operator confirmation",
+    "fresh hashes, regular-file and link checks",
+    "uid/gid/mode/SELinux/ACL metadata and verified backups",
+    "tool invocation exclusion and recovery owner",
+    "per-host ordered replacement and stop/restore authorization"
+  ]
+}
