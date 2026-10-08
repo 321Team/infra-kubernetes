@@ -1,0 +1,22 @@
+{
+  "schema": "fds.sec01.probe-driver.v1",
+  "mode": "precheck",
+  "session": "REPLACE_WITH_APPROVED_SESSION",
+  "host": "k8s-control01",
+  "scope": "isolated-exec-probe-only",
+  "executor": "GWONUK",
+  "approver": null,
+  "source_commit": null,
+  "bundle_sha256": null,
+  "go_url": null,
+  "go_body": null,
+  "go_body_sha256": null,
+  "approved_at": null,
+  "window_start": null,
+  "latest_start": null,
+  "window_end": null,
+  "live_go_rechecked": false,
+  "notice_confirmed": false,
+  "no_overlap_confirmed": false,
+  "checked_at": null
+}

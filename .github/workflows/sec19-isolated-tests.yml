@@ -3,11 +3,13 @@ on:
   pull_request:
     paths:
       - 'ops/p1-sec01-isolated-tests/**'
+      - 'ops/p1-sec01-probe-driver/**'
       - '.github/workflows/sec19-isolated-tests.yml'
   push:
     branches: ['p1-k8s-01/sec19-isolated-test-fixes']
     paths:
       - 'ops/p1-sec01-isolated-tests/**'
+      - 'ops/p1-sec01-probe-driver/**'
       - '.github/workflows/sec19-isolated-tests.yml'
 permissions:
   contents: read
@@ -23,3 +25,6 @@ jobs:
         run: for f in ops/p1-sec01-isolated-tests/*.sh; do bash -n "$f" || exit; done
       - name: Python and Bash regression tests (MOCK only)
         run: python3 -m unittest discover -s ops/p1-sec01-isolated-tests/tests -v
+
+      - name: Probe driver offline and Linux process tests (no cluster access)
+        run: python3 -m unittest discover -s ops/p1-sec01-probe-driver/tests -v
