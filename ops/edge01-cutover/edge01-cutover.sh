@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
 # Edge Cutover(#19) — edge01 nginx upstream `transaction_api`를 옛 E-K3S(10.1.93.50:30080)에서
 # 정본 Worker NodePort(10.1.93.105/.107/.108:30080)로 바꾼다. upstream 줄 외에는 바꾸지 않는다.
-# 사용: sudo -v 후 `bash edge01-cutover.sh <mode> <RUN>`   (RUN 예: 20261010T1000)
+# 사용: sudo -v 후 `bash edge01-cutover.sh <mode> <RUN> [WIN]`   (RUN 예: 20261010T1000, WIN 기본값=mode)
+#   경로 판정은 요청줄 캡처(cutover-capture.sh, 같은 폴더)로 한다. 이 스크립트를 실행하기 전에 같은 RUN·WIN으로
+#   edge01 캡처(`sudo bash cutover-capture.sh start <RUN> <WIN> <초>`)가 CAPTURE_READY여야 하고, check·apply는
+#   Worker 3대 캡처도 READY여야 한다(Worker는 P4 지원 경로로 이권욱이 시작·보고).
 #   check    : 설정 변경 없음. upstream 블록·설정 파일 SHA, reload 반영, 경로 응답, /metrics, E-K3S 상태.
-#              관측 방법 사전 검증용 표식 요청을 보낸다(edge 경유 1건 → E-K3S 로그에서 확인,
-#              Worker 3대 직접 각 1건 → control01 `trace <RUN> check`로 확인). GET /readyz만 보낸다.
+#              관측 방법 사전 검증용 표식 요청을 보낸다(edge 경유 1건 → edge01 캡처의 E-K3S Pod 요청에서 확인,
+#              Worker 3대 직접 각 1건 → Worker 캡처에서 확인). GET /readyz만 보낸다.
 #   apply    : 사전 게이트 → 설정 사본 → upstream 줄 전환(.50 주석, Worker 3줄 주석 해제) → nginx -t → reload
-#              → 반영 확인 → 표식 요청 9회 + 표식 smoke 1건 → E-K3S 로그에 표식 0건 확인.
-#              실제 새 upstream 경유는 control01 `trace <RUN> apply`로 표식 10개가 K8s Pod 로그에 각각 1번씩
-#              찍혔는지 확인해야 C1 완료다(이 스크립트의 OK는 edge 단계 완료).
+#              → 반영 확인 → 표식 요청 9회 + 표식 smoke 1건 → edge01 캡처(E-K3S Pod)에 apply 표식 0건 확인.
+#              실제 새 upstream 경유는 cutover-capture-judge.py apply가 Worker 캡처에서 표식 10개가 각 1번,
+#              nginx 경유(X-Real-IP)·src 10.1.93.50·그 노드의 K8s Pod로 들어간 것을 확인해야 C1 완료다
+#              (이 스크립트의 EDGE_OK는 edge 단계 완료).
 #   rollback : apply 직전 사본 복원 → nginx -t → reload → 반영 확인 → 표식 요청 3회 + 표식 smoke 1건이
-#              E-K3S Pod 로그에 각각 1번씩 찍혔는지 확인(옛 경로 경유의 직접 근거).
-# 표식: 요청 쿼리 `cutover=<RUN>-<mode>-<번호>`. transaction-api는 모르는 쿼리를 무시하고, uvicorn 접근 로그에
-#   경로·쿼리·client 주소가 남는다. 표식은 RUN·mode·번호로 정해져 다른 요청과 섞이지 않는다.
+#              edge01 캡처에서 E-K3S Pod로 각각 1번씩 들어갔는지 확인(옛 경로 경유의 직접 근거).
+#              캡처가 없거나 오류여도 복원은 멈추지 않는다(그때 결과는 UNCONFIRMED).
+# 표식: 요청 쿼리 `cutover=cutover-<RUN>-<tag>-<번호>`. transaction-api는 모르는 쿼리를 무시한다.
+#   표식은 RUN·tag·번호로 정해져 다른 요청과 섞이지 않는다. 보낸 요청은 `SENT … t=<보내기 직전 epoch>` 줄로 남긴다.
+# E-K3S 앱 로그 표식 조회(ek3s_trace)는 참고 기록이다. 단, apply 표식이 E-K3S 로그에서 발견되면(옛 경로의
+#   직접 증거) 그대로 STOP이다. 로그 0건·조회 실패는 판정에 쓰지 않는다(10/8 앱 접근 로그 비활성 확인).
 # 종료 코드: 0=완료(RESULT …=OK), 3=STOP(실패·조건 불충족), 4=UNCONFIRMED(변경은 됐으나 증명 불완전 —
 #   완료로 기록하지 않고 Review Owner·실행자가 복구/수용을 판단). 미확정을 OK로 내보내지 않는다.
 # E-K3S(k3s)는 이 스크립트에서 바꾸지 않는다(get·logs 조회만. 중지는 #47 창 edge01-k3s.sh 범위).
@@ -21,10 +28,18 @@ set -uo pipefail
 
 MODE=${1:-}
 RUN=${2:-}
+WIN=${3:-$MODE}
 case "$RUN" in
   [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9]) ;;
-  *) echo "usage: bash $0 check|apply|rollback <RUN=yyyymmddTHHMM>" >&2; exit 2 ;;
+  *) echo "usage: bash $0 check|apply|rollback <RUN=yyyymmddTHHMM> [WIN]" >&2; exit 2 ;;
 esac
+case "$WIN" in
+  "$MODE"|"$MODE"[1-9]) ;;
+  *) echo "usage: WIN은 mode 이름 또는 mode+숫자 1자리(예: check2)" >&2; exit 2 ;;
+esac
+HERE=$(cd "$(dirname "$0")" && pwd)
+CAP=$HERE/cutover-capture.sh
+JUDGE=$HERE/cutover-capture-judge.py
 
 UPSTREAM=transaction_api
 NEW_WORKERS=(10.1.93.105 10.1.93.107 10.1.93.108)
@@ -38,6 +53,7 @@ SIM_RUN=${RUN/T/}
 STAMP=$(date +%H%M%S)
 
 test "$(hostname -s)" = edge01 || { echo "STOP: edge01이 아님" >&2; exit 2; }
+test -s "$CAP" && test -s "$JUDGE" || { echo "STOP: 같은 폴더에 cutover-capture.sh·cutover-capture-judge.py가 없음" >&2; exit 2; }
 mkdir -p "$LOGDIR" && chmod 700 "$LOGDIR" || { echo "STOP: $LOGDIR 생성 실패" >&2; exit 2; }
 LOG=$LOGDIR/edge01-cutover-$MODE-$STAMP.log
 exec > >(tee -a "$LOG") 2>&1
@@ -93,29 +109,68 @@ wait_reloaded() {
   return "$rc"
 }
 
-# 표식 요청. 결과 줄 "<표식> <HTTP 코드>"를 nonce 파일에 남긴다.
+# 표식 요청. 보낸 요청마다 "SENT run= tag= id= http= t=<보내기 직전 epoch>" 줄을 tag별 파일에 남긴다.
 nonce() { echo "cutover-$RUN-$1-$2"; }
+now() { date +%s.%N | cut -c1-14; }
+sent() {   # $1=tag $2=번호 $3=HTTP 코드 $4=보내기 직전 시각
+  echo "SENT run=$RUN tag=$1 id=$2 http=$3 t=$4" | tee -a "$LOGDIR/sent-$1-$STAMP.txt"
+}
 send_nonces() {   # $1=tag $2=개수 $3=기준 URL
-  local tag=$1 n=$2 base=$3 i id c file=$LOGDIR/nonces-$1-$STAMP.txt
-  : > "$file"
+  local tag=$1 n=$2 base=$3 i t c
   for i in $(seq 1 "$n"); do
-    id=$(nonce "$tag" "$i")
-    c=$(code "$base/readyz?cutover=$id")
-    echo "$id $c" >> "$file"; echo "   $id http=$c"
+    t=$(now)
+    c=$(code "$base/readyz?cutover=$(nonce "$tag" "$i")")
+    sent "$tag" "$i" "$c" "$t"
     sleep 0.3
   done
-  NONCE_FILE=$file
+  NONCE_FILE=$LOGDIR/sent-$tag-$STAMP.txt
 }
-# 업무 smoke 1건(#20 최소): 표식 쿼리를 붙여 Pod 로그와 결속한다. 201과 응답 본문을 기록한다.
+# 업무 smoke 1건(#20 최소): 표식 쿼리를 붙여 캡처와 결속한다. 201과 응답 본문을 기록한다.
 smoke() {
-  local tag=$1 acct="SIM_cut_${SIM_RUN}_$1" id out c
+  local tag=$1 acct="SIM_cut_${SIM_RUN}_$1" id out c t
   id=$(nonce "$tag" smoke)
   out=$LOGDIR/smoke-$tag-$STAMP.json
+  t=$(now)
   c=$(curl -s -o "$out" -w '%{http_code}' --max-time 10 -X POST "$EDGE/api/v1/transactions?cutover=$id" \
       -H 'Content-Type: application/json' \
       -d "{\"account_id\":\"$acct\",\"amount\":10000,\"transaction_type\":\"deposit\",\"source_ip\":\"198.51.100.10\"}")
+  sent "$tag" smoke "$c" "$t"
   echo "   smoke $id $acct http=$c body=$(head -c 400 "$out")"
   test "$c" = 201
+}
+
+# E-K3S transaction-api Pod의 이름·UID·IP(캡처 dst와 결속용). "POD cluster=ek3s …" 줄을 파일과 화면에 남긴다.
+ek3s_pods() {   # $1=tag
+  local f=$LOGDIR/ek3s-pods-$1-$STAMP.txt
+  sudo "$K3S" kubectl get pods -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name} {.metadata.uid} {.status.podIP} {.spec.nodeName}{"\n"}{end}' \
+    2> "$f.err" | awk '$1 ~ /transaction-api/ { print "POD cluster=ek3s name=" $1 " uid=" $2 " ip=" $3 " node=" $4 }' > "$f"
+  echo "${PIPESTATUS[0]}" > "$f.rc"
+  cat "$f"
+  PODS_FILE=$f
+}
+# edge01 캡처를 멈추고(report) edge01 몫만 판정한다. 호출부가 쓸 값(모두 보존·출력):
+#   EDGE_REPORT_RC(report 종료 코드), EDGE_JUDGE_RC(판정기 종료 코드), EDGE_VERDICT(판정기 최종 verdict),
+#   EDGE_PART(edge 부분값 OK|OLD_PATH|MISMATCH|NOT_CAPTURED). 부분값만으로 통과시키지 않는다(edge_ok).
+edge_capture_judge() {   # $1=tag
+  local tag=$1 rep=$LOGDIR/capture-edge01-$WIN-$STAMP.txt out=$LOGDIR/judge-edge01-$1-$STAMP.txt
+  sudo bash "$CAP" report "$RUN" "$WIN" > "$rep" 2>&1
+  EDGE_REPORT_RC=$?
+  echo "$EDGE_REPORT_RC" > "$rep.rc"
+  cat "$rep"
+  ek3s_pods "$tag"
+  python3 -I "$JUDGE" "$MODE" "$RUN" "$tag" "$WIN" --edge-only "$LOGDIR/sent-$tag-$STAMP.txt" "$rep" "$PODS_FILE" > "$out" 2>&1
+  EDGE_JUDGE_RC=$?
+  echo "$EDGE_JUDGE_RC" > "$out.rc"
+  cat "$out"
+  J=$(grep '^JUDGE ' "$out" | tail -1)
+  EDGE_PART=$(printf '%s\n' "$J" | sed -n 's/^JUDGE .* edge=\([A-Z_]*\) .*/\1/p')
+  EDGE_VERDICT=$(printf '%s\n' "$J" | sed -n 's/^JUDGE .* verdict=\([A-Z_]*\)$/\1/p')
+  echo "-- edge01 캡처 판정: report_rc=$EDGE_REPORT_RC judge_rc=$EDGE_JUDGE_RC verdict=${EDGE_VERDICT:-없음} edge=${EDGE_PART:-없음} (원본 $rep, 판정 $out)"
+}
+# 모드별 edge01 판정 통과 조건: report rc0 + 판정기 rc0 + 기대 verdict + edge=OK 모두
+edge_ok() {   # $1=기대 verdict
+  test "$EDGE_REPORT_RC" = 0 && test "$EDGE_JUDGE_RC" = 0 && test "$EDGE_VERDICT" = "$1" && test "$EDGE_PART" = OK
 }
 
 # E-K3S transaction-api Pod 로그를 Pod별로 받아(조회마다 rc·stderr 분리, 회차별 새 파일) 표식 줄을 센다.
@@ -184,20 +239,23 @@ case "$MODE" in
     show
     nginx_ok || die "nginx -t 실패(사전검증)"
     reloaded_after_conf || die "reload 반영 판정 실패/미확정 — 표식 시험과 apply 중단"
+    sudo bash "$CAP" status "$RUN" "$WIN" || die "edge01 캡처가 실행 중이 아님(cutover-capture.sh start $RUN $WIN) — 표식 시험 안 함"
     TAG=check$STAMP
-    echo "-- 관측 방법 사전 검증(표식 GET /readyz, tag=$TAG)"
+    echo "-- 관측 방법 사전 검증(표식 GET /readyz, tag=$TAG win=$WIN)"
     send_nonces "$TAG" 1 "$EDGE"
     for w in "${NEW_WORKERS[@]}"; do
-      id=$(nonce "$TAG" "w${w##*.}")
-      echo "   $id direct $w:30080 http=$(code "http://$w:30080/readyz?cutover=$id")"
+      t=$(now)
+      sent "$TAG" "w${w##*.}" "$(code "http://$w:30080/readyz?cutover=$(nonce "$TAG" "w${w##*.}")")" "$t"
     done
     sleep 2
-    T=$(ek3s_trace "$TAG" 300 | tee /dev/stderr | tail -1)
-    echo "-- 기대: edge 경유 $TAG-1이 E-K3S 로그에 1번(현재 upstream이 E-K3S), Worker 직접 3건은 control01 \`trace $RUN $TAG\`에서 w105/w107/w108 각 1번"
-    if test "$(tr_get "$T" err)" = 0 && ids_exact "$(tr_get "$T" ids)" 1; then
-      echo "RESULT cutover-check=TRACE_READY $(date '+%T') (E-K3S 쪽 표식 관측 가능)"
+    edge_capture_judge "$TAG"
+    echo "-- 참고(판정 미사용): E-K3S 앱 로그 표식 조회"
+    ek3s_trace "$TAG" 300
+    echo "-- 기대: edge 경유 $TAG-1이 edge01 캡처에서 E-K3S Pod로 1번(현재 upstream이 E-K3S). Worker 직접 3건은 Worker 캡처에서 w105/w107/w108 각 1번 — cutover-capture-judge.py check $RUN $TAG $WIN로 최종 확인"
+    if edge_ok METHOD_READY; then
+      echo "RESULT cutover-check=EDGE_CAPTURE_READY $(date '+%T') tag=$TAG win=$WIN (C0 관측 방법 판정은 Worker 캡처를 합친 judge check의 METHOD_READY)"
     else
-      echo "RESULT cutover-check=TRACE_NOT_READY $(date '+%T') — E-K3S 로그로 표식을 확인하지 못함. C1 시작 전 원인 확인"
+      echo "RESULT cutover-check=EDGE_CAPTURE_NOT_READY $(date '+%T') tag=$TAG win=$WIN — edge01 캡처로 표식을 확인하지 못함. C1 시작 안 함"
       exit 3
     fi
     ;;
@@ -213,6 +271,7 @@ case "$MODE" in
     F=$(upstream_files)
     test "$(active_servers | tr '\n' ' ')" = "10.1.93.50:30080 " || die "유효 upstream이 예상(10.1.93.50:30080 하나)과 다름"
     test "$(systemctl is-active k3s)" = active || die "E-K3S가 active가 아님 → rollback 경로 없음"
+    sudo bash "$CAP" status "$RUN" "$WIN" || die "edge01 캡처가 실행 중이 아님(cutover-capture.sh start $RUN $WIN). 바꾸지 않는다"
     test "$(code $EDGE/readyz)" = 200 || die "현재 edge 경로 /readyz가 200이 아님"
     for w in "${NEW_WORKERS[@]}"; do
       test "$(code "http://$w:30080/readyz")" = 200 || die "Worker $w:30080/readyz가 200이 아님(local endpoint·허용 정책 확인). 바꾸지 않는다"
@@ -279,18 +338,21 @@ PY
     echo "-- ① 설정 반영: 확인"
     # ② 표식 요청 9회 + 표식 smoke
     send_nonces apply 9 "$EDGE"
-    test "$(grep -c ' 200$' "$NONCE_FILE")" = 9 || die "edge 경유 표식 요청 중 200이 아닌 것이 있음 → rollback 판단"
+    test "$(grep -c ' http=200 ' "$NONCE_FILE")" = 9 || die "edge 경유 표식 요청 중 200이 아닌 것이 있음 → rollback 판단"
     echo "-- ② HTTP: 9/9 200 ($NONCE_FILE)"
     smoke apply || die "업무 smoke가 201이 아님 → rollback"
     test "$(code $EDGE/metrics)" = 404 || die "/metrics가 404가 아님 → rollback"
     sleep 2
-    # ③ 옛 경로 미경유: E-K3S Pod 로그에 이번 apply 표식이 하나도 없어야 한다(조회 실패는 판정 불가)
+    # ③ 옛 경로 미경유: edge01 캡처(E-K3S Pod로 들어가는 요청)에 이번 apply 표식이 하나도 없어야 한다.
+    edge_capture_judge apply
+    echo "-- 참고: E-K3S 앱 로그 표식 조회(발견되면 옛 경로의 직접 증거로 STOP, 0건·조회 실패는 판정에 쓰지 않음)"
     T=$(ek3s_trace apply 600 | tee /dev/stderr | tail -1)
-    test "$(tr_get "$T" err)" = 0 || unconfirmed "E-K3S 로그 조회 실패 — 옛 경로 미경유 미확인"
     test "$(tr_get "$T" found)" = 0 || die "apply 표식이 E-K3S 로그에 있음(옛 경로 경유) → rollback"
-    echo "-- ③ E-K3S 로그의 apply 표식 0건"
+    if test "$EDGE_PART" = OLD_PATH || test "$EDGE_VERDICT" = OLD_PATH; then die "apply 표식이 edge01 캡처에서 E-K3S Pod로 들어감(옛 경로 경유) → rollback"; fi
+    edge_ok PATH_OK || unconfirmed "edge01 캡처 판정 불가(report_rc=$EDGE_REPORT_RC judge_rc=$EDGE_JUDGE_RC verdict=${EDGE_VERDICT:-없음} edge=${EDGE_PART:-없음}) — 옛 경로 미경유 미확인 → rollback 판단"
+    echo "-- ③ edge01 캡처의 apply 표식 0건(E-K3S Pod)"
     show
-    echo "RESULT cutover-apply=EDGE_OK $(date '+%T') file=$F — ④ control01 \`trace $RUN apply\`가 표식 10개(1~9, smoke) 각 1번을 K8s Pod 로그에서 찾아야 C1 완료"
+    echo "RESULT cutover-apply=EDGE_OK $(date '+%T') file=$F — ④ Worker 캡처 보고를 합친 \`cutover-capture-judge.py apply $RUN apply $WIN\`가 PATH_OK(표식 1~9·smoke 각 1번, nginx 경유, 그 노드 Pod)여야 C1 완료"
     ;;
 
   rollback)
@@ -299,6 +361,8 @@ PY
     F=$(cat "$META")
     show
     test "$(systemctl is-active k3s)" = active || die "E-K3S가 active가 아님 — 옛 경로로 복구할 수 없음(#47 W1 이후면 #47 rollback 먼저)"
+    # 캡처는 복원을 막지 않는다. 실행 중이 아니면 결과가 UNCONFIRMED(옛 경로 경유 미확인)로 남는다.
+    sudo bash "$CAP" status "$RUN" "$WIN" || echo "-- 주의: edge01 캡처가 실행 중이 아님 — 복원은 계속, 옛 경로 경유는 확인하지 못함"
     sudo sh -c 'cat "$1" > "$2"' sh "$BEFORE" "$F" || die "설정 복원 실패"
     nginx_ok || die "복원 설정 nginx -t 실패 → 즉시 확인"
     echo "-- reload $(date '+%F %T')"
@@ -309,16 +373,18 @@ PY
     echo "-- ① 설정 반영: 확인"
     TAG=rollback$STAMP
     send_nonces "$TAG" 3 "$EDGE"
-    test "$(grep -c ' 200$' "$NONCE_FILE")" = 3 || die "복원 후 edge /readyz 실패 — E-K3S 상태 확인"
+    test "$(grep -c ' http=200 ' "$NONCE_FILE")" = 3 || die "복원 후 edge /readyz 실패 — E-K3S 상태 확인"
     smoke "$TAG" || die "복원 후 업무 smoke가 201이 아님"
+    echo "-- 기능 복구: GET 3/3 200, smoke 201(DB 행은 db01에서 SIM_cut_${SIM_RUN}_$TAG 1행·false/false 확인)"
     sleep 2
-    # ② 옛 경로 경유: 이번 rollback 표식 4개(1~3, smoke)가 E-K3S Pod 로그에 각각 정확히 1번
-    T=$(ek3s_trace "$TAG" 600 | tee /dev/stderr | tail -1)
-    test "$(tr_get "$T" err)" = 0 || unconfirmed "E-K3S 로그 조회 실패 — 옛 경로 경유 미확인"
-    ids_exact "$(tr_get "$T" ids)" 1 2 3 smoke || unconfirmed "rollback 표식이 E-K3S 로그에 각 1번씩 있지 않음(ids=$(tr_get "$T" ids)) — 옛 경로 경유 미확인"
-    echo "-- ② E-K3S 로그에서 rollback 표식 1~3·smoke 각 1번 확인"
+    # ② 옛 경로 경유: 이번 rollback 표식 4개(1~3, smoke)가 edge01 캡처에서 E-K3S Pod로 각각 정확히 1번
+    edge_capture_judge "$TAG"
+    echo "-- 참고(판정 미사용): E-K3S 앱 로그 표식 조회"
+    ek3s_trace "$TAG" 600
+    edge_ok PATH_OK || unconfirmed "기능 복구(GET 3/3·smoke 201)는 확인, 옛 경로 경유는 캡처로 확인하지 못함(report_rc=$EDGE_REPORT_RC judge_rc=$EDGE_JUDGE_RC verdict=${EDGE_VERDICT:-없음} edge=${EDGE_PART:-없음})"
+    echo "-- ② edge01 캡처에서 rollback 표식 1~3·smoke가 E-K3S Pod로 각 1번"
     show
-    echo "RESULT cutover-rollback=OK $(date '+%T') tag=$TAG (control01 \`trace $RUN $TAG\`는 0건이어야 한다 — 보조)"
+    echo "RESULT cutover-rollback=OK $(date '+%T') tag=$TAG win=$WIN (Worker 캡처가 있으면 judge rollback으로 새 경로 0건도 확인 — 보조)"
     ;;
 
   *)

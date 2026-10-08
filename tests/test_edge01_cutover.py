@@ -120,20 +120,27 @@ def test_cutover_keeps_k3s_and_restores_on_failed_config_test():
 
 
 def test_unconfirmed_is_not_reported_as_ok():
-    """B1-R·B2-R: 조회 실패·표식 불일치는 종료 4이며 OK를 내지 않는다."""
+    """B1-R·B2-R: 판정 불가는 종료 4이며 OK를 내지 않는다. 경로 판정은 캡처, 앱 로그는 참고(발견 시 STOP)."""
     text = cutover_text()
     assert re.search(r"unconfirmed\(\) \{.*?exit 4; \}", text)
     apply = mode_block("apply")
     rollback = mode_block("rollback")
     for block in (apply, rollback):
         assert "wait_reloaded || unconfirmed" in block
-        assert 'test "$(tr_get "$T" err)" = 0 || unconfirmed' in block
-        assert "참고:" not in block
+        assert "edge_ok PATH_OK || unconfirmed" in block
         assert block.rstrip().splitlines()[-1].strip().startswith('echo "RESULT cutover-')
+    # 옛 경로의 직접 증거(로그 발견·캡처 OLD_PATH)는 STOP, 로그 조회 실패는 판정에 쓰지 않는다
     assert 'test "$(tr_get "$T" found)" = 0 || die' in apply
-    assert "trace $RUN apply" in apply
+    assert 'if test "$EDGE_PART" = OLD_PATH || test "$EDGE_VERDICT" = OLD_PATH; then die' in apply
+    assert 'tr_get "$T" err' not in apply + rollback
+    assert "ids_exact" not in apply + rollback
+    assert "cutover-capture-judge.py apply $RUN apply $WIN" in apply
     assert "EDGE_OK" in apply
-    assert 'ids_exact "$(tr_get "$T" ids)" 1 2 3 smoke || unconfirmed' in rollback
+    # apply는 캡처가 없으면 바꾸지 않고, rollback은 캡처가 없어도 복원한다
+    assert re.search(r'status "\$RUN" "\$WIN" \|\| die', apply)
+    assert re.search(r'status "\$RUN" "\$WIN" \|\| echo', rollback)
+    assert apply.index('status "$RUN" "$WIN"') < apply.index('sudo cat "$F" > "$BEFORE"')
+    assert 'smoke "$TAG" || die' in rollback
     for gone in ("tcpdump", "sock30080", "pkill", "|| true\n    n=$((n"):
         assert gone not in text
 
@@ -329,8 +336,12 @@ def test_readme_n1_and_trace_criteria():
         assert required in n1
     assert "12/12행 수집 완결 = positive 3" in text
     assert "C0 판정표" in text
-    assert "TRACED" in text and "TRACE_READY" in text
-    assert "tcpdump" not in text
+    # B1~B3 보완: 캡처 판정, E-K3S 유지, 원인별 rc 처리, 시간 상한
+    for required in ("E-K3S는 유지하며, 앱 로그 기반 판정만 대체", "METHOD_READY", "PATH_OK", "OLD_PATH",
+                     "X-Real-IP", "snaplen", "T0+80", "T0+95", "apply 시작 상한 = 창 종료 − 15분 − 65분",
+                     "종료 코드·결과의 원인별 처리", "기능 복구 확인·경로 추적 미확인", "false`/`false"):
+        assert required in text, required
+    assert "T0+75분" not in text
 
 
 def test_control01_check_is_read_only():
@@ -390,20 +401,41 @@ cat "FAKE_DIR/$4.log"
     assert result.returncode == expected, result.stdout + result.stderr
 
 
+CHECK_HARNESS = """
+sudo() { if test "$1" = bash; then shift; fake_cap "$@"; else return 0; fi; }
+fake_cap() { if test "$2" = status; then test "$CAP_STATE" = RUNNING; else echo report; fi; }
+show() { :; }; nginx_ok() { return 0; }; reloaded_after_conf() { return 0; }
+send_nonces() { :; }; sent() { :; }; sleep() { :; }; now() { echo 1; }
+nonce() { echo marker; }; code() { echo 200; }; ek3s_trace() { echo 'TRACE ek3s tag=x pods=1 err=0 found=0 ids='; }
+edge_capture_judge() { EDGE_PART=$FAKE_EDGE; EDGE_REPORT_RC=0; EDGE_JUDGE_RC=${FAKE_JRC:-0}; EDGE_VERDICT=${FAKE_VERDICT:-METHOD_READY}; }
+edge_ok() { test "$EDGE_REPORT_RC" = 0 && test "$EDGE_JUDGE_RC" = 0 && test "$EDGE_VERDICT" = "$1" && test "$EDGE_PART" = OK; }
+die() { echo "STOP: $*"; exit 3; }
+STAMP=1; RUN=20261008T0327; WIN=check; EDGE=http://unused; NEW_WORKERS=(); CAP=cap
+"""
+
+
 @needs_bash
-def test_edge_check_empty_logs_exits_nonzero(tmp_path):
-    body = mode_block('check')
-    # All read-only prerequisites succeed; no nonce is present in the log.
-    harness = '''
-sudo() { return 0; }; show() { :; }; nginx_ok() { return 0; }
-reloaded_after_conf() { return 0; }; send_nonces() { :; }; sleep() { :; }
-nonce() { echo marker; }; code() { echo 200; }
-ek3s_trace() { echo 'TRACE ek3s tag=check1 pods=1 err=0 found=0 ids='; }
-tr_get() { if test "$2" = err; then echo 0; fi; }
-ids_exact() { return 1; }; die() { exit 3; }
-STAMP=1; RUN=20261008T0327; EDGE=http://unused; NEW_WORKERS=()
-'''+body+'\n'
-    hp=tmp_path/'empty.sh'; hp.write_text(harness,encoding='utf-8')
-    result=subprocess.run([BASH,hp.as_posix()],capture_output=True)
-    assert result.returncode==3
-    assert b'TRACE_NOT_READY' in result.stdout
+@pytest.mark.parametrize("cap_state,edge,rc,word", [
+    ("RUNNING", "OK", 0, b"EDGE_CAPTURE_READY"),
+    ("RUNNING", "MISMATCH", 3, b"EDGE_CAPTURE_NOT_READY"),      # 캡처에 표식 없음(빈 로그와 같은 상황)
+    ("RUNNING", "NOT_CAPTURED", 3, b"EDGE_CAPTURE_NOT_READY"),
+    ("ABSENT", "OK", 3, b"STOP:"),                              # 캡처를 먼저 시작하지 않으면 표식 시험 안 함
+])
+def test_edge_check_requires_capture(tmp_path, cap_state, edge, rc, word):
+    hp = tmp_path / "check.sh"
+    hp.write_text(CHECK_HARNESS + mode_block("check") + "\n", encoding="utf-8")
+    env = dict(os.environ, CAP_STATE=cap_state, FAKE_EDGE=edge)
+    result = subprocess.run([BASH, hp.as_posix()], capture_output=True, env=env)
+    assert result.returncode == rc, result.stdout + result.stderr
+    assert word in result.stdout
+
+
+@needs_bash
+@pytest.mark.parametrize("verdict,jrc", [("METHOD_NOT_READY", "4"), ("METHOD_READY", "4")])
+def test_edge_check_partial_ok_is_not_ready(tmp_path, verdict, jrc):
+    """R1: edge 부분값이 OK여도 판정기 rc·verdict가 아니면 EDGE_CAPTURE_READY를 내지 않는다."""
+    hp = tmp_path / "check.sh"
+    hp.write_text(CHECK_HARNESS + mode_block("check") + "\n", encoding="utf-8")
+    env = dict(os.environ, CAP_STATE="RUNNING", FAKE_EDGE="OK", FAKE_VERDICT=verdict, FAKE_JRC=jrc)
+    result = subprocess.run([BASH, hp.as_posix()], capture_output=True, env=env)
+    assert result.returncode == 3 and b"EDGE_CAPTURE_NOT_READY" in result.stdout
