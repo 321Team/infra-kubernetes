@@ -20,7 +20,12 @@
 
 - C0는 `METHOD_READY`(scope=all, rc0)였으나 C1 `apply`가 rc4 `UNCONFIRMED`(16:32:10)로 끝났고, 같은 이유로 `rollback`도 rc4(16:35:10)였다. 설정 전환·복원과 reload는 실제로 됐다(journal `Reloaded` 16:31:32, worker 교체, 정리 중 옛 worker 0). 판정만 거짓 실패했다.
 - 원인: worker 시작 시각을 `ps lstart`로 읽었다. lstart는 부팅 시각(`btime`, 초 단위 버림)+경과로 계산돼 실제보다 최대 1초 이르다. 설정 쓰기(16:31:32.446)와 reload가 같은 초에 있으면 lstart(16:31:31)가 수정 시각보다 앞서 1(옛 worker)이 된다. 현장 `etimes`·`btime`으로 계산한 실제 시작은 16:31:32였다.
-- 수정: 설정은 나노초 mtime(`date -r … +%s.%N`), worker는 `지금 − (uptime − /proc/<pid>/stat starttime ÷ CLK_TCK)`로 소수 초까지 비교한다. tick 버림과 읽는 순서는 모두 시작 시각을 이르게 만드는 쪽이라 오차가 "반영"으로 기울지 않는다. apply·rollback에서는 설정 쓰기와 reload 사이에 `nginx -t`가 있어 실제 간격이 tick(10ms)보다 길다. 시각을 못 읽으면 지금처럼 2(판단 불가)이며 PASS로 우회하지 않는다.
+- 수정: 설정은 나노초 mtime(`date -r … +%s.%N`)으로, worker는 **보수적 시작 시각 하한** `지금 − uptime + starttime ÷ CLK_TCK − 0.011`로 비교한다. 하한이 설정 수정 시각 이상일 때만 반영(0)이고, 오차 범위 안은 반영으로 올리지 않는다(1).
+  - 0.011초 근거: `/proc/uptime`은 소수 둘째 자리 아래를 버린다(<10ms, 그리고 지금을 먼저·uptime을 나중에 읽어 생기는 지연도 이 안에 들어감). 여기에 출력 반올림 여유 1ms를 더했다. starttime의 tick 버림은 하한을 더 이르게 만드는 쪽이라 따로 빼지 않는다.
+  - 전제: 측정 동안 벽시계와 부팅 기준 시계의 차이가 일정하다. 시계 step이 의심되면 반영을 확정하지 않고 원인을 확인한다.
+  - 처음 안(#77 a0b02809)은 점 추정이라 uptime 버림·반올림으로 **거짓 PASS**가 날 수 있었다(이권욱 리뷰 B1, 실제 시작 .500·수정 .505·추정 .507 → rc0). 하한 비교로 바꿨다.
+  - apply·rollback은 설정 쓰기 뒤 reload 전에 `sleep 1`을 둔다. 쓰기와 새 worker 시작 간격을 오차(11ms)보다 확실히 벌려, 하한 비교 때문에 거짓 UNCONFIRMED가 나지 않게 한다(실측 간격 41ms 하나로 일반화하지 않음).
+  - 시각을 못 읽으면 지금처럼 2(판단 불가)이며 PASS로 우회하지 않는다.
 - 같은 RUN은 `upstream-file.before`가 있어 다시 apply하지 않는다. 새 RUN·새 승인으로 C0부터 다시 한다.
 
 ### 2026-10-08 현장 사전검증 보완

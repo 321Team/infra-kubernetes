@@ -84,8 +84,8 @@ proc_uptime() { cat /proc/uptime; }
 # 시작 시각은 ps lstart를 쓰지 않는다. lstart는 부팅 시각(btime, 초 단위 버림)+경과로 계산돼 실제보다
 # 최대 1초 이르게 나와, 설정 쓰기와 reload가 같은 초에 있으면 반영됐는데도 1이 된다(RUN 20261008T1730:
 # 설정 수정 16:31:32.446, reload 16:31:32, lstart 16:31:31 → apply·rollback 모두 거짓 UNCONFIRMED).
-# 그래서 설정은 나노초 mtime, worker는 "지금 − (uptime − starttime tick)"으로 소수 초까지 비교한다.
-# tick 버림·읽는 순서(지금을 uptime보다 먼저) 모두 시작 시각을 이르게 만드는 쪽이라, 오차가 반영 쪽으로 기울지 않는다.
+# 그래서 설정은 나노초 mtime과, worker는 아래 worker_start의 **보수적 시작 시각 하한**과 비교한다.
+# 하한이 설정 수정 시각 이상일 때만 0이다. 오차 범위 안(불확실)이면 1로 남긴다(반영으로 올리지 않음).
 reloaded_after_conf() {
   local master newest wstart pid t args n_old=0 n_cur=0
   master=$(pgrep -o -x nginx) || return 2
@@ -100,13 +100,18 @@ reloaded_after_conf() {
     if test -z "$wstart" || earlier "$t" "$wstart"; then wstart=$t; fi
   done
   test -n "$newest" && test -n "$wstart" || return 2
-  echo "   설정 최종 수정=$(date -d "@${newest%.*}" '+%F %T').${newest#*.} 현재 worker ${n_cur}개 최초 시작=$(date -d "@${wstart%.*}" '+%F %T').${wstart#*.} 정리 중 옛 worker=${n_old}"
+  echo "   설정 최종 수정=$(date -d "@${newest%.*}" '+%F %T').${newest#*.} 현재 worker ${n_cur}개 최초 시작(하한)=$(date -d "@${wstart%.*}" '+%F %T').${wstart#*.} 정리 중 옛 worker=${n_old}"
   earlier "$wstart" "$newest" && return 1
   return 0
 }
 # $1 < $2 (소수 초)면 0
 earlier() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 < b + 0) }'; }
-# worker 시작 시각(epoch, 소수 3자리). /proc/<pid>/stat의 22번째 필드(starttime, 부팅 후 tick)와 /proc/uptime으로 계산
+# worker 시작 시각의 보수적 하한(epoch, 소수 6자리). 실제 시작은 이 값보다 늦다.
+# 전제: 측정 동안 벽시계와 부팅 기준 시계의 차이가 일정하다(시계 step이 없음).
+#   실제 시작 = 부팅 시각 B + starttime 실제값, starttime 실제값 ≥ s/h (/proc/<pid>/stat 22번째, tick 버림)
+#   지금 n을 먼저 읽고 uptime을 나중에 읽으므로, n을 읽은 순간의 실제 uptime U1 ≤ 뒤에 읽은 uptime U2 < u + 0.01
+#   (/proc/uptime은 소수 둘째 자리 아래를 버린다) → B = n − U1 > n − u − 0.01
+#   → 실제 시작 > n − u + s/h − 0.010. 출력 반올림(%.6f, 0.5µs)까지 덮도록 1ms를 더 빼 0.011을 뺀다.
 worker_start() {
   local now up st hz
   hz=$(getconf CLK_TCK) || return 1
@@ -114,7 +119,7 @@ worker_start() {
   up=$(proc_uptime | awk '{ print $1 }') || return 1
   st=$(proc_stat "$1" | sed 's/^.*) //' | awk '{ print $20 }') || return 1
   awk -v n="$now" -v u="$up" -v s="$st" -v h="$hz" \
-    'BEGIN { if (s !~ /^[0-9]+$/ || u !~ /^[0-9.]+$/ || h !~ /^[0-9]+$/ || h == 0) exit 1; printf "%.3f\n", n - (u - s / h) }'
+    'BEGIN { if (s !~ /^[0-9]+$/ || u !~ /^[0-9.]+$/ || h !~ /^[0-9]+$/ || h == 0) exit 1; printf "%.6f\n", n - u + s / h - 0.011 }'
 }
 # reload 직후 판정을 5초 간격으로 최대 7번 본다(마지막 대기 포함 약 35초). 끝까지 0이 아니면 그 rc.
 wait_reloaded() {
@@ -347,6 +352,8 @@ PY
       nginx_ok && die "새 설정 nginx -t 실패 → 사본으로 되돌림(reload 안 함)"
       die "새 설정 nginx -t 실패, 되돌린 뒤에도 실패 → 즉시 확인"
     fi
+    # 설정 쓰기와 새 worker 시작 사이를 반영 판정의 오차(11ms)보다 확실히 벌린다. 없으면 거짓 UNCONFIRMED가 날 수 있다.
+    sleep 1
     echo "-- reload $(date '+%F %T')"
     sudo systemctl reload nginx || die "nginx reload 실패 → rollback"
     sleep 2
@@ -383,6 +390,7 @@ PY
     sudo bash "$CAP" status "$RUN" "$WIN" || echo "-- 주의: edge01 캡처가 실행 중이 아님 — 복원은 계속, 옛 경로 경유는 확인하지 못함"
     sudo sh -c 'cat "$1" > "$2"' sh "$BEFORE" "$F" || die "설정 복원 실패"
     nginx_ok || die "복원 설정 nginx -t 실패 → 즉시 확인"
+    sleep 1   # apply와 같은 이유(반영 판정 오차보다 간격을 벌림)
     echo "-- reload $(date '+%F %T')"
     sudo systemctl reload nginx || die "nginx reload 실패"
     sleep 2
