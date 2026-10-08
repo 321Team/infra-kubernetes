@@ -149,19 +149,28 @@ ek3s_pods() {   # $1=tag
   cat "$f"
   PODS_FILE=$f
 }
-# edge01 캡처를 멈추고(report) edge01 몫만 판정한다. 마지막 JUDGE 줄을 J에 둔다. edge=OK|OLD_PATH|MISMATCH|NOT_CAPTURED
+# edge01 캡처를 멈추고(report) edge01 몫만 판정한다. 호출부가 쓸 값(모두 보존·출력):
+#   EDGE_REPORT_RC(report 종료 코드), EDGE_JUDGE_RC(판정기 종료 코드), EDGE_VERDICT(판정기 최종 verdict),
+#   EDGE_PART(edge 부분값 OK|OLD_PATH|MISMATCH|NOT_CAPTURED). 부분값만으로 통과시키지 않는다(edge_ok).
 edge_capture_judge() {   # $1=tag
   local tag=$1 rep=$LOGDIR/capture-edge01-$WIN-$STAMP.txt out=$LOGDIR/judge-edge01-$1-$STAMP.txt
   sudo bash "$CAP" report "$RUN" "$WIN" > "$rep" 2>&1
-  echo "$?" > "$rep.rc"
+  EDGE_REPORT_RC=$?
+  echo "$EDGE_REPORT_RC" > "$rep.rc"
   cat "$rep"
   ek3s_pods "$tag"
   python3 -I "$JUDGE" "$MODE" "$RUN" "$tag" "$WIN" --edge-only "$LOGDIR/sent-$tag-$STAMP.txt" "$rep" "$PODS_FILE" > "$out" 2>&1
-  echo "$?" > "$out.rc"
+  EDGE_JUDGE_RC=$?
+  echo "$EDGE_JUDGE_RC" > "$out.rc"
   cat "$out"
   J=$(grep '^JUDGE ' "$out" | tail -1)
   EDGE_PART=$(printf '%s\n' "$J" | sed -n 's/^JUDGE .* edge=\([A-Z_]*\) .*/\1/p')
-  echo "-- edge01 캡처 판정: edge=${EDGE_PART:-없음} (원본 $rep, 판정 $out)"
+  EDGE_VERDICT=$(printf '%s\n' "$J" | sed -n 's/^JUDGE .* verdict=\([A-Z_]*\)$/\1/p')
+  echo "-- edge01 캡처 판정: report_rc=$EDGE_REPORT_RC judge_rc=$EDGE_JUDGE_RC verdict=${EDGE_VERDICT:-없음} edge=${EDGE_PART:-없음} (원본 $rep, 판정 $out)"
+}
+# 모드별 edge01 판정 통과 조건: report rc0 + 판정기 rc0 + 기대 verdict + edge=OK 모두
+edge_ok() {   # $1=기대 verdict
+  test "$EDGE_REPORT_RC" = 0 && test "$EDGE_JUDGE_RC" = 0 && test "$EDGE_VERDICT" = "$1" && test "$EDGE_PART" = OK
 }
 
 # E-K3S transaction-api Pod 로그를 Pod별로 받아(조회마다 rc·stderr 분리, 회차별 새 파일) 표식 줄을 센다.
@@ -243,7 +252,7 @@ case "$MODE" in
     echo "-- 참고(판정 미사용): E-K3S 앱 로그 표식 조회"
     ek3s_trace "$TAG" 300
     echo "-- 기대: edge 경유 $TAG-1이 edge01 캡처에서 E-K3S Pod로 1번(현재 upstream이 E-K3S). Worker 직접 3건은 Worker 캡처에서 w105/w107/w108 각 1번 — cutover-capture-judge.py check $RUN $TAG $WIN로 최종 확인"
-    if test "$EDGE_PART" = OK; then
+    if edge_ok METHOD_READY; then
       echo "RESULT cutover-check=EDGE_CAPTURE_READY $(date '+%T') tag=$TAG win=$WIN (C0 관측 방법 판정은 Worker 캡처를 합친 judge check의 METHOD_READY)"
     else
       echo "RESULT cutover-check=EDGE_CAPTURE_NOT_READY $(date '+%T') tag=$TAG win=$WIN — edge01 캡처로 표식을 확인하지 못함. C1 시작 안 함"
@@ -339,8 +348,8 @@ PY
     echo "-- 참고: E-K3S 앱 로그 표식 조회(발견되면 옛 경로의 직접 증거로 STOP, 0건·조회 실패는 판정에 쓰지 않음)"
     T=$(ek3s_trace apply 600 | tee /dev/stderr | tail -1)
     test "$(tr_get "$T" found)" = 0 || die "apply 표식이 E-K3S 로그에 있음(옛 경로 경유) → rollback"
-    test "$EDGE_PART" = OLD_PATH && die "apply 표식이 edge01 캡처에서 E-K3S Pod로 들어감(옛 경로 경유) → rollback"
-    test "$EDGE_PART" = OK || unconfirmed "edge01 캡처 판정 불가(edge=${EDGE_PART:-없음}) — 옛 경로 미경유 미확인 → rollback 판단"
+    if test "$EDGE_PART" = OLD_PATH || test "$EDGE_VERDICT" = OLD_PATH; then die "apply 표식이 edge01 캡처에서 E-K3S Pod로 들어감(옛 경로 경유) → rollback"; fi
+    edge_ok PATH_OK || unconfirmed "edge01 캡처 판정 불가(report_rc=$EDGE_REPORT_RC judge_rc=$EDGE_JUDGE_RC verdict=${EDGE_VERDICT:-없음} edge=${EDGE_PART:-없음}) — 옛 경로 미경유 미확인 → rollback 판단"
     echo "-- ③ edge01 캡처의 apply 표식 0건(E-K3S Pod)"
     show
     echo "RESULT cutover-apply=EDGE_OK $(date '+%T') file=$F — ④ Worker 캡처 보고를 합친 \`cutover-capture-judge.py apply $RUN apply $WIN\`가 PATH_OK(표식 1~9·smoke 각 1번, nginx 경유, 그 노드 Pod)여야 C1 완료"
@@ -372,7 +381,7 @@ PY
     edge_capture_judge "$TAG"
     echo "-- 참고(판정 미사용): E-K3S 앱 로그 표식 조회"
     ek3s_trace "$TAG" 600
-    test "$EDGE_PART" = OK || unconfirmed "기능 복구(GET 3/3·smoke 201)는 확인, 옛 경로 경유는 캡처로 확인하지 못함(edge=${EDGE_PART:-없음})"
+    edge_ok PATH_OK || unconfirmed "기능 복구(GET 3/3·smoke 201)는 확인, 옛 경로 경유는 캡처로 확인하지 못함(report_rc=$EDGE_REPORT_RC judge_rc=$EDGE_JUDGE_RC verdict=${EDGE_VERDICT:-없음} edge=${EDGE_PART:-없음})"
     echo "-- ② edge01 캡처에서 rollback 표식 1~3·smoke가 E-K3S Pod로 각 1번"
     show
     echo "RESULT cutover-rollback=OK $(date '+%T') tag=$TAG win=$WIN (Worker 캡처가 있으면 judge rollback으로 새 경로 0건도 확인 — 보조)"

@@ -20,43 +20,61 @@ def cap_text():
     return CAP.read_text(encoding="utf-8")
 
 
-def report_py():
+def embedded(starts_with):
     lines = cap_text().split("\n")
-    start = next(i for i, l in enumerate(lines) if l.lstrip().startswith('python3 -I - "$DIR" "$H" "$RUN" "$WIN"'))
+    start = next(i for i, l in enumerate(lines) if l.lstrip().startswith(starts_with))
     end = next(i for i in range(start + 1, len(lines)) if lines[i] == "PY")
     return "\n".join(lines[start + 1:end])
 
 
-# ---- tcpdump -A 해석(report) ----
+def extract_py():
+    return embedded('cat > "$DIR/extract.py" <<')
 
-def packet(t, sip, sport, dip, seq, reqline, xri=True, iface="cali1234 In  "):
+
+def report_py():
+    return embedded('python3 -I - "$DIR" "$H" "$RUN" "$WIN"')
+
+
+# ---- 추출기(tcpdump -A 출력 → 식별 필드만 저장)와 report ----
+
+def packet(t, sip, sport, dip, seq, reqline, xri=True, iface="cali1234 In  ", extra=""):
     body = ".....E..x@.@.....%s\nHost: 10.1.93.50\n" % reqline
     if xri:
         body += "X-Real-IP: 10.1.93.50\nX-Forwarded-For: 10.1.93.50\n"
-    body += "Connection: close\n\n"
+    body += extra + "Connection: close\n\n"
     return "%.6f %sIP %s.%s > %s.8000: Flags [P.], seq %d:%d, ack 1, win 502, length 120\n%s" % (
         t, iface, sip, sport, dip, seq, seq + 120, body)
 
 
-def run_report(tmp_path, decoded, rc="124", err=None, decoded_rc="0", pcap=True):
+def run_extract(d, decoded, host="k8s-worker01", win="apply"):
+    src = d.parent / "extract.py"
+    src.write_text(extract_py(), encoding="utf-8")
+    r = subprocess.run([sys.executable, "-X", "utf8", "-I", "-u", str(src), str(d), host, RUN, win],
+                       input=decoded, capture_output=True, text=True, encoding="utf-8")
+    return r.returncode
+
+
+def run_report(tmp_path, decoded, rc="124", err=None, extract=True, extract_rc=None, counts=True):
     d = tmp_path / "cap"
     d.mkdir()
-    (d / "decoded.txt").write_text(decoded, encoding="utf-8")
-    (d / "decoded.rc").write_text(decoded_rc + "\n", encoding="utf-8")
     (d / "tcpdump.rc").write_text(rc + "\n", encoding="utf-8")
     (d / "tcpdump.err").write_text(err if err is not None else
                                    "listening on any\n5 packets captured\n5 packets received by filter\n0 packets dropped by kernel\n",
                                    encoding="utf-8")
     (d / "ready.ts").write_text("%.3f\n" % T0, encoding="utf-8")
     (d / "stop.ts").write_text("%.3f\n" % (T0 + 100), encoding="utf-8")
-    if pcap:
-        (d / "capture.pcap").write_bytes(b"pcap")
+    if extract:
+        (d / "hits.txt").write_text("", encoding="utf-8")
+        erc = run_extract(d, decoded)
+        (d / "extract.rc").write_text("%s\n" % (extract_rc if extract_rc is not None else erc), encoding="utf-8")
+    if not counts and (d / "counts.txt").exists():
+        (d / "counts.txt").unlink()
     src = tmp_path / "report.py"
     src.write_text(report_py(), encoding="utf-8")
     r = subprocess.run([sys.executable, "-X", "utf8", "-I", str(src), str(d), "k8s-worker01", RUN, "apply"],
                        capture_output=True, text=True, encoding="utf-8")
     assert r.returncode == 0, r.stderr
-    return r.stdout.strip().splitlines()
+    return r.stdout.strip().splitlines(), d
 
 
 def req(tag, i, method="GET", path="/readyz", run=RUN):
@@ -71,19 +89,36 @@ def test_report_extracts_hits_and_dedupes(tmp_path):
            + packet(T0 + 2, "10.1.93.50", 40002, ip, 5000, req("apply", "smoke", "POST", "/api/v1/transactions"))
            + packet(T0 + 3, "10.1.93.50", 40003, ip, 7000, req("apply", 2, run="20261008T0327"))   # 다른 RUN
            + packet(T0 + 4, "10.1.93.50", 40004, ip, 9000, "GET /readyz HTTP/1.1"))                # 표식 없는 probe
-    out = run_report(tmp_path, dec)
+    out, d = run_report(tmp_path, dec)
     hits = [l for l in out if l.startswith("HIT ")]
     assert len(hits) == 2
     assert "id=1 " in hits[0] and "src=10.1.93.50:40001 dst=%s:8000" % ip in hits[0]
     assert "method=GET proto=HTTP/1.0 hdr_host=10.1.93.50 xri=10.1.93.50" in hits[0]
     assert "id=smoke " in hits[1] and "method=POST" in hits[1]
     assert out[-1].startswith("CAPTURE host=k8s-worker01 run=%s win=apply err=0 reason=- " % RUN)
-    assert "hits=2 " in out[-1] and "pcap_sha256=" in out[-1]
+    assert "hits=2 " in out[-1] and " other=2 " in out[-1] and "hits_sha256=" in out[-1]
+    # 같은 패킷의 다른 인터페이스·재전송은 표식 요청 중복으로 걸러지고, 표식 없는 요청(다른 RUN·probe)만 other
+    assert (d / "counts.txt").read_text(encoding="utf-8").strip() == "blocks=6 hits=2 other=2"
+
+
+def test_extract_stores_only_identification_fields(tmp_path):
+    """R2: 표식 요청도 식별 필드만, 표식 없는 요청·본문·다른 헤더는 어디에도 저장하지 않는다."""
+    ip = POD_IP["k8s-worker01"]
+    secret = 'Authorization: Bearer SECRET-TOKEN-X\nCookie: sid=COOKIE-Y\n\n{"account_id":"REAL-ACCOUNT-Z","amount":1}'
+    dec = (packet(T0 + 1, "10.1.93.50", 40001, ip, 1000, req("apply", "smoke", "POST", "/api/v1/transactions"), extra=secret + "\n")
+           + packet(T0 + 2, "10.1.93.50", 40002, ip, 2000, "POST /api/v1/transactions HTTP/1.0", extra=secret + "\n"))
+    out, d = run_report(tmp_path, dec)
+    stored = "".join(p.read_text(encoding="utf-8") for p in d.iterdir() if p.is_file())
+    for s in ("SECRET-TOKEN-X", "COOKIE-Y", "REAL-ACCOUNT-Z", "Authorization", "Cookie", "account_id"):
+        assert s not in stored and s not in "\n".join(out)
+    assert sorted(p.name for p in d.iterdir()) == ["counts.txt", "extract.rc", "hits.txt", "ready.ts", "stop.ts",
+                                                    "tcpdump.err", "tcpdump.rc"]
+    assert "hits=1 " in out[-1] and " other=1 " in out[-1]
 
 
 def test_report_without_xri_marks_dash(tmp_path):
-    out = run_report(tmp_path, packet(T0 + 1, "10.1.93.50", 40001, "10.244.1.11", 1, req("check1", "w105"), xri=False,
-                                      iface=""))
+    out, _ = run_report(tmp_path, packet(T0 + 1, "10.1.93.50", 40001, "10.244.1.11", 1, req("check1", "w105"),
+                                         xri=False, iface=""))
     assert "xri=- " in out[0] + " "
 
 
@@ -91,23 +126,132 @@ def test_report_without_xri_marks_dash(tmp_path):
     (dict(rc="1"), "tcpdump_rc=1"),
     (dict(err="listening on any\n"), "no_stats"),
     (dict(err="3 packets captured\n3 packets received by filter\n2 packets dropped by kernel\n"), "dropped=2"),
-    (dict(decoded_rc="1"), "decode_rc=1"),
-    (dict(pcap=False), "no_pcap"),
+    (dict(extract_rc="1"), "extract_rc=1"),
+    (dict(extract=False), "no_counts"),
+    (dict(counts=False), "no_counts"),
 ])
 def test_report_capture_errors_are_err(tmp_path, kw, reason):
-    out = run_report(tmp_path, "", **kw)
-    assert " err=1 " in out[-1] and reason in out[-1]
+    out, _ = run_report(tmp_path, "", **kw)
+    assert " err=0 " not in out[-1] and reason in out[-1]
+
+
+def test_report_missing_hits_file_is_err(tmp_path):
+    out, d = run_report(tmp_path, packet(T0 + 1, "10.1.93.50", 40001, "10.244.1.11", 1, req("apply", 1)))
+    (d / "hits.txt").unlink()
+    src = tmp_path / "report.py"
+    r = subprocess.run([sys.executable, "-X", "utf8", "-I", str(src), str(d), "k8s-worker01", RUN, "apply"],
+                       capture_output=True, text=True, encoding="utf-8")
+    last = r.stdout.strip().splitlines()[-1]
+    assert " err=0 " not in last and "no_hits_file" in last and "hits_mismatch" in last
 
 
 def test_capture_script_scope_is_fixed():
+    """R2: 저장 전 커널 필터로 요청 방향·앱 포트·대상만 받고, pcap·원문을 남기지 않는다."""
     text = cap_text()
-    assert "tcp dst port 8000 and src host 10.1.93.50" in text
-    assert "tcp and dst net 10.42.0.0/16" in text
-    assert "SNAPLEN=300" in text and '-s "$3"' in text
-    assert "-Z root" in text and "-U" in text
-    assert "이미 있음" in text                       # 같은 RUN·WIN 재사용 금지
-    for forbidden in ("set -e\n", "-s 0", "-s0", "iptables", "nft ", "systemctl", "kubectl"):
+    req_start = "(tcp[((tcp[12]&0xf0)>>2):4] = 0x47455420 or tcp[((tcp[12]&0xf0)>>2):4] = 0x504f5354)"
+    assert req_start in text
+    assert bytes.fromhex("47455420") == b"GET " and bytes.fromhex("504f5354") == b"POST"
+    assert 'FILTER="tcp dst port 8000 and src host 10.1.93.50 and $REQ_START"' in text
+    assert 'FILTER="tcp dst port 8000 and ($DST) and $REQ_START"' in text
+    assert "dst net 10.42" not in text                      # 대역 전체가 아니라 Pod IP로 한정
+    assert "SNAPLEN=300" in text and '-s "$3"' in text and "-Z root" in text and " -l " in text
+    for forbidden in ("set -e\n", "-s 0", "-s0", " -w ", "capture.pcap", "decoded.txt", "iptables", "nft ",
+                      "systemctl", "kubectl apply", "kubectl delete", "kubectl patch", "kubectl exec"):
         assert forbidden not in text
+    assert text.count('"$K3S" kubectl get pods') == 1      # edge01 Pod IP 읽기 조회만
+    assert "이미 있음" in text                       # 같은 RUN·WIN 재사용 금지
+
+
+# ---- R1: edge01-cutover.sh 호출부가 판정기 rc·verdict를 모두 본다(가짜 report + 실제 판정기) ----
+
+EDGE_SCRIPT = ROOT / "ops/edge01-cutover/edge01-cutover.sh"
+
+
+def bash_ok():
+    import shutil
+    b = shutil.which("bash")
+    if not b:
+        return None
+    try:
+        return b if subprocess.run([b, "-c", "echo ok"], capture_output=True, text=True, timeout=10).stdout.strip() == "ok" else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+BASH = bash_ok()
+
+
+def run_caller(tmp_path, mode, tag, win, report_text, sent_text, pods_text, report_rc=0):
+    """edge_capture_judge·edge_ok를 원본에서 꺼내, report만 가짜로 두고 실제 판정기로 돌린다."""
+    text = EDGE_SCRIPT.read_text(encoding="utf-8")
+    funcs = text[text.index("edge_capture_judge() {"):text.index("# E-K3S transaction-api Pod 로그를 Pod별로")]
+    logdir = tmp_path / "log"
+    logdir.mkdir()
+    (logdir / ("sent-%s-S.txt" % tag)).write_text(sent_text, encoding="utf-8")
+    (tmp_path / "pods.txt").write_text(pods_text, encoding="utf-8")
+    (tmp_path / "report.txt").write_text(report_text, encoding="utf-8")
+    fake_cap = tmp_path / "cap.sh"
+    fake_cap.write_text('cat "%s"\nexit %d\n' % ((tmp_path / "report.txt").as_posix(), report_rc), encoding="utf-8")
+    harness = "\n".join([
+        'python3 -c 1 >/dev/null 2>&1 || python3() { python -X utf8 "$@"; }',
+        'sudo() { "$@"; }',
+        'ek3s_pods() { PODS_FILE="%s"; }' % (tmp_path / "pods.txt").as_posix(),
+        'MODE=%s RUN=%s WIN=%s STAMP=S LOGDIR="%s" CAP="%s" JUDGE="%s"' % (
+            mode, RUN, win, logdir.as_posix(), fake_cap.as_posix(), JUDGE.as_posix()),
+        funcs,
+        'edge_capture_judge %s > /dev/null 2>&1' % tag,
+        'echo "RC=$EDGE_REPORT_RC/$EDGE_JUDGE_RC VERDICT=$EDGE_VERDICT PART=$EDGE_PART"',
+        'if edge_ok %s; then echo GATE=PASS; else echo GATE=FAIL; fi' % ("METHOD_READY" if mode == "check" else "PATH_OK"),
+    ])
+    h = tmp_path / "h.sh"
+    h.write_text(harness, encoding="utf-8")
+    r = subprocess.run([BASH, h.as_posix()], capture_output=True, text=True, encoding="utf-8")
+    return r.stdout + r.stderr
+
+
+needs_bash = pytest.mark.skipif(BASH is None, reason="bash 없음")
+
+
+def rb_inputs(extra_hits=(), edge_ids=("1", "2", "3", "smoke"), uid_conflict=False):
+    tag = "rollback163000"
+    sent = sent_lines(tag, ["1", "2", "3", "smoke"])
+    rep = [capture("edge01", win="rollback")]
+    rep += [hit("edge01", tag, i, EK3S_IP, 50 + n, win="rollback") for n, i in enumerate(edge_ids)]
+    rep += list(extra_hits)
+    p = pods()
+    if uid_conflict:
+        p += "POD cluster=ek3s name=fds/transaction-api-y uid=uid-other ip=%s node=edge01\n" % EK3S_IP
+    return tag, "\n".join(rep) + "\n", sent, p
+
+
+@needs_bash
+def test_caller_rollback_normal_passes(tmp_path):
+    tag, rep, sent, p = rb_inputs()
+    out = run_caller(tmp_path, "rollback", tag, "rollback", rep, sent, p)
+    assert "RC=0/0 VERDICT=PATH_OK PART=OK" in out and "GATE=PASS" in out
+
+
+@needs_bash
+@pytest.mark.parametrize("case", ["other_tag", "uid_conflict", "report_fail", "missing_id"])
+def test_caller_rollback_unconfirmed_is_not_pass(tmp_path, case):
+    if case == "other_tag":
+        tag, rep, sent, p = rb_inputs(extra_hits=[hit("edge01", "rollback999999", "1", EK3S_IP, 99, win="rollback")])
+    elif case == "uid_conflict":
+        tag, rep, sent, p = rb_inputs(uid_conflict=True)
+    elif case == "missing_id":
+        tag, rep, sent, p = rb_inputs(edge_ids=("1", "3", "smoke"))
+    else:
+        tag, rep, sent, p = rb_inputs()
+    out = run_caller(tmp_path, "rollback", tag, "rollback", rep, sent, p, report_rc=4 if case == "report_fail" else 0)
+    assert "GATE=FAIL" in out, out
+
+
+def test_callers_use_full_gate():
+    text = EDGE_SCRIPT.read_text(encoding="utf-8")
+    assert text.count("edge_ok PATH_OK ||") == 2            # apply ③, rollback ②
+    assert "if edge_ok METHOD_READY; then" in text          # check
+    assert 'test "$EDGE_PART" = OK ||' not in text           # 부분값만 보는 통과 금지
+    assert "EDGE_JUDGE_RC=$?" in text and "EDGE_REPORT_RC=$?" in text
 
 
 # ---- 판정 ----
@@ -126,7 +270,7 @@ def hit(host, tag, i, dst, sport, xri="10.1.93.50", src="10.1.93.50", win="apply
 
 
 def capture(host, win="apply", err=0, ready=T0, stop=T0 + 100):
-    return "CAPTURE host=%s run=%s win=%s err=%d reason=- ready=%.3f stop=%.3f pkts=10 dropped=0 blocks=10 hits=3 pcap_sha256=ab" % (
+    return "CAPTURE host=%s run=%s win=%s err=%d reason=- ready=%.3f stop=%.3f pkts=10 dropped=0 blocks=10 hits=3 other=7 hits_sha256=ab" % (
         host, RUN, win, err, ready, stop)
 
 

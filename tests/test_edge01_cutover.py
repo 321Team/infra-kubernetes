@@ -127,11 +127,11 @@ def test_unconfirmed_is_not_reported_as_ok():
     rollback = mode_block("rollback")
     for block in (apply, rollback):
         assert "wait_reloaded || unconfirmed" in block
-        assert 'test "$EDGE_PART" = OK || unconfirmed' in block
+        assert "edge_ok PATH_OK || unconfirmed" in block
         assert block.rstrip().splitlines()[-1].strip().startswith('echo "RESULT cutover-')
     # 옛 경로의 직접 증거(로그 발견·캡처 OLD_PATH)는 STOP, 로그 조회 실패는 판정에 쓰지 않는다
     assert 'test "$(tr_get "$T" found)" = 0 || die' in apply
-    assert 'test "$EDGE_PART" = OLD_PATH && die' in apply
+    assert 'if test "$EDGE_PART" = OLD_PATH || test "$EDGE_VERDICT" = OLD_PATH; then die' in apply
     assert 'tr_get "$T" err' not in apply + rollback
     assert "ids_exact" not in apply + rollback
     assert "cutover-capture-judge.py apply $RUN apply $WIN" in apply
@@ -407,7 +407,8 @@ fake_cap() { if test "$2" = status; then test "$CAP_STATE" = RUNNING; else echo 
 show() { :; }; nginx_ok() { return 0; }; reloaded_after_conf() { return 0; }
 send_nonces() { :; }; sent() { :; }; sleep() { :; }; now() { echo 1; }
 nonce() { echo marker; }; code() { echo 200; }; ek3s_trace() { echo 'TRACE ek3s tag=x pods=1 err=0 found=0 ids='; }
-edge_capture_judge() { EDGE_PART=$FAKE_EDGE; }
+edge_capture_judge() { EDGE_PART=$FAKE_EDGE; EDGE_REPORT_RC=0; EDGE_JUDGE_RC=${FAKE_JRC:-0}; EDGE_VERDICT=${FAKE_VERDICT:-METHOD_READY}; }
+edge_ok() { test "$EDGE_REPORT_RC" = 0 && test "$EDGE_JUDGE_RC" = 0 && test "$EDGE_VERDICT" = "$1" && test "$EDGE_PART" = OK; }
 die() { echo "STOP: $*"; exit 3; }
 STAMP=1; RUN=20261008T0327; WIN=check; EDGE=http://unused; NEW_WORKERS=(); CAP=cap
 """
@@ -427,3 +428,14 @@ def test_edge_check_requires_capture(tmp_path, cap_state, edge, rc, word):
     result = subprocess.run([BASH, hp.as_posix()], capture_output=True, env=env)
     assert result.returncode == rc, result.stdout + result.stderr
     assert word in result.stdout
+
+
+@needs_bash
+@pytest.mark.parametrize("verdict,jrc", [("METHOD_NOT_READY", "4"), ("METHOD_READY", "4")])
+def test_edge_check_partial_ok_is_not_ready(tmp_path, verdict, jrc):
+    """R1: edge 부분값이 OK여도 판정기 rc·verdict가 아니면 EDGE_CAPTURE_READY를 내지 않는다."""
+    hp = tmp_path / "check.sh"
+    hp.write_text(CHECK_HARNESS + mode_block("check") + "\n", encoding="utf-8")
+    env = dict(os.environ, CAP_STATE="RUNNING", FAKE_EDGE="OK", FAKE_VERDICT=verdict, FAKE_JRC=jrc)
+    result = subprocess.run([BASH, hp.as_posix()], capture_output=True, env=env)
+    assert result.returncode == 3 and b"EDGE_CAPTURE_NOT_READY" in result.stdout

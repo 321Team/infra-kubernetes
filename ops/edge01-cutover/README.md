@@ -9,8 +9,10 @@
 ### 2026-10-08 오후 보완 — 앱 로그 판정을 요청줄 캡처로 대체 (이권욱 HOLD [6051321109](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6051321109) B1~B3)
 
 - **E-K3S는 유지하며, 앱 로그 기반 판정만 대체한다.** E-K3S는 지금 서비스 경로이고 rollback 대상이다. 바꾸는 것은 "표식이 어느 backend로 갔는가"를 보는 방법뿐이다(K8s·E-K3S transaction-api 접근 로그가 비어 있어 판정 불가, 10/8 확인).
-- **B1 대체 관측:** 새 `cutover-capture.sh`가 backend Pod로 **들어가는 HTTP 요청줄**을 캡처한다. Worker 3대는 `tcp dst port 8000 and src host 10.1.93.50`(NodePort DNAT 뒤 Pod 쪽), edge01은 `tcp and dst net 10.42.0.0/16`(E-K3S Pod 쪽)이다. 캡처를 먼저 시작해 `CAPTURE_READY`를 확인한 뒤 nginx `:80`으로 고유 표식 요청을 보내고, `cutover-capture-judge.py`가 표식마다 **어느 노드의 어느 Pod(UID·IP)로 몇 번 들어갔는지**, nginx 경유 서명(`X-Real-IP` 헤더, nginx `proxy_set_header`가 붙임)이 있는지, 캡처 준비·종료 시각이 요청 구간을 덮는지, 캡처 오류(tcpdump rc·커널 drop·해석 rc)가 없는지 판정한다. 기존 P4 collector(`c0d784fa`, 헤더만 `-c 5`, Worker 직접 curl)는 source 보존 증거로만 유지하고 C1 판정에 쓰지 않는다.
-- **캡처 범위(기존 헤더-only 수집과 다른 점):** 패킷당 앞 300바이트(snaplen)까지 저장한다. 요청줄과 앞쪽 헤더(Host, X-Real-IP, X-Forwarded-For)가 들어가며 업무 payload 전체는 저장하지 않는다. smoke 요청은 본문 일부(SIM 시험값)가 들어갈 수 있다. 요청 방향·TCP 본문이 있는 패킷만 저장하고 응답은 저장하지 않는다.
+- **B1 대체 관측:** 새 `cutover-capture.sh`가 backend Pod로 **들어가는 HTTP 요청줄**을 캡처한다. Worker 3대는 `tcp dst port 8000 and src host 10.1.93.50`(NodePort DNAT 뒤 Pod 쪽), edge01은 `tcp dst port 8000 and (dst host <E-K3S transaction-api Pod IP>…)`(start 시점 k3s 읽기 조회로 고정, E-K3S Pod 쪽)이며, 둘 다 TCP 본문 첫 4바이트가 `GET `/`POST`인 요청 첫 세그먼트만 받는다(R2). 캡처를 먼저 시작해 `CAPTURE_READY`를 확인한 뒤 nginx `:80`으로 고유 표식 요청을 보내고, `cutover-capture-judge.py`가 표식마다 **어느 노드의 어느 Pod(UID·IP)로 몇 번 들어갔는지**, nginx 경유 서명(`X-Real-IP` 헤더, nginx `proxy_set_header`가 붙임)이 있는지, 캡처 준비·종료 시각이 요청 구간을 덮는지, 캡처 오류(tcpdump rc·커널 drop·해석 rc)가 없는지 판정한다. 기존 P4 collector(`c0d784fa`, 헤더만 `-c 5`, Worker 직접 curl)는 source 보존 증거로만 유지하고 C1 판정에 쓰지 않는다.
+- **캡처·저장 범위(기존 헤더-only 수집과 다른 점, R2):**
+  - **저장 전 제한(커널 필터):** 목적지 포트 8000(앱)·요청 첫 세그먼트(`GET `/`POST`)만. Worker는 출발지 `10.1.93.50`, edge01은 E-K3S transaction-api Pod IP로 한정한다. 응답(`HTTP/…`), DB(5432 등) 트래픽, 다른 Pod 트래픽은 커널에서 걸러져 들어오지 않는다. 커널은 패킷당 앞 300바이트(snaplen)까지만 넘긴다.
+  - **저장:** pcap·디코딩 원문을 남기지 않는다. tcpdump 출력은 파이프로 추출기에 바로 들어가고, **RUN 표식이 있는 요청의 식별 필드만**(시각·출발/도착·seq·메서드·tag·id·Host 값·X-Real-IP 값) `hits.txt`에 적는다. 표식 없는 요청(probe·다른 요청)은 `counts.txt`에 개수만 남긴다. 다른 헤더(Authorization·Cookie 등)와 본문은 표식 요청이든 아니든 어디에도 저장하지 않는다.
 - **B2:** 아래 §5의 "원본 결과 → 실패 지점 → 대체 증거 → 판단" 표로 종료 코드를 원인별로 다룬다. 로그 때문에 생기던 rc3/rc4는 없어지고, 앱 로그는 참고 기록이 된다. 단 E-K3S 로그에서 apply 표식이 **발견되면** 옛 경로의 직접 증거이므로 그대로 STOP이다. rollback의 smoke 201·DB 행, C2 P3 DB 1행 `false/false`는 그대로 유지한다.
 - **B3:** C0 15 + C1 15 + C2 20 + C3 30 = **80분**(기존 "75분" 표기는 오류)으로 바로잡고, 창 종료 시각에서 거꾸로 **apply 시작 상한 = 창 종료 − 15분(복구 여유) − 65분(C1~C3)**을 GO에 고정한다(§4).
 
@@ -85,7 +87,7 @@
   - 설정 반영: reload 뒤 정리 중인 옛 worker(`shutting down`)를 빼고, 현재 worker가 모두 설정 파일 최종 수정 이후에 시작됐는지 본다. 5초 간격으로 최대 7번(약 35초) 다시 본다. 끝내 확인하지 못하면 종료 4. nginx는 reload 뒤에도 옛 worker가 기존 연결을 처리할 수 있으므로, 반영 판정과 별개로 **새 요청 각각이 어느 backend로 갔는지**를 아래 캡처로 본다.
   - 실제 경유: 요청마다 고유 표식 `?cutover=cutover-<RUN>-<tag>-<번호>`를 붙이고(transaction-api는 모르는 쿼리를 무시), edge01은 보내기 직전 시각과 HTTP 코드를 `SENT` 줄로 남긴다. backend 쪽 캡처에서 표식이 든 요청줄을 찾아 **표식 → 캡처 호스트 → dst Pod IP → Pod 이름·UID·노드**(control01 `POD` 줄, E-K3S는 edge01 `POD cluster=ek3s` 줄)로 결속한다.
   - nginx 경유와 직접 요청의 구분: nginx는 `X-Real-IP`를 붙인다(D18 Option A 원본 설정 fds-msa `kubernetes/edge-proxy/fds.conf`(9/7)의 `proxy_set_header X-Real-IP $remote_addr`. 9/29 `nginx -T` 수집본은 upstream·listen·`/metrics` 줄만 담아 이 줄이 없다. 운영 설정에 실제로 있는지는 C0 `check`의 `proxy_set_header` 출력과 판정기의 `xri` 값으로 확인하고, 없으면 `METHOD_READY`가 나오지 않아 시작하지 않는다). apply·rollback 표식은 nginx 서명이 있어야 하고, C0의 Worker 직접 표식(w105 등)은 서명이 없어야 한다. 같은 WIN에 다른 tag 표식이 섞이면 판정 불가다.
-  - 캡처 오류·누락: tcpdump 종료 코드(0/124 정상), 종료 통계의 커널 drop 0, pcap 해석 rc 0, 캡처 준비 < 첫 요청, 캡처 종료 > 마지막 요청. 하나라도 아니면 판정 불가(종료 4)다. 0건 정상과 캡처 실패를 합치지 않는다.
+  - 캡처 오류·누락: tcpdump 종료 코드(0/124/143 정상), 종료 통계의 커널 drop 0, 추출기 rc 0·`counts.txt`·`hits.txt` 존재와 개수 일치, 캡처 준비 < 첫 요청, 캡처 종료 > 마지막 요청. 하나라도 아니면 판정 불가(종료 4)다. 0건 정상과 캡처 실패를 합치지 않는다.
   - 같은 패킷이 두 인터페이스(브리지·veth)에서 잡히거나 재전송된 경우는 (src, dst, seq, 표식)으로 1번만 센다. 서로 다른 연결로 같은 표식이 두 번 들어오면 중복(판정 불가)이다.
   - 표식은 RUN·tag·번호로 정해지고 check·rollback tag에는 실행 시각(`HHMMSS`)이 붙어, 이전 요청이나 다른 회차가 섞이지 않는다. 기대값은 "각 번호가 정확히 1번"이다(누락·중복 모두 실패).
   - E-K3S·K8s 앱 로그 표식 조회(edge01 `ek3s_trace`, control01 `trace`)는 참고 기록으로 남긴다. apply 표식이 E-K3S 로그에서 발견되면 옛 경로의 직접 증거이므로 STOP이다.
@@ -173,6 +175,8 @@ $o = "$HOME\edge-cutover-<RUN>-n1.txt"
 | rollback | rc4 `UNCONFIRMED` | `기능 복구(GET 3/3·smoke 201)는 확인, 옛 경로 경유는 캡처로 확인하지 못함` | (이전: E-K3S 로그 조회 실패·표식 불일치 → rc4) | DB 1행 `false`/`false`, 캡처 원본 | **기능 복구 확인·경로 추적 미확인**으로 기록(완전한 경로 복구 PASS 아님) |
 | rollback | rc0 `OK` | — | E-K3S 로그 표식(참고) | edge01 캡처 1~3·smoke 각 1번, DB 1행 | 복구 완료(DB 행 확인 포함) |
 
+- **edge01 캡처 판정의 통과 조건(R1):** `edge01-cutover.sh`는 판정기 출력의 edge 부분값(`edge=OK`)만으로 통과시키지 않는다. `report` 종료 코드 0, 판정기 종료 코드 0, 모드별 최종 verdict(check `METHOD_READY`, apply·rollback `PATH_OK`), `edge=OK`가 **모두** 맞아야 위 표의 rc0으로 간다(`edge_ok`). 같은 WIN에 다른 tag 표식이 섞이거나, 같은 Pod IP에 다른 UID가 기록되거나, report·판정기가 실패하면 판정기는 `UNCONFIRMED`(rc4)를 내고 호출부도 rc4·rc3로 끝난다. 값 4개는 실행 로그에 그대로 출력된다.
+
 ## 6. #47 창과의 관계
 
 - #47 창(infra-db `ops/p2-hyb01-db-window/`, 병합 `d14d4597`)은 Cutover `RESULT cutover-apply=OK`, C2 통과, C3 관찰 종료 뒤에만 시작한다. #47 W1 `edge01-k3s.sh stop`도 같은 조건(유효 upstream에 `.50:30080` 0, Worker 3/3, reload 반영, 옛 NodePort ESTABLISHED 0)을 다시 확인한다.
@@ -187,6 +191,6 @@ $o = "$HOME\edge-cutover-<RUN>-n1.txt"
 
 ## 8. 원본 수집·파일 전달
 
-- edge01 `~/edge-cutover-<RUN>/`(로그, `upstream-file.before/after`, `sent-*.txt`, `capture-edge01-*.txt`·`judge-edge01-*.txt`와 rc, `ek3s-pods-*.txt`, `ek3s-<tag>-*/` E-K3S Pod 로그 원본·rc(참고), `smoke-*.json`), 캡처 원본 edge01·Worker 3대 `/var/tmp/edge-cutover-capture-<RUN>/<WIN>/`(`capture.pcap`, `tcpdump.err`·`tcpdump.rc`, `decoded.txt`·rc, `report.txt`, `meta.txt` — Worker 쪽은 이권욱이 ansible `fetch`로 수집), 판정 출력(`cutover-capture-judge.py` stdout·rc, 입력 파일 목록), control01 `/root/edge-cutover-<RUN>/`(`*.log`, `k8s-<tag>-*/` K8s Pod 로그 원본·rc(참고)), C0 판정표, PC의 P1·P2·N1 출력(`edge-cutover-<RUN>-n1.txt`), db01 P3·rollback DB 출력, P4 수집기 archive. 비밀 값 없음. pcap은 snaplen 300바이트라 업무 본문 전체가 없다.
+- edge01 `~/edge-cutover-<RUN>/`(로그, `upstream-file.before/after`, `sent-*.txt`, `capture-edge01-*.txt`·`judge-edge01-*.txt`와 rc, `ek3s-pods-*.txt`, `ek3s-<tag>-*/` E-K3S Pod 로그 원본·rc(참고), `smoke-*.json`), 캡처 원본 edge01·Worker 3대 `/var/tmp/edge-cutover-capture-<RUN>/<WIN>/`(`hits.txt`(표식 요청 식별 필드), `counts.txt`, `tcpdump.err`·`tcpdump.rc`, `extract.rc`·`extract.err`, `report.txt`, `meta.txt`(필터 원문) — Worker 쪽은 이권욱이 ansible `fetch`로 수집), 판정 출력(`cutover-capture-judge.py` stdout·rc, 입력 파일 목록), control01 `/root/edge-cutover-<RUN>/`(`*.log`, `k8s-<tag>-*/` K8s Pod 로그 원본·rc(참고)), C0 판정표, PC의 P1·P2·N1 출력(`edge-cutover-<RUN>-n1.txt`), db01 P3·rollback DB 출력, P4 수집기 archive. pcap·요청 원문은 남기지 않으므로 헤더·본문 값이 없다(표식 요청의 Host·X-Real-IP 값만 저장).
 - 증적 PR: fds-project-evidence `evidence/P1-SEC-01/edge-cutover-<RUN>/`, 독립 리뷰어 지정. #19 결과 코멘트는 증적 PR 링크와 함께.
 - 전달: 작업 폴더 사본이 아니라 `git show <MERGE_SHA>:<경로> > 파일`로 만든 파일을 보낸다. edge01에는 `edge01-cutover.sh`·`cutover-capture.sh`·`cutover-capture-judge.py`를 같은 폴더에 둔다. Worker 캡처용 `cutover-capture.sh`는 ansible01에 같은 방법으로 둔다(이 PC는 `core.autocrlf=true`). edge01은 PC에서 `scp`, control01은 `gzip -9cn | base64 -w 76` 붙여넣기 후 `sha256sum` 대조.
