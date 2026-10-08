@@ -354,25 +354,86 @@ def test_control01_check_is_read_only():
         assert required in text
 
 
+# 2026-10-08 RUN 20261008T1730: 설정 수정 16:31:32.446, reload 16:31:32, ps lstart 16:31:31(btime 초 버림)
+# → 반영됐는데 rc1(거짓 UNCONFIRMED). #77 리뷰 B1: /proc/uptime 소수 둘째 자리 버림·출력 반올림 때문에
+# 점 추정은 거짓 PASS가 날 수 있다 → 보수적 하한(n − u + s/h − 0.011)과 비교하고, 오차 범위 안은 rc0이 아니다.
+# 기본: HZ=100, uptime 출력 196000.00, now 1791444700.000 → starttime 19599250은 추정 .500(하한 .489)
+NOW = '1791444700.000000000'
+UP = '196000.00'
+CONF = '1791444692.445991231'
+W = 'nginx: worker process'
+
+
 @needs_bash
-@pytest.mark.parametrize('newest,expected', [(1791200000, 0), (1991200000, 1)])
-def test_reload_check_parses_c_locale_under_korean_host(tmp_path, newest, expected):
+@pytest.mark.parametrize('now,workers,newest,expected', [
+    # 같은 초, 수정 54ms 뒤 시작(오늘 사례) → 반영
+    (NOW, {101: (W, 19599250)}, CONF, 0),
+    # 리뷰 B1 재현 ①: uptime 버림 — 실제 시작 .500 < 수정 .505인데 점 추정은 .507
+    ('1791444700.007000000', {101: (W, 19599250)}, '1791444692.505000000', 1),
+    # 리뷰 B1 재현 ②: ms 반올림 — 실제 시작 .5006 < 수정 .5009
+    ('1791444700.000600000', {101: (W, 19599250)}, '1791444692.500900000', 1),
+    # 0~11ms 불확실 구간: 추정 .500, 수정 .495 → 반영으로 올리지 않음
+    (NOW, {101: (W, 19599250)}, '1791444692.495000000', 1),
+    # 불확실 구간 밖(하한 .489 ≥ 수정 .488) → 반영
+    (NOW, {101: (W, 19599250)}, '1791444692.488000000', 0),
+    # 표본 지연: now를 늦게 읽어도(uptime 출력 동일) 하한은 now 차이만큼만 움직인다 — 수정 .4955, now +5ms → 하한 .494
+    ('1791444700.005000000', {101: (W, 19599250)}, '1791444692.495500000', 1),
+    # 다중 worker: 가장 이른 worker로 판정
+    (NOW, {101: (W, 19599250), 102: (W, 19599200)}, CONF, 1),
+    (NOW, {101: (W, 19599250), 102: (W, 19599260)}, CONF, 0),
+    # 정리 중 옛 worker는 빼고 현재 worker로 판정
+    (NOW, {101: ('nginx: worker process is shutting down', 100), 102: (W, 19599250)}, CONF, 0),
+    # reload 안 된 옛 worker
+    (NOW, {101: (W, 100)}, CONF, 1),
+    # 현재 worker 없음(정리 중만) → 판단 불가
+    (NOW, {101: ('nginx: worker process is shutting down', 19599250)}, CONF, 2),
+    # starttime 못 읽음 → 판단 불가
+    (NOW, {101: (W, 'x')}, CONF, 2),
+])
+def test_reload_check_uses_conservative_start_lower_bound(tmp_path, now, workers, newest, expected):
     text = cutover_text()
+    assert 'lstart=' not in text  # ps lstart(초 버림)로 판정하지 않음
     body = text[text.index('reloaded_after_conf() {'):text.index('wait_reloaded() {')]
+    args_case = ''.join('    %d) echo \'%s\' ;;\n' % (p, a) for p, (a, _) in workers.items())
+    stat_case = ''.join('    %d) st=%s ;;\n' % (p, s) for p, (_, s) in workers.items())
     harness = '''
 sudo() { "$@"; }
 nginx() { echo '# configuration file /mock/nginx.conf:'; }
-stat() { echo NEWEST; }
-pgrep() { if test "$1" = -o; then echo 100; else echo 101; fi; }
-ps() {
-  if test "$2" = args=; then echo 'nginx: worker process'; return; fi
-  if test "${LC_ALL:-}" = C; then echo 'Tue Oct  6 10:04:38 2026';
-  else echo '화 10월  6 10:04:38 2026'; fi
+date() {
+  case "$1" in
+    -r) echo NEWEST ;;
+    +%s.%N) echo NOW ;;
+    *) command date "$@" ;;
+  esac
 }
-'''.replace('NEWEST', str(newest)) + body + '\nreloaded_after_conf\n'
-    hp = tmp_path / 'locale.sh'; hp.write_text(harness, encoding='utf-8')
+getconf() { echo 100; }
+pgrep() { if test "$1" = -o; then echo 100; else echo PIDS; fi; }
+ps() {
+  case "$4" in
+ARGS_CASE  esac
+}
+proc_uptime() { echo 'UP 380000.00'; }
+proc_stat() {
+  local st
+  case "$1" in
+STAT_CASE  esac
+  echo "$1 (nginx) S 100 100 100 0 -1 4194624 1 0 0 0 0 0 0 0 20 0 1 0 $st 1000 1"
+}
+'''.replace('NEWEST', newest).replace('NOW', now).replace('UP', UP) \
+   .replace('PIDS', ' '.join(str(p) for p in workers)) \
+   .replace('ARGS_CASE', args_case).replace('STAT_CASE', stat_case) + body + '\nreloaded_after_conf\n'
+    hp = tmp_path / 'reload.sh'; hp.write_text(harness, encoding='utf-8')
     result = subprocess.run([BASH, hp.as_posix()], capture_output=True)
-    assert result.returncode == expected, result.stderr
+    assert result.returncode == expected, result.stdout + result.stderr
+
+
+def test_reload_waits_before_reload_in_apply_and_rollback():
+    text = cutover_text()
+    for mode in ('apply)', 'rollback)'):
+        block = text[text.index('  ' + mode):]
+        reload_at = block.index('sudo systemctl reload nginx')
+        write_at = block.index("sudo sh -c 'cat \"$1\" > \"$2\"'")
+        assert write_at < block.index('sleep 1', write_at) < reload_at
 
 
 @needs_bash
