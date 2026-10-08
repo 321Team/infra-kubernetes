@@ -32,6 +32,10 @@ class ProbeIntegration(unittest.TestCase):
             state = json.loads((temp/'state.json').read_text())
             calls = (temp/'state.calls').read_text()
             summary = (folders[0]/'99-summary-provisional.txt').read_text(encoding='utf-8')
+            if scenario in ('t0_restart','t0_diagnostics_error'):
+                self.assertTrue((folders[0]/'failure-pod.json').exists())
+                diag=(folders[0]/'failure-diagnostics.rc').read_text()
+                self.assertIn('events_rc='+('1' if scenario=='t0_diagnostics_error' else '0'),diag)
             return result, state, calls, summary
 
     def test_normal_all_stages_and_both_uid_deletions(self):
@@ -40,6 +44,27 @@ class ProbeIntegration(unittest.TestCase):
         self.assertEqual(state['stage'], 3)
         self.assertEqual(state['objects'], {})
         self.assertIn('ALL_STAGES_OBSERVED=yes', summary)
+
+    def test_t0_restart_stops_before_injection_and_keeps_diagnostics(self):
+        for scenario in ('t0_restart','t0_diagnostics_error'):
+            with self.subTest(scenario=scenario):
+                r,state,calls,summary=self.exercise(scenario)
+                self.assertEqual(r.returncode,3,r.stdout+r.stderr)
+                self.assertEqual(state['stage'],0)
+                self.assertEqual(state['objects'],{})
+                self.assertNotIn('"exec"',calls)
+                self.assertIn('최초 기동 중 예상 밖 restart',r.stdout)
+
+    def test_t0_initial_pending_without_status_can_converge(self):
+        r,state,calls,summary=self.exercise('t0_pending')
+        self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+        self.assertEqual(state['objects'],{})
+
+    def test_render_uses_interpreter_bound_to_runtime_digest(self):
+        r=subprocess.run([BASH,str(ROOT/'probe.sh'),'render'],capture_output=True,text=True,encoding='utf-8')
+        self.assertEqual(r.returncode,0)
+        self.assertNotIn('/venv/bin/python3',r.stdout)
+        self.assertEqual(r.stdout.count('/usr/local/bin/python3.12'),3)
 
     def test_precheck_never_mutates(self):
         r, state, calls, summary = self.exercise('', 'precheck')
