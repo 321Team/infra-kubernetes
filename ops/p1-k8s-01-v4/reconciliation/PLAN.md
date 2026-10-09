@@ -80,3 +80,23 @@ control02는 이번5대 수집에서 제외된 별도 검증 대상이다. 이�
 - **worker01의 비교대상5개도 type 차이가 있다.** 기존17개 교체 후보에 나머지5개를 자동 추가하거나 라벨을 일괄 변경하지 않는다. Lead는 관측값 보존과 별도 정정 중 적절한 처리, 정확한 기대 context/metadata와 복귀값을 결정한다. 경로 기본값 조회만으로 장애·AVC·원인 또는 승인 기대값을 확정하지 않는다.
 - 정책 기본값 조회는 메타데이터 수집보다 약1분 뒤의 별도 회차이며, 동시 정책 변경 배제는 입증하지 않았다. 따라서 실행 직전 새 해시/link/metadata 확인은 여전히 필요하다.
 - 백업·교체·relabel·도구 실행·정책 적용0. **검증된 백업, 실제 호출 주체·동시 사용 배제, 대상/실행자/복구 인수 및 GO는 여전히 미확정**이다. 읽기 증적 추가로 배포 준비 완료를 선언하지 않는다.
+
+## 8. 09:16 원본 사본·부모 ACL 보완과 복귀 준비
+
+사용자 단독 창은 [09:10~12:00 KST로 연장](https://github.com/321Team/fds-project-baseline/issues/19#issuecomment-6071495239)됐다. §3의00~09시는 이전 창이며 새 실행 승인을 대신하지 않는다. 리뷰는 연장 창 이후 회수한다.
+
+[증적182 HEAD f4be8a13af393ef9cb8650a58dc5a33176ac3c6f](https://github.com/321Team/fds-project-evidence/tree/f4be8a13af393ef9cb8650a58dc5a33176ac3c6f/evidence/P1-K8S-01/v4-tool-backup-preparation-20261009T091654)에서 **PC09:16:54~57 / 호스트09:16:56~58 KST**의 새 조회를 보존했다.5대45개 hash는 이전과 동일하며 후보17개·168,782bytes의 원본 내용을 PC로 수신해 해시/구문 대조했다. 부모20개를 포함한65개 객체의 열람 가능한 전체 xattr 목록은 security.selinux뿐이며, root0:0·기본 숫자 ACL을 확인했다. 부모 /opt·/opt/fds는0755, 패키지 root·code 및 파일은0750이다. metadata·xattr 읽기 전후 및 부모 전후는 안정이었으나 다중 파일 원자적 snapshot/동시 호출 배제는 아니다.
+
+원본 stdout·17개 bytes는 **실행자 PC 비공개**로 보존하고 archive39개 member를 수신 파일과 byte 대조했다. 보관 archive SHA256은 `a86024b31d9433e1fdb63127f4a30e7360138d69cd682988b97409acd37a2dfa`다. Git 증적의 projection.json은 파일 내용 필드만 제외한 투영본이며 원 stdout이 아니다. 비공개 원본을 받지 않은 검토자가17개 bytes까지 재검증할 수 있다고 하지 않는다. 전달·보관 인수는 별도다.
+
+| 복귀 준비 항목 | 이번에 확보한 것 | 실제 교체 전에 남은 것 |
+|---|---|---|
+| 원본 bytes |17개 PC 사본·hash 및 archive 대조 | 실행 직전 현장 원본의 동일성, 호스트별 신규0700 백업 위치·복구 담당의 접근/회수 경로 |
+| 파일 metadata | uid/gid/mode/시간·전체 열람 가능 xattr·ACL | 관측값과 승인 기대값 구분, 임시 파일에서 적용·재조회 검증. Windows 사본 속성을 Linux 복구값으로 쓰지 않음 |
+| 부모·filesystem |20개 부모 metadata/ACL·가용 bytes/inode·readonly flag | 실제 staging/백업 filesystem 및 공간·정리 범위. flag=false를 쓰기 성공으로 간주하지 않음 |
+| SELinux | 관측 문맥 bytes 보존, worker01 type 차이 유지 | Lead의 보존/정정 선택·정확한 적용/복귀 context. 보존5개 relabel 추가는 별도 범위 결정 |
+| 복귀 검증 | PC archive에서 원본 bytes 대조 | 서버에서 backup→임시 복원→hash/uid/gid/mode/context/ACL 재검증, 호출 배제·복구 인수 및 정확한 GO |
+
+실행안 확정 시 호스트별 백업 경로·실행 시각·실제 inode/mtime·원본/백업 해시를 같은 기록에 연결한다. 사전 사본과 현장 bytes가 다르면 자동 덮어쓰기/복귀하지 않고 STOP한다. 복귀 대상은 해당 호스트에서 이번에 교체한 파일에 한정하고, 비대상28개 hash를 다시 대조한다. 복원 후 inode/dev/ctime까지 원래 값과 같아야 한다고 요구하지 않는다. 그 값은 수집 식별값이며 복귀 판정은 내용과 승인된 복원 가능 metadata를 기준으로 한다.
+
+**SERVER_BACKUP NOT_CREATED / RESTORE_TEST NOT_RUN / RUNTIME_APPLY NOT_RUN.** 이번 서버 작업은 읽기뿐이고 원격 임시 파일 정리 대상도 없다. PC 사본 검증을 서버 복귀 시험이나 준비 완료로 격상하지 않는다. 운영 도구·정책·manifest17/28 변경0이며 기존 관측 manifest는 당시 기록으로 보존한다.
