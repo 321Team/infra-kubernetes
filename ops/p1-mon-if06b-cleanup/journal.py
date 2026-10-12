@@ -20,6 +20,15 @@ JOURNAL = 'journal.jsonl'
 LOCK = 'writer.lock'
 MAX_LINE = 65536
 MAX_FILE = 1048576
+REASONS = frozenset('''CALLER_HANDOFF INPUT_INVALID GENERATION_CHANGED CLOCK_INVALID
+TRIGGER_INVALID OBSERVATION_INVALID OBSERVATION_TARGET_CHANGED OBSERVATION_CLOCK_INVALID
+OBSERVATION_STALE STATUS_INVALID NOT_FOUND_UNVERIFIED NOT_FOUND_TARGET_CHANGED API_READ_FAILED
+BODY_INVALID KIND_INVALID NAME_INVALID IDENTITY_INVALID SPEC_INVALID FOREIGN_UID POLICY_DRIFT
+DELETE_ALREADY_CLAIMED_OR_OUTCOME_UNRESOLVED UNEXPECTED_DELETION_OR_FINALIZERS
+CLEANUP_WINDOW_EXPIRED EXPLICIT_NOT_FOUND_BASELINE_STILL_UNVERIFIED
+RECEIPT_INVALID SCHEMA_INVALID BINDING_INVALID SPEC_PIN_INVALID TIME_INVALID TIME_ORDER_INVALID
+PHASE_INVALID CREATE_NOT_CONFIRMED CREATE_SPEC_DRIFT CREATE_LIFECYCLE_UNEXPECTED
+TRANSPORT_UNCERTAIN RESPONSE_INVALID REQUEST_WINDOW_EXPIRED ADAPTER_FAILURE'''.split())
 
 
 class JournalError(RuntimeError):
@@ -50,6 +59,28 @@ def _file(fd, directory, name):
 
 def _flags():
     return os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
+
+
+def _diagnostic(reason, observation=None):
+    # Never persist exception messages or arbitrary API response text.
+    reason = reason if isinstance(reason, str) and reason in REASONS else 'INPUT_INVALID'
+    obs = observation if isinstance(observation, dict) else {}
+    stamp, status = obs.get('observed_mono'), obs.get('http_status')
+    return dict(reason=reason, observed_mono=stamp if d.number(stamp) else None,
+                http_status=status if type(status) is int and 100 <= status <= 599 else None)
+
+
+def _terminal(payload):
+    # PR82 records remain readable, without inventing a reason for old bytes.
+    if payload == {}:
+        return None
+    _require(isinstance(payload, dict) and set(payload) == {'reason', 'observed_mono', 'http_status'},
+             'TERMINAL_DIAGNOSTIC_INVALID')
+    _require(isinstance(payload['reason'], str) and payload['reason'] in REASONS and
+             (payload['observed_mono'] is None or d.number(payload['observed_mono'])) and
+             (payload['http_status'] is None or (type(payload['http_status']) is int and
+              100 <= payload['http_status'] <= 599)), 'TERMINAL_DIAGNOSTIC_INVALID')
+    return copy.deepcopy(payload)
 
 
 def _transition(state, event, payload):
@@ -93,10 +124,11 @@ def _transition(state, event, payload):
         _require(payload['receipt'] == expected, 'DELETE_RESULT_CHANGED')
         state['receipt'] = copy.deepcopy(expected)
     elif event == 'ABSENT':
-        _require(phase in {'OWNED', 'DELETE_INTENT', 'DELETE_RESULT'} and payload == {}, 'ABSENCE_ORDER_INVALID')
+        _require(phase in {'OWNED', 'DELETE_INTENT', 'DELETE_RESULT'}, 'ABSENCE_ORDER_INVALID')
+        state['terminal_diagnostic'] = _terminal(payload)
     elif event == 'HANDOFF':
-        _require(phase in {'CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'DELETE_RESULT'} and
-                 payload == {}, 'HANDOFF_ORDER_INVALID')
+        _require(phase in {'CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'DELETE_RESULT'}, 'HANDOFF_ORDER_INVALID')
+        state['terminal_diagnostic'] = _terminal(payload)
     else:
         raise JournalError('EVENT_INVALID')
     state['event'] = event
@@ -194,7 +226,7 @@ class Session:
                 self._append('DELETE_INTENT', dict(receipt=result['next_receipt'],
                                                    path=result['path'], body=result['body']))
             elif action in {'ABSENT', 'HANDOFF'}:
-                self._append(action, {})
+                self._append(action, _diagnostic(result['reason'], observation))
             return result
 
     def record_delete_result(self, http_status):
@@ -204,10 +236,10 @@ class Session:
             self._append('DELETE_RESULT', dict(http_status=http_status, receipt=receipt))
             return copy.deepcopy(receipt)
 
-    def handoff(self):
+    def handoff(self, reason='CALLER_HANDOFF'):
         """Create/transport uncertainty: retain history and end automatic work."""
         with self._operation():
-            self._append('HANDOFF', {})
+            self._append('HANDOFF', _diagnostic(reason))
 
     def close(self):
         # Never LOCK_UN: closing a forked child's duplicate must not unlock its parent.
@@ -266,6 +298,7 @@ def inspect_history(directory_fd):
                  (after.st_size, after.st_mtime_ns, after.st_ctime_ns), 'HISTORY_CHANGED')
         return dict(last_event=state['event'], binding=state['binding'],
                     receipt=state.get('receipt'), automatic_replay_allowed=False,
+                    terminal_diagnostic=copy.deepcopy(state.get('terminal_diagnostic')),
                     disposition='HANDOFF_BASELINE_UNVERIFIED')
     except (ValueError, TypeError, KeyError, UnicodeError) as exc:
         raise JournalError('HISTORY_INVALID') from exc
