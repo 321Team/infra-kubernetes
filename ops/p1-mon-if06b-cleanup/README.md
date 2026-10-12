@@ -33,6 +33,16 @@ Kubernetes의 [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-ap
 4. 응답은 `record_delete_result(status)`로 기록. 응답 유실은 `None`, DELETE404도 UNKNOWN이다. 명시적 NotFound GET을 이후 `plan_delete(...)`에 공급하면 ABSENT를 별도 기록할 수 있다. ACK 후 GET200은 현행 판단대로 HANDOFF이며 DELETE를 재전송하지 않는다.
 5. 종료/실패 시 파일·잠금 파일을 보존한다. `close()`는 fd만 닫고 파일은 제거하지 않는다. 재시작은 `inspect_history()`로 읽어 인수할 뿐이며 새 디렉터리/파일명·claim 삭제로 불확실한 회차를 우회하지 않는다.
 
+## 실제 API·감독·CLI 통합
+
+CLAUDE_ASSISTED · 2026-10-12. 아래 "통합 전 남은 작업"이 요구한 transport·독립 감독·실패 반환값 보존은
+`transport.py`·`supervisor.py`·`guardian.py`로 구현했다. 계약→구현→시험 대응표, 실행·중단·회수·인수 절차,
+최소 현장 입력은 [INTEGRATION.md](INTEGRATION.md)에 있다. `coordinator.py`는 `*_NOT_SENT`의 하위 원인을
+반환값에 더한 것 외에는 그대로이고 `decision.py`·`journal.py`·journal schema는 변경하지 않았다.
+
+이 구현은 SYNTHETIC loopback 서버로만 시험했다. endpoint·자격증명·보호 디렉터리·시간 예산·인수/알림 경로는
+여전히 현장 입력이며 기본값이 없다. 원격 알림 전송은 구현하지 않았다. 아래 절들은 각 모듈의 계약으로 계속 유효하다.
+
 ## 통합 전 남은 작업
 
 ### 생성·회수 요청과 기록의 연결
@@ -103,6 +113,6 @@ PR81 비차단 리뷰 메모도 실제 통합에 연결한다. MON Lead와 abort
 python3 -B -m unittest discover -s ops/p1-mon-if06b-cleanup/tests -v
 ```
 
-모든 객체·시간·UID는 SYNTHETIC이다. 판단 시험은 정상 만료와 조기 중단, stale/future 관측, 잘못된 입력, boot/epoch/cluster/session 변경, 다른 UID/spec,403/409/유실, finalizer, ACK 후 readback을 검증한다. 추가 journal 시험은 임시 디렉터리에서 실제 Linux 파일·프로세스 잠금/종료와 fsync 순서, 주입한 짧은 쓰기·저장 실패·손상·세대 변경·재전송 금지를 검증한다. 클러스터·소켓·API 호출은 없다. Windows에서는 Linux 전용 journal 시험이 SKIP되므로 전체 성공으로 세지 않는다. Linux CI는 이 범위만 실행하며 Runtime 검증·독립 REVIEW·MERGE·AC와 구분한다.
+모든 객체·시간·UID는 SYNTHETIC이다. 판단 시험은 정상 만료와 조기 중단, stale/future 관측, 잘못된 입력, boot/epoch/cluster/session 변경, 다른 UID/spec,403/409/유실, finalizer, ACK 후 readback을 검증한다. 추가 journal 시험은 임시 디렉터리에서 실제 Linux 파일·프로세스 잠금/종료와 fsync 순서, 주입한 짧은 쓰기·저장 실패·손상·세대 변경·재전송 금지를 검증한다. 통합 시험(`test_transport.py`·`test_supervisor.py`·`test_guardian.py`)은 127.0.0.1의 가짜 TLS 서버와 실행마다 `openssl`로 만들어 버리는 시험용 PKI에 실제 소켓·프로세스를 쓴다. 클러스터·실제 API·실제 credential 접근은 없다. Windows에서는 Linux 전용 journal·프로세스 시험이 SKIP되므로 전체 성공으로 세지 않는다. CI는 `IF06B_REQUIRE_FULL=1`로 Linux·`openssl` 부재 시 실패한다. Linux CI는 이 범위만 실행하며 Runtime 검증·독립 REVIEW·MERGE·AC와 구분한다.
 
 실서버 적용은 없다. 코드가 이상하면 사용을 보류하고 diff/시험 결과를 검토한다. 이미 생성된 실제 canary나 원본 영수증이 있을 때 이 모듈을 임의로 끼워 넣어 회수를 재개하지 않는다.

@@ -16,6 +16,7 @@ import journal as j
 
 MAX_RESPONSE = 1048576
 COLLECTION = '/apis/' + d.API + '/' + d.RESOURCE
+NOT_SENT_CAUSES = frozenset({'GENERATION_CHANGED', 'CLOCK_INVALID', 'REQUEST_WINDOW_EXPIRED'})
 
 
 def manifest_hash(manifest):
@@ -29,11 +30,20 @@ class CoordinatorError(RuntimeError):
 
 class RequestNotSent(CoordinatorError):
     """Local failure before entering transport; never inferred from its error."""
+    def __init__(self, reason, cause='ADAPTER_FAILURE'):
+        super().__init__(reason)
+        self.cause = cause  # Returned to the supervisor only; never journaled.
 
 
 def require(ok, reason):
     if not ok:
         raise CoordinatorError(reason)
+
+
+def _not_sent(exc):
+    # PR83 follow-up: the journal reason stays *_NOT_SENT; the supervisor also
+    # needs to know whether the generation changed or only time ran out.
+    return dict(not_sent_cause=exc.cause) if isinstance(exc, RequestNotSent) else {}
 
 
 def decode_response(response):
@@ -109,10 +119,11 @@ class Coordinator:
             payload = copy.deepcopy(body)
             start = self._check(deadline)
             end = min(deadline, start + self._timeout)
-        except Exception:
+        except Exception as exc:
             if method in {'POST', 'DELETE'}:
                 reason = 'CREATE_NOT_SENT' if method == 'POST' else 'DELETE_NOT_SENT'
-                raise RequestNotSent(reason) from None
+                cause = str(exc) if type(exc) is CoordinatorError and str(exc) in NOT_SENT_CAUSES else 'ADAPTER_FAILURE'
+                raise RequestNotSent(reason, cause) from None
             raise
         try:
             response = self._transport(method=method, path=path, body=payload, deadline_mono=end)
@@ -123,7 +134,7 @@ class Coordinator:
         self._check(end)
         return start, decode_response(response)
 
-    def _handoff(self, reason):
+    def _handoff(self, reason, **detail):
         self._phase = 'HANDOFF'
         reason = reason if isinstance(reason, str) and reason in j.REASONS else 'ADAPTER_FAILURE'
         recorded = False
@@ -133,7 +144,7 @@ class Coordinator:
         except (j.JournalError, OSError, ValueError, TypeError):
             pass  # Failed/partial journal is preserved; never repair or retry.
         return dict(action='HANDOFF', reason=reason, handoff_recorded=recorded,
-                    baseline_verified=False)
+                    baseline_verified=False, **detail)
 
     def _run(self, action):
         require(os.getpid() == self._pid, 'FORKED_COORDINATOR')
@@ -146,7 +157,7 @@ class Coordinator:
                 # Both JournalError and OSError stop execution, as PR82 review
                 # requires. Unknown exceptions never expose their messages.
                 reason = str(exc) if isinstance(exc, (CoordinatorError, j.JournalError, ValueError)) else 'ADAPTER_FAILURE'
-                return self._handoff(reason)
+                return self._handoff(reason, **_not_sent(exc))
         finally:
             self._guard.release()
 
@@ -190,7 +201,7 @@ class Coordinator:
                 _, (status, _body) = self._request('DELETE', result['path'], result['body'], self._deadline)
             except RequestNotSent as exc:
                 # Intent remains durable, but there is no response/loss event.
-                return self._handoff(str(exc))
+                return self._handoff(str(exc), **_not_sent(exc))
             except CoordinatorError as exc:
                 self._session.record_delete_result(None)
                 return self._handoff(str(exc))
