@@ -142,10 +142,15 @@ class Coordinator:
             require(self._phase == 'NEW', 'CREATE_NOT_CONFIRMED')
             self._phase = 'CREATE_CLAIMED'  # Transport uncertainty never permits another POST.
             started, (status, body) = self._request('POST', COLLECTION, self._manifest, self._expires)
-            receipt = self._session.record_owned(binding=self._binding, http_status=status,
+            inputs = dict(binding=self._binding, http_status=status,
                 create_body=body, reviewed_spec_sha256=self._pin, created_mono=started,
                 expires_mono=self._expires, cleanup_deadline_mono=self._deadline,
                 observation_max_age=self._age)
+            # Reject an unconfirmed/drifting response before entering the
+            # writer's poison-on-validation-error operation, so the usable
+            # journal can still retain the concrete handoff reason.
+            d.owned_receipt(**inputs)
+            receipt = self._session.record_owned(**inputs)
             self._phase = 'OWNED'
             return dict(action='OWNED', receipt=receipt, baseline_verified=False)
         return self._run(action)

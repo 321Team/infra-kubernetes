@@ -188,11 +188,31 @@ class CoordinatorTests(unittest.TestCase):
         self.assertEqual(obj.create()['reason'], 'REQUEST_WINDOW_EXPIRED')
         self.assertNotIn('OWNED', [e['event'] for e in self.events()])
 
-    def test_create_conflict_and_body_drift_are_not_owned(self):
+    def test_create_conflict_is_not_owned_and_reason_is_preserved(self):
         obj = self.make()
         self.queue.append(self.response(409, {'kind': 'Status'}))
         self.assertEqual(obj.create()['reason'], 'CREATE_NOT_CONFIRMED')
         self.assertEqual(self.events()[-1]['event'], 'HANDOFF')
+
+    def test_create_response_spec_drift_is_not_owned_and_reason_is_preserved(self):
+        obj = self.make()
+        wrong = copy.deepcopy(self.body)
+        wrong['spec']['selector'] = 'unexpected'
+        self.queue.append(self.response(201, wrong))
+        result = obj.create()
+        self.assertEqual(result['reason'], 'CREATE_SPEC_DRIFT')
+        self.assertTrue(result['handoff_recorded'])
+        self.assertEqual(self.events()[-1]['payload']['reason'], 'CREATE_SPEC_DRIFT')
+        self.assertNotIn('OWNED', [e['event'] for e in self.events()])
+
+    def test_create_lifecycle_change_is_not_owned(self):
+        obj = self.make()
+        wrong = copy.deepcopy(self.body)
+        wrong['metadata']['finalizers'] = ['synthetic']
+        self.queue.append(self.response(201, wrong))
+        result = obj.create()
+        self.assertEqual(result['reason'], 'CREATE_LIFECYCLE_UNEXPECTED')
+        self.assertTrue(result['handoff_recorded'])
 
     def test_mutation_of_caller_input_does_not_change_sent_manifest(self):
         obj = self.make()
