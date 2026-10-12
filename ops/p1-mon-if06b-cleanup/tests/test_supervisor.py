@@ -134,6 +134,8 @@ class GuardTests(unittest.TestCase):
                          ['ARMING', 'ARMED', 'CREATE', 'TRIGGER', 'CLEANUP', 'READBACK', 'FINAL'])
         self.assertEqual(self.rows()[3]['trigger'], 'expiry')
         self.assertEqual(self.rows()[2]['uid'], 'SYNTHETIC-uid')
+        self.assertIs(self.rows()[-1]['evidence_complete_before_write'], True)
+        self.assertTrue(all('evidence_complete' not in row for row in self.rows()))  # Never self-attested.
         self.assertEqual(self.events(), ['CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'DELETE_RESULT', 'ABSENT'])
         watched = s.watch(self.fd, poll=1, until_mono=0, clock=lambda: self.now, pause=self.pause)
         self.assertEqual((watched['state'], watched['handoff_required']), ('ABSENT_BASELINE_UNVERIFIED', False))
@@ -280,6 +282,71 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(self.rows()[-1]['terminal_recorded'], False)
         self.assertNotIn('HANDOFF', self.events())
         self.assertNotIn(b'PRIVATE', (self.proof / s.STEPS).read_bytes())
+
+    def _break_final(self, mode):
+        """Fail only the FINAL row of the evidence file: 'write', 'short' or 'fsync'."""
+        write, sync, inode, hit = os.write, os.fsync, os.stat(self.proof / s.STEPS).st_ino, []
+
+        def fake_write(fd, data):
+            if b'"step":"FINAL"' in bytes(data) and os.fstat(fd).st_ino == inode:
+                hit.append(mode)
+                if mode == 'write':
+                    raise OSError('PRIVATE disk failure')
+                if mode == 'short':
+                    return write(fd, bytes(data)[:-7])
+            return write(fd, data)
+
+        def fake_sync(fd):
+            if mode == 'fsync' and hit and os.fstat(fd).st_ino == inode:
+                raise OSError('PRIVATE disk failure')
+            sync(fd)
+        return patch.object(os, 'write', side_effect=fake_write), patch.object(os, 'fsync', side_effect=fake_sync), hit
+
+    def test_final_row_cannot_vouch_for_its_own_failed_write(self):
+        for mode in ('write', 'short', 'fsync'):
+            with self.subTest(mode=mode):
+                self.setUp()
+                self.normal()
+                read_fd, write_fd = os.pipe()
+                self.addCleanup(os.close, read_fd)
+                evidence = s.Evidence(self.proof_fd, journal_fd=self.fd, clock=lambda: self.now, stream_fd=write_fd)
+                writes, syncs, hit = self._break_final(mode)
+                with writes, syncs:
+                    final = self.guard(evidence=evidence)
+                evidence.close()
+                streamed = [json.loads(line) for line in os.read(read_fd, 65536).splitlines()]
+                self.assertEqual(hit, [mode])
+                # The reclaim itself is untouched and judged separately from the evidence.
+                self.assertEqual(final['disposition'], 'ABSENT_BASELINE_UNVERIFIED')
+                self.assertEqual(self.events()[-1], 'ABSENT')
+                self.assertEqual(self.methods(), ['POST', 'GET', 'DELETE', 'GET'])
+                self.assertIs(final['evidence_complete_before_write'], True)
+                self.assertIs(final['evidence_complete'], False)
+                self.assertEqual(streamed[-1], final)  # The external copy reports this row's failure.
+                self.assertTrue(all(row['evidence_complete'] is True for row in streamed[:-1]))
+                stored = (self.proof / s.STEPS).read_bytes()
+                self.assertNotIn(b'"evidence_complete":', stored)
+                self.assertNotIn(b'PRIVATE', stored)
+                if mode == 'write':
+                    self.assertNotIn(b'"step":"FINAL"', stored)
+                elif mode == 'short':
+                    self.assertFalse(stored.endswith(b'\n'))
+                    with self.assertRaises(ValueError):
+                        json.loads(stored.splitlines()[-1])
+                else:
+                    self.assertIs(json.loads(stored.splitlines()[-1])['evidence_complete_before_write'], True)
+
+    def test_failure_before_final_is_carried_into_the_final_row(self):
+        self.normal()
+        evidence = s.Evidence(self.proof_fd, journal_fd=self.fd, clock=lambda: self.now)
+        first = evidence.write('PROBE')
+        with self._fail_sync_of(self.proof / s.STEPS):
+            second = evidence.write('PROBE')
+        final = self.guard(evidence=evidence)
+        self.assertEqual((first['evidence_complete'], second['evidence_complete']), (True, False))
+        self.assertEqual((final['evidence_complete_before_write'], final['evidence_complete']), (False, False))
+        self.assertIs(self.rows()[-1]['evidence_complete_before_write'], False)  # Later successes do not restore it.
+        self.assertEqual(final['disposition'], 'ABSENT_BASELINE_UNVERIFIED')
 
     def test_evidence_failure_does_not_stop_the_reclaim(self):
         self.normal()

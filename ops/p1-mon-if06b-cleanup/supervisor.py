@@ -46,6 +46,11 @@ class Evidence:
 
     A failed write never stops a reclaim; it is reported in `complete` and to
     the stream instead. Only fixed codes, identifiers and times are recorded.
+
+    A stored row cannot attest its own write and fsync, so `evidence_complete`
+    is never stored. It is added after the attempt, to the returned row and
+    the stream copy only: true means this row and every earlier one were
+    written in full and fsynced.
     """
     def __init__(self, directory_fd, *, journal_fd, clock, stream_fd=None, name=STEPS):
         j._directory(directory_fd)
@@ -64,22 +69,24 @@ class Evidence:
             mono = None
         row = dict(seq=self._sequence, step=step, mono=mono if d.number(mono) else None,
                    utc=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds'), **fields)
-        raw = (json.dumps(row, sort_keys=True, separators=(',', ':'), ensure_ascii=False) + '\n').encode('utf-8')
         try:
+            raw = self._encode(row)
             if os.write(self._fd, raw) != len(raw):
-                raise OSError
+                raise OSError  # A short write leaves a torn line; it is not retried.
             os.fsync(self._fd)
         except Exception:
             self.complete = False
-        self._emit(raw)
-        return row
-
-    def _emit(self, raw):
+        reported = dict(row, evidence_complete=self.complete)
         if self._stream is not None:
             try:
-                os.write(self._stream, raw)
+                os.write(self._stream, self._encode(reported))
             except Exception:
                 self._stream = None  # The launcher/observer may be gone; keep going.
+        return reported
+
+    @staticmethod
+    def _encode(row):
+        return (json.dumps(row, sort_keys=True, separators=(',', ':'), ensure_ascii=False) + '\n').encode('utf-8')
 
     def release_stream(self):
         if self._stream is not None:
@@ -152,7 +159,7 @@ def guard(*, directory_fd, evidence, binding, manifest, reviewed_manifest_sha256
         last = getattr(transport, 'last', None)
         return evidence.write('FINAL', disposition=disposition, reason=reason,
                               transport_last=copy.deepcopy(last) if isinstance(last, dict) else None,
-                              evidence_complete=evidence.complete, automatic_replay_allowed=False,
+                              evidence_complete_before_write=evidence.complete, automatic_replay_allowed=False,
                               baseline_verified=False, **extra)
 
     def step(name, result):

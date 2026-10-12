@@ -18,13 +18,65 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import fake_api as f
 import coordinator as c
 import decision as d
+import guardian as g
 import journal as j
 import supervisor as s
 import transport as t
 
 GUARDIAN = Path(__file__).resolve().parents[1] / 'guardian.py'
+PROBE = Path(__file__).resolve().parent / 'signal_probe.py'
+STORM = ('SIGUSR2', 'SIGUSR1', 'SIGTERM', 'SIGINT', 'SIGHUP')
 RECLAIM = [('GET', t.NAMESPACE), ('GET', d.PATH), ('POST', c.COLLECTION), ('GET', d.PATH),
            ('DELETE', d.PATH), ('GET', d.PATH)]
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'POSIX signals delivered to a child process')
+class TriggerTests(unittest.TestCase):
+    """Each probe is a child with a timeout: a deadlock fails the test instead of hanging it."""
+    def probe(self, *args, timeout=20):
+        done = subprocess.run([sys.executable, '-B', str(PROBE), *args], capture_output=True, timeout=timeout)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        return json.loads(done.stdout)
+
+    def lines(self, mode, signame, accept, least):
+        count = 0
+        for index in range(16):
+            out = self.probe(mode, signame, str(index))
+            if not out['fired']:
+                break
+            count += 1
+            self.assertIn(out['value'], accept, out)
+            self.assertLess(out['elapsed'], 2, out)
+        self.assertGreaterEqual(count, least)  # The injection really walked the function.
+
+    def test_probe_detects_the_old_event_based_deadlock(self):
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.probe('legacy', timeout=3)
+
+    def test_signal_at_every_line_of_wait_returns_its_trigger(self):
+        for signame, expected in g.Triggers.SIGNALS:
+            with self.subTest(signal=signame):
+                self.lines('wait', signame, (expected,), 3)
+
+    def test_second_signal_inside_the_handler_cannot_block_or_raise(self):
+        self.lines('nested', 'SIGUSR1', ('abort', 'complete'), 5)
+        self.lines('nested', 'SIGTERM', ('abort', 'complete'), 5)
+
+    def test_timeout_returns_nothing_and_a_late_signal_is_still_seen(self):
+        out = self.probe('expiry')
+        self.assertIsNone(out['value'])
+        self.assertTrue(0.15 <= out['elapsed'] < 2, out)
+        self.assertEqual(out['late'], 'abort')
+
+    def test_signal_storm_keeps_the_first_trigger_and_close_releases_cleanly(self):
+        out = self.probe('storm')
+        self.assertEqual((out['value'], out['after_close']), ('complete', 'complete'))
+        self.assertLess(out['elapsed'], 2)
+        self.assertEqual(out['written_after_close'], 0)  # Nothing lands in a reused descriptor.
+
+    def test_lost_descriptors_never_raise_from_the_handler_and_end_in_reclaim(self):
+        out = self.probe('broken')
+        self.assertEqual((out['value'], out['await']), ('abort', 'abort'))
 
 
 @unittest.skipUnless(f.OPENSSL and sys.platform == 'linux', 'Linux processes, journal and throwaway PKI')
@@ -94,7 +146,8 @@ class GuardianProcessTests(unittest.TestCase):
 
     def rows(self, name=s.STEPS):
         path = self.root / 'evidence' / name
-        return [json.loads(line) for line in path.read_bytes().splitlines()] if path.exists() else []
+        whole = path.read_bytes().split(b'\n')[:-1] if path.exists() else []  # Skip a row still being written.
+        return [json.loads(line) for line in whole]
 
     def final(self, name=s.STEPS):
         return next((r for r in self.rows(name) if r['step'] == 'FINAL'), None)
@@ -173,7 +226,10 @@ class GuardianProcessTests(unittest.TestCase):
                          dict(uid=lines[2]['uid'], resourceVersion=lines[2]['resource_version']))
         self.assertGreaterEqual(lines[3]['mono'], lines[0]['expires_mono'])
         self.assertEqual(self.events(), ['CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'DELETE_RESULT', 'ABSENT'])
+        # The stream copy alone carries the outcome of each row's own write and fsync.
+        self.assertTrue(all(row.pop('evidence_complete') is True for row in lines))
         self.assertEqual(self.rows(), lines)
+        self.assertIs(self.rows()[-1]['evidence_complete_before_write'], True)
         self.assertNotIn(b'SYNTHETIC-not-a-credential',
                          (self.root / 'evidence' / s.STEPS).read_bytes() + (self.root / 'journal' / j.JOURNAL).read_bytes())
 
@@ -196,6 +252,35 @@ class GuardianProcessTests(unittest.TestCase):
         self.assertEqual(final['disposition'], 'ABSENT_BASELINE_UNVERIFIED')
         self.assertEqual(next(r for r in self.rows() if r['step'] == 'TRIGGER')['trigger'], 'abort')
         self.assertEqual(self.api.methods(), RECLAIM)
+
+    def storm(self, pid, start_mono=None):
+        while start_mono is not None and time.clock_gettime(time.CLOCK_BOOTTIME) < start_mono:
+            time.sleep(0.0005)
+        sent = 0
+        while self.final() is None and sent < 20000:
+            try:
+                os.kill(pid, getattr(signal, STORM[sent % len(STORM)]))
+            except ProcessLookupError:
+                break
+            sent += 1
+            time.sleep(0.002)
+        final = self.until(self.final)
+        self.assertGreater(sent, 5)
+        self.assertEqual(final['disposition'], 'ABSENT_BASELINE_UNVERIFIED')
+        self.assertEqual(self.api.methods(), RECLAIM)  # One POST, one DELETE, one readback.
+        self.assertIsNone(self.api.object)
+        self.assertEqual(self.events(), ['CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'DELETE_RESULT', 'ABSENT'])
+        return next(r for r in self.rows() if r['step'] == 'TRIGGER')['trigger']
+
+    def test_repeated_signals_through_reclaim_and_exit_delete_exactly_once(self):
+        pid = self.launch('run', '--config', self.config(lease_seconds=30))
+        self.until(lambda: self.api.object)
+        self.assertIn(self.storm(pid), ('abort', 'complete'))
+
+    def test_signals_racing_the_lease_expiry_delete_exactly_once(self):
+        pid = self.launch('run', '--config', self.config(lease_seconds=1.5))
+        expires = next(r for r in self.rows() if r['step'] == 'ARMING')['expires_mono']
+        self.assertIn(self.storm(pid, expires - 0.004), ('abort', 'complete', 'expiry'))
 
     def test_killed_guardian_leaves_a_handoff_and_is_never_replayed(self):
         pid = self.launch('run', '--config', self.config(lease_seconds=30))

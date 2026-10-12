@@ -8,9 +8,9 @@ Output is one JSON object per line with fixed codes and no exception text.
 import argparse
 import json
 import os
+import select
 import signal
 import sys
-import threading
 import time
 
 import coordinator as c
@@ -94,22 +94,48 @@ class Triggers:
     """SIGUSR1/TERM/INT request an early reclaim (abort), SIGUSR2 reports completion.
 
     A hangup is ignored: the session that started the guardian may end first.
+    A handler interrupts the main thread between any two bytecodes, so it
+    takes no lock: it records the first trigger and writes one byte to a
+    nonblocking pipe that wait() selects on. The byte is never drained; once
+    a trigger is recorded every later wait() returns it at once.
     """
+    SIGNALS = (('SIGUSR1', 'abort'), ('SIGUSR2', 'complete'), ('SIGTERM', 'abort'), ('SIGINT', 'abort'))
+
     def __init__(self):
-        self._event, self._value = threading.Event(), None
-        for number, name in ((signal.SIGUSR1, 'abort'), (signal.SIGUSR2, 'complete'),
-                             (signal.SIGTERM, 'abort'), (signal.SIGINT, 'abort')):
-            signal.signal(number, lambda _n, _f, name=name: self._set(name))
+        self._value = None
+        self._read, self._wake = os.pipe()
+        for fd in (self._read, self._wake):
+            os.set_blocking(fd, False)
+        for signame, name in self.SIGNALS:
+            signal.signal(getattr(signal, signame), lambda _n, _f, name=name: self._set(name))
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     def _set(self, name):
+        # No lock, no blocking call, and nothing may escape into the interrupted code.
         if self._value is None:
             self._value = name
-        self._event.set()
+        wake = self._wake
+        if wake is not None:
+            try:
+                os.write(wake, b'!')
+            except OSError:
+                pass  # A full pipe already holds a pending wakeup.
 
     def wait(self, timeout):
-        self._event.wait(timeout)
+        # A signal landing after this check has already written the byte select sees.
+        if self._value is None and self._read is not None:
+            select.select([self._read], [], [], timeout)
         return self._value
+
+    def close(self):
+        """Stop reacting first, then release the pipe: a late signal must not
+        write into a descriptor number the process has since reused."""
+        for signame, _name in self.SIGNALS:
+            signal.signal(getattr(signal, signame), signal.SIG_IGN)
+        read, wake, self._read, self._wake = self._read, self._wake, None, None
+        for fd in (read, wake):
+            if fd is not None:
+                os.close(fd)
 
 
 def detach():
@@ -203,6 +229,8 @@ def command_run(args):
                     readback_delay=budgets['readback_delay_seconds'], clock=clock, binding_probe=probe,
                     transport=transport, trigger_wait=triggers.wait, pause=time.sleep,
                     on_armed=None if args.foreground else evidence.release_stream)
+    # guard() ended in a terminal or handoff record; a late signal has nothing left to trigger.
+    triggers.close()
     evidence.close()
     return {'ABSENT_BASELINE_UNVERIFIED': EXIT['OK'], 'NOT_STARTED': EXIT['NOT_STARTED']}.get(
         final['disposition'], EXIT['HANDOFF'])
@@ -235,7 +263,7 @@ def command_survival(args):
     while clock() < end:
         time.sleep(min(args.interval_seconds, max(end - clock(), 0)))
         record.write('BEAT')
-    record.write('FINAL', disposition='SURVIVED_REQUESTED_DURATION', complete=record.complete)
+    record.write('FINAL', disposition='SURVIVED_REQUESTED_DURATION', evidence_complete_before_write=record.complete)
     record.close()
     return EXIT['OK']
 
