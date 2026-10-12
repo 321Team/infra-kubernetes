@@ -1,4 +1,4 @@
-# IF06B 조건부 회수 판단 모듈 — 실행기 미포함
+# IF06B 조건부 회수 판단·영속 기록 — 실행기 미포함
 
 CODEX_ASSISTED · 2026-10-12. `P1-MON-01` / [baseline#17](https://github.com/321Team/fds-project-baseline/issues/17) 및 K8S·SEC 협업 범위의 로컬 사전준비다. [기존 canary 카드](../../docs/change/P1-MON-01/P1_MON_01_IF06B_WORKER03_CANARY_20261002.md)의 이름·UID·최신 resourceVersion 조건을 판단 코드로 분리한다. 기존 정책 YAML이나 실행 허용은 변경하지 않는다.
 
@@ -14,6 +14,25 @@ CODEX_ASSISTED · 2026-10-12. `P1-MON-01` / [baseline#17](https://github.com/321
 
 Kubernetes의 [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-api/definitions/delete-options-v1-meta/)는 UID/resourceVersion precondition 불일치를409로 거부한다. GET 이후 객체가 바뀌어도 조건 없는 삭제나 이름만으로 된 fallback을 만들지 않는다.
 
+## 영속 기록과 단일 작성자
+
+`journal.py`는 Linux 로컬 파일시스템용 라이브러리다. PR81의 `decision.py`는 변경하지 않는다. CREATE 직전 의도, 확인된 소유 영수증, DELETE 의도, 응답, 명시적 부재 또는 인수 전환을 순서대로 보존한다. 네트워크 호출·credential·실행 CLI·서비스 설치는 없다.
+
+- 호출자는 기존 권한으로 검토한 **cluster/canary별 고정된 보호 디렉터리**의 열린 fd를 공급한다. 유효 UID 소유/0700을 확인하며 디렉터리 생성·chmod·chown은 하지 않는다. 전체 부모 경로·실효 ACL·SELinux·신뢰된 공급 및 durable local storage의 검증은 어댑터/현장 전제다. 임의 임시 경로·NFS·다른 호스트의 사본을 운영 journal로 쓰지 않는다.
+- 고정 `writer.lock`을 `flock(LOCK_EX|LOCK_NB)`로 유지한다. 파일은 현재 UID/0600·regular·단일 link·경로/inode 일치를 확인하며 symlink를 따라가지 않는다. 다른 프로세스·동시 스레드·fork 상속 writer를 거부한다. 이 잠금은 해당 로컬 디렉터리의 협조적 작성자 보호이며 다른 호스트까지 잠그는 분산 잠금이나 악의적인 동일 UID/root 방어가 아니다.
+- 고정 `journal.jsonl`은 `O_EXCL`로 한 번만 만들고 append한다. CREATE 의도 또는 DELETE 의도의 파일 **fsync → 디렉터리 fsync**가 모두 반환된 뒤에만 호출자에게 정상 반환한다. 구현 의미는 Python의 [fsync](https://docs.python.org/3.12/library/os.html#os.fsync), [flock](https://docs.python.org/3.12/library/fcntl.html#fcntl.flock)를 따른다. 실제 전원 장애 내구성·파일시스템/장치 보장까지 CI로 입증한 것은 아니다.
+- 저장·동기화·검증 실패는 해당 인스턴스를 더 이상 사용하지 못하게 한다. 원본을 지우거나 수정·재시도하지 않는다. 프로세스가 죽거나 닫힌 뒤 기존 파일을 다시 쓰는 API도 없다. 유효한 prefix·빈 파일·부분 기록 모두 재기동/재생성의 허용이 아니다.
+- `inspect_history()`는 writer가 없는 상태에서 공유 잠금으로 읽고 순서·schema·세대/소유 연결을 대조한다. 반환은 언제나 `automatic_replay_allowed=false`다. ACK/ABSENT도 실제 기준 복귀·인수 성공을 뜻하지 않는다. append-only 기록은 암호학적 인증 증거가 아니며 과거 파일의 진본성은 별도 보존/출처 검증이 필요하다.
+- 런타임 예산 기본값은 없다. 64KiB/행·1MiB/파일 상한은 잘못된 파일의 무제한 파싱을 막는 구현 한계이며 실행 시간/회수 예산과 무관하다. 로그에는 검증된 receipt와 조건부 요청의 최소 필드만 저장하고 전체 API 응답·예외 원문·환경·credential은 저장하지 않는다.
+
+어댑터가 지켜야 할 호출 순서는 아래와 같다. 실제 경로·대상·예산이 없는 인터페이스 설명이며 실행 명령/승인된 package가 아니다.
+
+1. 단일 실행 위치와 고정 디렉터리·미사용 회차를 확인하고 `Session(directory_fd, binding=..., reviewed_spec_sha256=...)` 생성. 성공 반환 전에 CREATE를 전송하지 않는다.
+2. 별도 어댑터가 검토된 CREATE를 최대1회 전송한다. 정확 HTTP201 응답은 `record_owned(**create_inputs)`로 기록한다. 생성 결과 불명/기록 실패면 인수 전환하며 발견한 동일 이름을 소유로 채택하거나 재생성하지 않는다.
+3. 인증된 최신 관측·현재 세대·시간을 받아 `plan_delete(...)` 호출. 반환이 DELETE_INTENT일 때만 외부 어댑터가 전송 직전 세대·기한을 다시 확인하고 해당 요청을 최대1회 전송한다. 함수 반환과 실제 전송 사이 중단/시간 경과를 이 라이브러리가 관측할 수는 없다.
+4. 응답은 `record_delete_result(status)`로 기록. 응답 유실은 `None`, DELETE404도 UNKNOWN이다. 명시적 NotFound GET을 이후 `plan_delete(...)`에 공급하면 ABSENT를 별도 기록할 수 있다. ACK 후 GET200은 현행 판단대로 HANDOFF이며 DELETE를 재전송하지 않는다.
+5. 종료/실패 시 파일·잠금 파일을 보존한다. `close()`는 fd만 닫고 파일은 제거하지 않는다. 재시작은 `inspect_history()`로 읽어 인수할 뿐이며 새 디렉터리/파일명·claim 삭제로 불확실한 회차를 우회하지 않는다.
+
 ## 통합 전 남은 작업
 
 **이 모듈만으로 독립 만료 회수가 동작하지 않는다.** MON의 `docs/IF06B_REMAINING_TEST_INPUTS_20261009.md`에 남은 구현·독립 생존 검증 조건은 계속 미완료다.
@@ -22,9 +41,11 @@ Kubernetes의 [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-ap
 
 1. 실제 검토한 manifest·API endpoint·현재 cluster와 관측의 출처를 결속한다. 호출자가 준 해시는 승인 증거를 스스로 만들지 않는다. API 응답의 기본값 적용 뒤 spec pin과 비교할 방법도 실제 서버에서 대조한다.
 2. 시험 프로세스와 독립적으로 생존하는 실행 위치·프로세스 감독·연결 경로를 확정하고, 제한된 기존 자격증명으로 실제 create/get/delete 권한을 확인한다. credential을 산출물에 저장하지 않는다.
-3. 생성 직전부터 단일 작성자와 보호된 durable journal을 유지한다. 생성 응답 전 유실, 생성 성공 뒤 영수증 저장 실패, intent 저장 뒤 전송 여부 미상은 현재 모듈로 자동 해결하지 않는다. 원본을 보존하고 회수 인수로 전환한다.
+3. 생성 직전부터 단일 작성자와 보호된 durable journal을 유지한다. 로컬 기록 라이브러리는 구현했지만 실제 실행 위치/고정 저장 경로·장치·권한·감독 통합은 미완료다. 생성 응답 전 유실, 생성 성공 뒤 영수증 저장 실패, intent 저장 뒤 전송 여부 미상은 자동 해결하지 않는다. 원본을 보존하고 회수 인수로 전환한다.
 4. `DELETE_INTENT.next_receipt`를 영속화하고 성공을 확인한 뒤에만 한 번 전송한다. 저장 실패·부팅/epoch 변화·기한 경과면 전송하지 않는다. API 요청 timeout과 readback 예산도 현장 값으로 제한한다.
 5. ACK 뒤에도 읽기만으로 명시적인 부재를 확인하고, 기존 기준 정책·허용/차단 연결성을 따로 확인한다. 모호한 결과를 강제 삭제·finalizer 제거·무조건 재시도로 해결하지 않는다.
+
+PR81 비차단 리뷰 메모도 실제 통합에 연결한다. MON Lead와 abort 관측의 출처·주기·지연을 정하고, ABSENT 뒤 remote write/Target/heartbeat 정상과 HEP/GNP/firewalld/NAT 불변을 확인한다. 실제 CRD defaulting/spec 비교·NotFound details 및 ACK 후 제한된 읽기 재조회 간격/기한은 현장 입력과 검토가 필요하다. 삭제 재전송은 허용하지 않는다.
 
 따라서 자동 회수·IF06B 실행·MON/SEC 인수는 HOLD다. 실제 관리 환경·관측 지점·권한·회수 예산과 입력 검토 후 어댑터/통합 시험이 필요하다. 기존 카드의 canary 최대180초·관측120초 제안은 이 모듈의 승인 기본값이 아니다.
 
@@ -36,6 +57,6 @@ Kubernetes의 [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-ap
 python3 -B -m unittest discover -s ops/p1-mon-if06b-cleanup/tests -v
 ```
 
-모든 객체·시간·UID는 SYNTHETIC이다. 시험은 정상 만료와 조기 중단, stale/future 관측, 잘못된 입력, boot/epoch/cluster/session 변경, 다른 UID/spec,403/409/유실, finalizer, ACK 후 readback을 검증한다. 클러스터·소켓·API 호출 없이 수행한다. Linux CI는 이 범위만 실행하며 Runtime 검증·독립 REVIEW·MERGE·AC와 구분한다.
+모든 객체·시간·UID는 SYNTHETIC이다. 판단 시험은 정상 만료와 조기 중단, stale/future 관측, 잘못된 입력, boot/epoch/cluster/session 변경, 다른 UID/spec,403/409/유실, finalizer, ACK 후 readback을 검증한다. 추가 journal 시험은 임시 디렉터리에서 실제 Linux 파일·프로세스 잠금/종료와 fsync 순서, 주입한 짧은 쓰기·저장 실패·손상·세대 변경·재전송 금지를 검증한다. 클러스터·소켓·API 호출은 없다. Windows에서는 Linux 전용 journal 시험이 SKIP되므로 전체 성공으로 세지 않는다. Linux CI는 이 범위만 실행하며 Runtime 검증·독립 REVIEW·MERGE·AC와 구분한다.
 
 실서버 적용은 없다. 코드가 이상하면 사용을 보류하고 diff/시험 결과를 검토한다. 이미 생성된 실제 canary나 원본 영수증이 있을 때 이 모듈을 임의로 끼워 넣어 회수를 재개하지 않는다.

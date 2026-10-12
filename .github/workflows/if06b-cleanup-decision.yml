@@ -14,5 +14,5 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Synthetic decision tests without cluster access
+      - name: Synthetic decision and local journal tests without cluster access
         run: python3 -B -m unittest discover -s ops/p1-mon-if06b-cleanup/tests -v
