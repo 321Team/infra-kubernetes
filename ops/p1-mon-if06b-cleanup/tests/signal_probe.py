@@ -65,7 +65,8 @@ def main(mode, signame='SIGUSR1', index='0'):
     elif mode == 'wait':  # One signal at each line of the real wait().
         triggers = g.Triggers()
         fired = inject(g.Triggers.wait.__code__, signame, index=int(index))
-        out['value'], out['elapsed'] = timed(triggers.wait, 5)
+        # Short: the `return` line is only reached, and injected, after the timeout.
+        out['value'], out['elapsed'] = timed(triggers.wait, 0.3)
         out['fired'] = fired
     elif mode == 'nested':  # A second signal at each line of the handler itself.
         triggers = g.Triggers()
