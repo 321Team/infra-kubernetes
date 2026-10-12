@@ -78,7 +78,7 @@ G=/usr/bin/python3.12\ -B\ <검토 commit의 공급 경로>/ops/p1-mon-if06b-cle
 - **회수:** 만료 또는 trigger에서 GET 1회 → UID·spec 일치 시 DELETE_INTENT fsync → UID+방금 읽은 RV 조건부 DELETE 1회 → `readback_delay` 뒤 GET 1회. 명시적 NotFound면 `ABSENT_BASELINE_UNVERIFIED`. 기존 HEP/GNP/firewalld/NAT 불변과 새 연결 기준 Deny 복귀, remote write·Target·heartbeat는 **이 도구가 확인하지 않는다**(카드 5절 4).
 - **종료 코드:** 0=ABSENT 또는 검사 통과, 3=인수 필요, 4=시작 안 함, 5=검사 실패, 2=입력/도구 오류. 종료 코드는 **회수 결과만** 나타내며 증적 완전성은 담지 않는다.
 - **증적:** `<journal>/journal.jsonl`·`writer.lock`, `<evidence>/supervisor.jsonl`을 지우거나 고치지 않고 보존한다. 고정 코드·식별자(UID/RV/세션)·시각만 들어 있고 token·응답 본문·예외 원문은 없다.
-- **증적 완전성:** stream 출력과 반환값의 `evidence_complete`는 "이 행과 앞의 모든 행이 끝까지 쓰이고 fsync됐다"는 뜻이다. 파일에는 이 값을 저장하지 않는다. 파일의 FINAL 행에 있는 `evidence_complete_before_write`는 FINAL을 쓰기 **직전**까지의 상태다. 파일에 FINAL 행이 없거나, 마지막 줄이 잘렸거나, `evidence_complete_before_write=false`이면 증적은 불완전한 것으로 다루고 journal을 기준으로 인수한다. 분리 실행(`run` 기본)에서는 `ARMED` 뒤 stream이 닫히므로 파일로만 판단한다.
+- **증적 완전성:** stream 출력과 반환값의 `evidence_complete`는 "이 행과 앞의 모든 행이 끝까지 쓰이고 fsync됐다"는 뜻이다. 파일에는 이 값을 저장하지 않는다. 파일의 FINAL 행에 있는 `evidence_complete_before_write`는 FINAL을 쓰기 **직전**까지의 상태다. 파일에 FINAL 행이 없거나, 마지막 줄이 잘렸거나, `evidence_complete_before_write=false`이면 증적은 불완전한 것으로 다루고 journal을 기준으로 인수한다. 분리 실행(`run` 기본)에서는 `ARMED` 뒤 stream이 닫히므로 파일로만 판단한다. 다만 온전한 FINAL 줄과 `evidence_complete_before_write=true`만으로는 FINAL 자체의 write·fsync 성공을 확인할 수 없다. write는 됐지만 fsync가 실패한 경우에도 같은 모습으로 남기 때문이다. 분리 실행에서는 마지막 행의 동기화 성공 여부를 파일만으로 확정하지 않으며, 전원 장애나 비정상 종료 뒤라면 더욱 그렇다. 회수 상태는 journal과 필요한 실제 상태 확인을 기준으로 판정하고, supervisor 증적의 완전성과 구분한다.
 
 ### 인수 (exit 3 / `handoff_required=true`)
 
@@ -94,6 +94,8 @@ G=/usr/bin/python3.12\ -B\ <검토 commit의 공급 경로>/ops/p1-mon-if06b-cle
 | `DELETE_ALREADY_CLAIMED_OR_OUTCOME_UNRESOLVED` | 403/409 또는 ACK 뒤에도 객체가 남음 | `phase`(`CONFLICT`·`DELETE_UNKNOWN`·`DELETE_ACK`)와 현재 RV |
 | watch `WRITER_GONE_WITHOUT_TERMINAL` | 감독이 terminal 기록 없이 사라짐 | `last_event`·`uid`·`phase`. OWNED면 canary 잔존 |
 | watch `WRITER_STILL_HOLDING_AFTER_WINDOW`·`HISTORY_UNREADABLE`·`NO_SESSION_FILES` | 감시 창 초과 / 기록 판독 불가 / 회차 파일 없음 | 감독 프로세스와 디렉터리 상태 |
+
+**전송 여부를 좁히는 보조 정보:** journal의 `TRANSPORT_UNCERTAIN`은 transport가 낸 모든 예외를 보수적으로 묶은 값이다. FINAL 행의 `transport_last`를 함께 보면 구분할 수 있다. `stage`가 `REJECTED`(소켓 생성 전 거부)·`CONNECT`·`TLS`이면 HTTP 요청이 쓰이기 전에 끝난 것이고, `WRITE`·`READ`이면 요청이 서버에 도달했을 수 있다. `transport_last`는 transport가 **마지막으로 받은 요청**의 기록이므로 `method`가 보려는 요청과 같은지 먼저 확인한다. `*_NOT_SENT`는 transport를 부르기 전에 끝난 경우라서 `transport_last`에는 그 앞 요청(예: GET)이 남는다. 이 정보는 인수자의 판단을 돕는 진단이며, journal 사유를 바꾸거나 자동 재전송을 허용하지 않는다.
 
 ## 6. 최소 현장 입력
 
@@ -118,7 +120,7 @@ G=/usr/bin/python3.12\ -B\ <검토 commit의 공급 경로>/ops/p1-mon-if06b-cle
 4. **실행 구조** — 4절 A/B/C와 `KillUserProcesses` 실제값.
 5. **시간 예산** — 위 5개와 watch 2개. 카드의 120/180초는 제안값이며 채워 넣지 않았다. 제약은 `lease > request_timeout`, `cleanup_window > 3×request_timeout + readback_delay`뿐이다.
 6. **manifest JSON과 해시** — YAML 후보와 내용이 같은 JSON, `validate`가 계산하는 manifest 해시의 검토, `preflight`가 보고하는 기본값 적용 후 spec 해시의 검토.
-7. **인수·알림** — 회차의 회수 인수자(콘솔), HANDOFF 전달 경로, abort를 누가 어떤 MON 관측으로 보내는지. 원격 알림 전송(Alertmanager/Discord 등)은 경로가 정해지지 않아 **구현하지 않았다.** 현재 전달 수단은 `watch`의 출력·종료 코드와 증적 파일이다.
+7. **인수·알림** — 회차의 회수 인수자(콘솔), HANDOFF 전달 경로, abort를 누가 어떤 MON 관측으로 보내는지. 원격 알림 전송(Alertmanager/Discord 등)은 경로가 정해지지 않아 **구현하지 않았다.** 현재 전달 수단은 `watch`의 출력·종료 코드와 증적 파일이다. MON Lead의 [입력 제안](https://github.com/321Team/infra-kubernetes/pull/84#pullrequestreview-5487522145)이 있다(결정 아님, 채택은 회차 카드에서): abort를 보낼 관측 3종(기준선 대비 `up` 감소, heartbeat 60초 이상 단절, remote write 실패 증가), `watch`를 인수자 콘솔에서 `ARMED` 직후 띄워 종료 코드 3을 인수 신호로 쓰는 안, ABSENT 뒤 MON 기준 복귀 확인을 회차 기록에 연결하는 안.
 8. **공급·회차** — 검토 commit의 파일을 control01에 두는 방법과 해시 대조, 다른 K8S/네트워크/APP·Harbor 작업과 겹치지 않는 창.
 
 ## 7. 한계
@@ -130,4 +132,5 @@ G=/usr/bin/python3.12\ -B\ <검토 commit의 공급 경로>/ops/p1-mon-if06b-cle
 - trigger가 `ARMED`와 POST 사이에 도착하면 생성 후 즉시 회수한다. 생성 자체를 취소하지는 않는다.
 - 신호 시험은 대기 함수의 각 행과 handler 내부에 신호를 주입하는 자식 프로세스 probe와 loopback 프로세스 시험이다. 커널이 임의 시점에 전달하는 모든 경우를 열거한 것은 아니며, 실제 control01에서의 신호 전달은 실행 전 `survival-check`·첫 회차에서만 관측된다.
 - FINAL 기록 뒤에는 신호를 무시한다. 그 뒤의 SIGTERM은 이미 끝난 회수에 영향을 주지 않는다.
+- trigger 대기는 `select`를 쓰므로 pipe의 descriptor 번호가 1024(FD_SETSIZE) 미만이어야 한다. pipe는 시작 시 한 번 열고 이 프로세스가 여는 descriptor는 십수 개라 현재는 해당하지 않는다. descriptor를 많이 쓰는 구조로 바뀌면 `poll`로 바꿔야 한다. `select`가 실패하면 대기 실패로 처리되어 abort 회수로 이어진다.
 - ABSENT는 이 canary의 부재만 뜻한다. 기준 정책 복귀·연결성·AC 판정은 MON/SEC의 별도 관측이다.
