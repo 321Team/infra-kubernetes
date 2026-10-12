@@ -27,6 +27,10 @@ class CoordinatorError(RuntimeError):
     pass
 
 
+class RequestNotSent(CoordinatorError):
+    """Local failure before entering transport; never inferred from its error."""
+
+
 def require(ok, reason):
     if not ok:
         raise CoordinatorError(reason)
@@ -101,11 +105,20 @@ class Coordinator:
         return now
 
     def _request(self, method, path, body, deadline):
-        start = self._check(deadline)
-        end = min(deadline, start + self._timeout)
         try:
-            response = self._transport(method=method, path=path, body=copy.deepcopy(body), deadline_mono=end)
+            payload = copy.deepcopy(body)
+            start = self._check(deadline)
+            end = min(deadline, start + self._timeout)
         except Exception:
+            if method in {'POST', 'DELETE'}:
+                reason = 'CREATE_NOT_SENT' if method == 'POST' else 'DELETE_NOT_SENT'
+                raise RequestNotSent(reason) from None
+            raise
+        try:
+            response = self._transport(method=method, path=path, body=payload, deadline_mono=end)
+        except Exception:
+            # Even RequestNotSent raised by the transport is uncertain: once
+            # entered, its exception cannot prove no request reached the API.
             raise CoordinatorError('TRANSPORT_UNCERTAIN') from None
         self._check(end)
         return start, decode_response(response)
@@ -172,12 +185,16 @@ class Coordinator:
             # plan_delete has fsynced intent. Recheck live generation/time again
             # inside _request immediately before the sole permitted DELETE.
             require(self._phase == 'OWNED', 'ADAPTER_FAILURE')
-            self._phase = 'DELETE_SENT'
+            self._phase = 'DELETE_CLAIMED'
             try:
                 _, (status, _body) = self._request('DELETE', result['path'], result['body'], self._deadline)
+            except RequestNotSent as exc:
+                # Intent remains durable, but there is no response/loss event.
+                return self._handoff(str(exc))
             except CoordinatorError as exc:
                 self._session.record_delete_result(None)
                 return self._handoff(str(exc))
+            self._phase = 'DELETE_SENT'
             self._session.record_delete_result(status)
             return dict(action='READBACK_REQUIRED', http_status=status, baseline_verified=False)
         return self._run(action)

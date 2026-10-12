@@ -170,14 +170,25 @@ class CoordinatorTests(unittest.TestCase):
     def test_binding_changes_before_create_prevents_send(self):
         obj = self.make()
         self.binding['host_boot_id'] = 'different'
-        self.assertEqual(obj.create()['reason'], 'GENERATION_CHANGED')
+        self.assertEqual(obj.create()['reason'], 'CREATE_NOT_SENT')
         self.assertEqual(self.calls, [])
+        self.assertEqual([e['event'] for e in self.events()], ['CREATE_INTENT', 'HANDOFF'])
+        self.assertEqual(self.history(obj)['terminal_diagnostic']['reason'], 'CREATE_NOT_SENT')
 
     def test_clock_reversal_prevents_send(self):
         obj = self.make()
         self.now = 9
-        self.assertEqual(obj.create()['reason'], 'CLOCK_INVALID')
+        self.assertEqual(obj.create()['reason'], 'CREATE_NOT_SENT')
         self.assertEqual(self.calls, [])
+        self.assertEqual(self.history(obj)['terminal_diagnostic']['reason'], 'CREATE_NOT_SENT')
+
+    def test_create_expired_before_send_is_not_sent(self):
+        obj = self.make()
+        self.now = 20
+        self.assertEqual(obj.create()['reason'], 'CREATE_NOT_SENT')
+        self.assertEqual(self.calls, [])
+        self.assertEqual([e['event'] for e in self.events()], ['CREATE_INTENT', 'HANDOFF'])
+        self.assertEqual(self.history(obj)['terminal_diagnostic']['reason'], 'CREATE_NOT_SENT')
 
     def test_late_create_response_is_not_ownership(self):
         obj = self.make()
@@ -186,6 +197,8 @@ class CoordinatorTests(unittest.TestCase):
             return self.response(201, self.body)
         self.queue.append(late)
         self.assertEqual(obj.create()['reason'], 'REQUEST_WINDOW_EXPIRED')
+        self.assertEqual([r['method'] for r in self.calls], ['POST'])
+        self.assertEqual(self.events()[-1]['payload']['reason'], 'REQUEST_WINDOW_EXPIRED')
         self.assertNotIn('OWNED', [e['event'] for e in self.events()])
 
     def test_create_conflict_is_not_owned_and_reason_is_preserved(self):
@@ -285,8 +298,54 @@ class CoordinatorTests(unittest.TestCase):
             self.binding['guardian_epoch'] = 'changed'
         with patch.object(j.os, 'fsync', side_effect=change):
             result = obj.cleanup(trigger='expiry')
-        self.assertEqual(result['reason'], 'GENERATION_CHANGED')
+        self.assertEqual(result['reason'], 'DELETE_NOT_SENT')
         self.assertFalse(any(r['method']=='DELETE' for r in self.calls))
+        self.assertEqual([e['event'] for e in self.events()],
+                         ['CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'HANDOFF'])
+        history = self.history(obj)
+        self.assertEqual(history['terminal_diagnostic']['reason'], 'DELETE_NOT_SENT')
+        self.assertEqual(history['receipt']['phase'], 'DELETE_INTENT')
+
+    def _clock_changes_after_intent(self, now):
+        obj = self.owned()
+        self.queue.append(self.response(200, self.body))
+        original = obj._session.plan_delete
+        def after_intent(**kwargs):
+            result = original(**kwargs)
+            self.now = now
+            return result
+        with patch.object(obj._session, 'plan_delete', side_effect=after_intent):
+            self.assertEqual(obj.cleanup(trigger='expiry')['reason'], 'DELETE_NOT_SENT')
+        self.assertEqual([r['method'] for r in self.calls], ['POST', 'GET'])
+        self.assertEqual([e['event'] for e in self.events()],
+                         ['CREATE_INTENT', 'OWNED', 'DELETE_INTENT', 'HANDOFF'])
+        self.assertEqual(self.history(obj)['terminal_diagnostic']['reason'], 'DELETE_NOT_SENT')
+
+    def test_deadline_after_intent_before_send_has_no_delete_result(self):
+        self._clock_changes_after_intent(30)
+
+    def test_clock_reversal_after_intent_before_send_has_no_delete_result(self):
+        self._clock_changes_after_intent(19)
+
+    def test_late_delete_response_is_uncertain_after_transport(self):
+        obj = self.owned()
+        def late(_):
+            self.now = 24
+            return self.response(202, {'kind':'Status'})
+        self.queue.extend([self.response(200, self.body), late])
+        self.assertEqual(obj.cleanup(trigger='expiry')['reason'], 'REQUEST_WINDOW_EXPIRED')
+        self.assertEqual([r['method'] for r in self.calls], ['POST', 'GET', 'DELETE'])
+        self.assertEqual(self.events()[-2]['event'], 'DELETE_RESULT')
+        self.assertIsNone(self.events()[-2]['payload']['http_status'])
+        self.assertEqual(self.history(obj)['receipt']['phase'], 'DELETE_UNKNOWN')
+
+    def test_transport_cannot_claim_that_delete_was_not_sent(self):
+        obj = self.owned()
+        self.queue.extend([self.response(200, self.body), c.RequestNotSent('DELETE_NOT_SENT')])
+        self.assertEqual(obj.cleanup(trigger='expiry')['reason'], 'TRANSPORT_UNCERTAIN')
+        self.assertEqual([r['method'] for r in self.calls], ['POST', 'GET', 'DELETE'])
+        self.assertEqual(self.events()[-2]['event'], 'DELETE_RESULT')
+        self.assertEqual(self.history(obj)['receipt']['phase'], 'DELETE_UNKNOWN')
 
     def test_timeout_after_delete_is_terminal_without_resend(self):
         obj = self.owned()

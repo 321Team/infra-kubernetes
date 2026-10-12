@@ -46,6 +46,10 @@ Kubernetes의 [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-ap
   제출 manifest 해시와 CRD defaulting 후 응답 spec의 검토 해시는 별개 입력이다. 어느 해시도 자동 학습하지 않는다.
 - 현재 binding/monotonic clock을 요청 전후 및 DELETE 의도 기록 뒤 다시 확인한다. 생성·회수 종료·관측 유효기간·요청 timeout에는 기본값이 없다.
   GET 시작 시각을 관측 시각으로 사용하므로 느린 응답을 새 관측처럼 취급하지 않는다.
+- transport 진입 전 로컬 준비/세대·시계·기한 검사가 실패하면 CREATE_NOT_SENT 또는
+  DELETE_NOT_SENT로 바로 HANDOFF한다. 이때 DELETE_RESULT(None)을 남기지 않는다.
+  이 사유는 **본 실행기가 transport를 호출하지 않았음**만 뜻하며 객체의 현재 존재/부재를 보장하지 않는다.
+  진입 뒤 예외·지연은 결과 불명으로 구분한다. transport가 NOT_SENT 예외를 던져도 결과 불명으로 처리한다.
 - `plan_delete()`의 fsync 성공 후에만 정확 이름의 UID/RV 조건부 DELETE를 한 번 전달한다.
   DELETE 응답은 결과 기록일 뿐이며, 다음 명시적 NotFound GET 전에는 READBACK_REQUIRED다.
   ACK 뒤 객체가 남거나 DELETE 유실/409인 경우 자동 DELETE 재전송은 없다.
@@ -57,6 +61,8 @@ Kubernetes의 [DeleteOptions](https://kubernetes.io/docs/reference/kubernetes-ap
   고정 오류로 중단한다. credential·API 응답/예외 원문은 journal에 넣지 않는다.
 - JournalError와 OSError 모두 추가 요청을 중단한다. 저장 실패로 HANDOFF 자체가 기록되지 못하면
   `handoff_recorded=false`를 반환하고 기존/부분 파일을 보존한다. 인수 알림이나 AC 성공은 뜻하지 않는다.
+  감독 측은 이 반환값도 journal과 독립적으로 보존/전달해야 한다. 고정 허용 목록 밖 저장 오류는
+  ADAPTER_FAILURE로 반환될 수 있으므로 journal 파일만으로 모든 실패가 기록됐다고 판단하지 않는다.
 - fork·동시 호출·종료된 회차를 거부한다. `close()`는 파일을 지우거나 canary를 삭제하지 않으므로,
   호출자는 실제 감독/인수 경로 없이 단순 종료를 정상 회수로 취급하면 안 된다.
 
@@ -69,6 +75,11 @@ PR82의 나머지 통합 메모도 유지한다. **pre-intent GET 실패/오래�
 WAIT/재조회로 바꾸는 결정은 하지 않았다. HANDOFF 전달 경로·회차 인수자와 MON abort 관측
 출처/주기/지연은 실제 통합 전에 정할 입력이다. OSError/FileExistsError의 원래 예외 종류는 보존하고
 연결 코드가 두 종류 모두 안전 중단으로 다룬다.
+
+기한 뒤 도착한201 응답의 UID/RV를 진단 전용으로 보존하는 비차단 제안은 후속 어댑터/감독 통합에
+남긴다. 이번 수정은 늦은 응답을 소유로 채택하거나 기록 schema를 추가 확장하지 않는다.
+진단 UID가 없다는 이유로 이름만 사용한 무조건 삭제를 허용하지 않는다. 수동 인수도 현재 인증된
+조회·대상/spec/UID/RV 대조와 해당 회수 범위를 확인해야 하며, 자동 재생/소유 채택과 구분한다.
 
 **이 모듈만으로 독립 만료 회수가 동작하지 않는다.** MON의 `docs/IF06B_REMAINING_TEST_INPUTS_20261009.md`에 남은 구현·독립 생존 검증 조건은 계속 미완료다.
 
