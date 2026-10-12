@@ -119,14 +119,16 @@ def detach():
     if child:
         os.close(write_fd)
         os.waitpid(child, 0)
-        armed = False
+        armed = refused = False
         with os.fdopen(read_fd, 'rb') as pipe:
             for line in iter(lambda: pipe.readline(65536), b''):
                 os.write(1, line)
-                if b'"step":"ARMED"' in line:
-                    armed = True
-                if armed or b'"step":"FINAL"' in line or b'"step":"NOT_STARTED"' in line:
+                armed = b'"step":"ARMED"' in line
+                refused = b'"step":"FINAL"' in line or b'"step":"NOT_STARTED"' in line
+                if armed or refused:
                     break
+        if not (armed or refused):  # The pipe closed first; ARMED precedes the only POST.
+            say(1, step='NOT_STARTED', reason='GUARDIAN_EXITED_BEFORE_ARMING', create_sent=False)
         raise SystemExit(EXIT['OK'] if armed else EXIT['NOT_STARTED'])
     os.close(read_fd)
     os.setsid()
