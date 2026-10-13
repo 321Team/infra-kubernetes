@@ -1,5 +1,5 @@
 -- db01, existing server08 console -> postgres peer. Read-only, no credentials.
--- psql -X -v ON_ERROR_STOP=1 -v run_first=202610140510 -v run_last=202610140520 -d fdsdb -f app-db-before.sql
+-- psql -X -v ON_ERROR_STOP=1 -v run_first=202610140825 -v run_last=202610140835 -d fdsdb -f app-db-before.sql
 -- Bounds below are proposed, not authorized. Supply final approved same-day KST bounds.
 SELECT :'run_first' ~ '^[0-9]{8}(0[5-9]|1[0-9]|2[0-3])[0-5][0-9]$'
    AND :'run_last' ~ '^[0-9]{8}(0[5-9]|1[0-9]|2[0-3])[0-5][0-9]$'

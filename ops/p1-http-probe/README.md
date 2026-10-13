@@ -41,12 +41,14 @@ proc start/cgroup/namespace/UID/명령을 다시 확인한다. 이후 STOP/CONT�
 [Linux pidfd](https://man7.org/linux/man-pages/man2/pidfd_open.2.html).
 실제 성공은 아래 kubelet/Endpoint/복구 원본으로 별도 판정한다.
 
-## 제안 시간창 — 미확정
+## 07:45 시작으로 조정 — 사용자 지정 시작, 진입 조건 확인 대기
 
 | 단계 | 제안 | 실제 진입 조건 |
 |---|---|---|
-| Probe1회 | 10/14 03:00~03:10 KST 시작, 03:35까지 복구·수집 | exact HEAD 독립 리뷰/병합, 새 형상/정상성 확인, 해당 창 콘솔·비중첩 확인 |
-| APP1회 | 10/14 05:10~05:20 KST 시작, 06:00까지 수집 | Probe/서비스/MON 회복, 새 DB0행, DB 콘솔 조회·writer 배제, 새 baseline |
+| Probe1회 | 10/14 07:45~07:55 KST 시작, 08:20까지 복구·수집 | exact HEAD 독립 리뷰/병합, 새 형상/정상성 확인, 해당 창 콘솔·비중첩 확인 |
+| APP1회 | 10/14 08:25~08:35 KST 시작, 09:15까지 수집 | Probe/서비스/MON 회복, 새 DB0행, DB 콘솔 조회·writer 배제, 새 baseline |
+
+사용자가 `7:45실행창으로`로 시작 시각을 지정했다. 03:00/05:10 제안 창의 실제 실행은0회다. 기존 단계별 시작 여유·복구/수집 예산을 유지해 위 순서로 조정했으며, 05:00 이후 조건은 충족한다. 07:45 지정만으로 독립 리뷰 완료·콘솔 대기·타 작업 비중첩·DB 콘솔 조회 가능을 확인했다고 보지 않는다. 후속 APP은 Probe 회복을 확인한 뒤에만 시작한다.
 
 시작 마감까지 조건이 안 되면 실행0회. 실패·불명확 응답은 자동 재실행하지 않는다.
 00:15~01:05의 HA 창·콘솔 확인을 이 창의 확인으로 쓰지 않는다.
@@ -66,15 +68,15 @@ Harbor PR62의 01:46~01:54 H6 기록은 당시 복구 기록이며 이번 창의
    오래된 누적 event를 이번 liveness 실패로 재사용하지 않는다. 같은 시각 node kubelet 로그도 UID로 연결한다.
    운영자가 다른 engine2 Ready, API3 Ready, 노드 상태를 계속 감시한다. 관측 실패도 중단 조건이다.
 4. worker02 root의 유지되는 콘솔/기존 SSH 세션에서 정확한 새 경로로 한 번 실행한다.
-   아래 인자 시각은 **제안값**이며, 실제 범위가 확정된 뒤에만 소비한다. `<SOURCE_SHA256>`는 리뷰된 bytes의 값이다.
+   아래 인자는 **07:45 조정안**이며, 독립 리뷰와 해당 창 진입 조건이 확인된 뒤에만 소비한다. `<SOURCE_SHA256>`는 리뷰된 bytes의 값이다.
 
 ```bash
 python3 -B -I engine_stop.py apply observed-binding.json \
   --source-sha256 <SOURCE_SHA256> \
-  --start 2026-10-14T03:00:00+09:00 \
-  --latest-start 2026-10-14T03:10:00+09:00 \
-  --end 2026-10-14T03:35:00+09:00 \
-  --output /var/tmp/p1-http-probe-20261014-0300
+  --start 2026-10-14T07:45:00+09:00 \
+  --latest-start 2026-10-14T07:55:00+09:00 \
+  --end 2026-10-14T08:20:00+09:00 \
+  --output /var/tmp/p1-http-probe-20261014-0745
 ```
 
 출력의 `input.json`, `events.jsonl`, claim 디렉터리는 삭제하거나 재사용하지 않는다.
@@ -89,7 +91,7 @@ readiness false·Endpoint false, liveness 실패/재시작, 같은 Pod UID의 co
 - 주입 후 원 프로세스가 종료되면 도구는 CONT를 보내지 않는다. kubelet의 새 프로세스에는 신호0회다.
 - 최대150초 뒤에도 원 프로세스가 살아 있으면 같은 pidfd로 CONT하고 rc2로 종료한다. 자동 재주입0회.
 - 다른 engine/API/노드 이상, target 교체·관측 불가·원하지 않은 영향이면 즉시 worker02에서
-  `touch /var/tmp/p1-http-probe-20261014-0300/ABORT` 또는 실행 세션 INT/TERM/HUP로 회수를 요청한다.
+  `touch /var/tmp/p1-http-probe-20261014-0745/ABORT` 또는 실행 세션 INT/TERM/HUP로 회수를 요청한다.
   ABORT는 약0.2초 폴링이고 중단 신호는 finally에서 원 fd CONT를 시도한다.
 - 프로세스 강제KILL·서버 장애·커널/I/O hang·반복 종료 신호에서는 자동 회수를 보장하지 않는다.
   콘솔 인수자가 원 프로세스/클러스터 상태를 확인한다. 원 container가 여전히 동일하고 살아 있으면
@@ -104,7 +106,7 @@ python3 -B -I engine_stop.py resume-original observed-binding.json --source-sha2
   이번 liveness 실패→kubelet 재시작 사건, 새 container/restart+1, HTTP 정상 회복을 모두 대조한다.
 - 종료 확인: engine3/API3 Ready·각 Worker1/1, intended restart 외 변화0, Node 정상,
   edge Worker3 readyz200·업무 metrics404, 정확한 앱6/전체23 target 정상 **60초 연속**.
-  03:35까지 원본/복구 확인이 안 끝나면 실패/미확인으로 보존하고 APP 단계로 승격하지 않는다.
+  08:20까지 원본/복구 확인이 안 끝나면 실패/미확인으로 보존하고 APP 단계로 승격하지 않는다.
 
 ## APP 회귀 준비·DB 콘솔 인계
 
@@ -114,7 +116,7 @@ db01(.55)의 svc_ansible SSH는 02:21에 publickey 인증 거부(rc255)였다. D
 현재 schema/DB 권한/새 RUN0행은 **미확인**이다. 이는 APP 전송의 필수 선행 입력이다.
 
 1. [사전 SQL](app-db-before.sql): db01 식별·fdsdb·8열 관련 schema를 확인하고, 확정된 RUN 분 범위가0행인지 조회한다.
-   제안 범위 `202610140510`~`202610140520`; 창이 바뀌면 새 범위로 재조회한다.
+   제안 범위 `202610140825`~`202610140835`; 창이 바뀌면 새 범위로 재조회한다.
    실행 직전 시각/콘솔 작성자·rc·COUNT0 원본을 수신하기 전 POST0회다.
 2. Probe 회복 후 control01에서 Pod UID/restart/image와 PromQL6개 원본을 새 baseline으로 수집한다.
    `sum by(rule_id)(fds_detected_total)`의 비어 있는 vector는 조회 오류/targetdown과 구분한다.
@@ -140,7 +142,7 @@ db01(.55)의 svc_ansible SSH는 02:21에 publickey 인증 거부(rc255)였다. D
 # db01 / server08 console; script와 로그는 기존 비공개 작업 경로에 보존.
 date --iso-8601=seconds
 sudo -u postgres psql -X -v ON_ERROR_STOP=1 -d fdsdb \
-  -v run_first=202610140510 -v run_last=202610140520 -f app-db-before.sql
+  -v run_first=202610140825 -v run_last=202610140835 -f app-db-before.sql
 printf 'DB_BEFORE_RC=%s\n' "$?"
 # 사후: RUN은 edge meta.json에서 수신한 실제 값으로 지정.
 sudo -u postgres psql -X -A -t -F '|' -v ON_ERROR_STOP=1 -d fdsdb \
