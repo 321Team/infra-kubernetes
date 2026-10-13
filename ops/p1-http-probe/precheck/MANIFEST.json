@@ -1,0 +1,125 @@
+{
+  "classification": "READ_ONLY_PRECHECK_NOT_RUNTIME_FAULT",
+  "records": [
+    {
+      "path": "precheck/process/collector.py",
+      "sha256": "73b85325e65ed365bf1523e7311a8385fa21420663888a46cfdca72565ab9942",
+      "bytes": 1982
+    },
+    {
+      "path": "precheck/process/receipt.json",
+      "sha256": "43591791e45512dbb282fe385edb9cdc6a57db25a78eceea1bcdcb621b860b44",
+      "bytes": 1240
+    },
+    {
+      "path": "precheck/process/stdout.json",
+      "sha256": "a6611225d651425cd45b90cc0d0190ec442230f521dfddacc644b59e5433658a",
+      "bytes": 1650
+    },
+    {
+      "path": "precheck/process/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "precheck/app-state/collector.py",
+      "sha256": "1e83908cd40aedda88185cf8bcb0ed74adc48a918819efb24d343638427b56e1",
+      "bytes": 2619
+    },
+    {
+      "path": "precheck/app-state/receipt.json",
+      "sha256": "2c1c1eba5d04fd7a73f18b7087a539d81243317d66126dba75f8e72d7dfc95d0",
+      "bytes": 1240
+    },
+    {
+      "path": "precheck/app-state/stdout.json",
+      "sha256": "aaf23d6bcfa74b6c5f2af04be9af31ee49ff685cfc5af7c0bf11bf9f005b1086",
+      "bytes": 17877
+    },
+    {
+      "path": "precheck/app-state/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "precheck/cluster/collector.py",
+      "sha256": "82ddeaa508ed7ec76f0eb5022e805f118872b0835f496fe1643a1b818361ab90",
+      "bytes": 5789
+    },
+    {
+      "path": "precheck/cluster/receipt.json",
+      "sha256": "1a2229d8dfcbee0e6e8f5a8165e5971afe3c32d99aeafa46ca862324842b6a1b",
+      "bytes": 1240
+    },
+    {
+      "path": "precheck/cluster/stdout.json",
+      "sha256": "af87b2fb9ef20cce9e6c4fd707b925a763363f7b67a16b14208aef89bc5d14cd",
+      "bytes": 77366
+    },
+    {
+      "path": "precheck/cluster/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "precheck/edge/collector.py",
+      "sha256": "58e9999da714f67421bf47b9f0066a5e824ec0cd6fca34612f8f87042e588f22",
+      "bytes": 1266
+    },
+    {
+      "path": "precheck/edge/receipt.json",
+      "sha256": "72431f857729d29197eb11063d698ec1111ccb95d3f60bb174587cfc08d3869b",
+      "bytes": 1214
+    },
+    {
+      "path": "precheck/edge/stdout.json",
+      "sha256": "f90154afc7ece40457b74e2ca21752c00194d7c5346d49e08572446b3f0ec589",
+      "bytes": 2176
+    },
+    {
+      "path": "precheck/edge/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "precheck/mon/collector.py",
+      "sha256": "ecfdc9a425b46dae0535f6d7820231e9b0d0b5c3f2a1ecb21ed30a786cc8fc14",
+      "bytes": 1996
+    },
+    {
+      "path": "precheck/mon/receipt.json",
+      "sha256": "ec461b0a36cebad62d3bea14a9ed37046aed591be4e2c3643e59d31d285d889d",
+      "bytes": 1240
+    },
+    {
+      "path": "precheck/mon/stdout.json",
+      "sha256": "856dbb1bf92baa57d71dcc31f7512bd24ecad16bae9f52dfb1aae0bad782568f",
+      "bytes": 4732
+    },
+    {
+      "path": "precheck/mon/stderr.txt",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "precheck/db-route/collector.py",
+      "sha256": "de18152e90576c9765fef3b3fef02322b4e6ee41e07343d0a24acd4b63fc48e4",
+      "bytes": 762
+    },
+    {
+      "path": "precheck/db-route/receipt.json",
+      "sha256": "8c7b53300cb54f3d7deac848c671918b4e7b55b23c7eafcca118fd67411d77af",
+      "bytes": 1240
+    },
+    {
+      "path": "precheck/db-route/stdout.json",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "precheck/db-route/stderr.txt",
+      "sha256": "c71a22a28c05ec882eec04e16236eca9be0c0ae157a72deed26169934498437d",
+      "bytes": 94
+    }
+  ]
+}
