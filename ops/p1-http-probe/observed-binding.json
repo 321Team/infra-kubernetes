@@ -1,0 +1,14 @@
+{
+  "host": "k8s-worker02",
+  "boot_id": "f0015ee5-36c9-4184-a985-723170958f2c",
+  "container_id": "7b24cf1f8132da141a186eb00d7cbd02e30b9d1e28a2dfdb1147376caf544a45",
+  "pid": 1290996,
+  "start_ticks": "19229699",
+  "cgroup": "0::/kubepods.slice/kubepods-burstable.slice/kubepods-burstable-pode349b045_870f_4061_a677_3007efe479e9.slice/cri-containerd-7b24cf1f8132da141a186eb00d7cbd02e30b9d1e28a2dfdb1147376caf544a45.scope\n",
+  "pid_namespace": "pid:[4026533163]",
+  "namespace": "fds-app",
+  "container_name": "fds-engine",
+  "pod_name": "fds-engine-65479b5bf-4gfgq",
+  "pod_uid": "e349b045-870f-4061-a677-3007efe479e9",
+  "image_ref": "10.1.93.54/fds/fds-engine@sha256:8b257adb08b6d381f72b66d3386efea6112a8f072ecfafcbcd463bcd1c3be89d"
+}
